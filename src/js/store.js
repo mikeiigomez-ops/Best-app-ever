@@ -228,6 +228,7 @@
   /* ---------- vault ---------- */
   function addVault(kind, text, extra = {}) {
     const item = { id: UP.uid("v"), kind, text: String(text).trim().slice(0, 600), createdAt: now(), done: false, ...extra };
+    if (kind === "task" && item.due == null) { const due = UP.parseDue(item.text); if (due) item.due = due; }
     if (!item.text) return null;
     state.vault.unshift(item);
     if (state.vault.length > 800) state.vault.length = 800;

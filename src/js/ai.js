@@ -128,6 +128,14 @@
     return (Array.isArray(res) ? res : []).filter((x) => x && typeof x.text === "string" && ["task", "idea", "question"].includes(x.kind));
   }
 
+  /* ---------- help get a to-do done ---------- */
+  function helpTask(task, onText, signal) {
+    return sample(
+      `Someone has this on their to-do list: "${task}". Help them do it in the next few minutes. If it involves messaging someone, write the exact message they can copy. If it's a call, give a 2-line script. Otherwise give the 3 smallest concrete steps. Plain text, no markdown, under 90 words.`,
+      { onText, signal, cache: { gcTime: 3600000 } }
+    );
+  }
+
   /* ---------- expand a saved idea ---------- */
   function expandIdea(idea, onText, signal) {
     return sample(
@@ -136,5 +144,5 @@
     );
   }
 
-  UP.ai = { init, available, status: () => status, digHole, digging, deeper, answer, untangle, expandIdea, handleError };
+  UP.ai = { init, available, status: () => status, digHole, digging, deeper, answer, untangle, expandIdea, helpTask, handleError };
 })();

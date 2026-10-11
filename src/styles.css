@@ -280,7 +280,7 @@ body:not([data-tab="feed"]) .rail-slot { display: none; }
 }
 .est-readout.revealed { color: var(--gold); }
 .est-track { position: relative; padding: 10px 0; }
-.est-slider { width: 100%; appearance: none; -webkit-appearance: none; height: 8px; border-radius: 999px; background: linear-gradient(90deg, hsl(var(--hue) 70% 40% / 0.4), hsl(var(--hue) 90% 60% / 0.7)); outline-offset: 6px; touch-action: none; }
+.est-slider { width: 100%; appearance: none; -webkit-appearance: none; height: 8px; border-radius: 999px; background: linear-gradient(90deg, hsl(var(--hue) 70% 40% / 0.4), hsl(var(--hue) 90% 60% / 0.7)); outline-offset: 6px; touch-action: pan-y; }
 .est-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); border: 4px solid hsl(var(--hue) 90% 60%); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }
 .est-slider::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); border: 4px solid hsl(var(--hue) 90% 60%); }
 .est-answer {
@@ -692,3 +692,19 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .field.time { flex: 0 0 auto; width: auto; padding: 8px 12px; }
 .remind { display: flex; flex-direction: column; gap: 6px; }
 .view:has(.card.active.done) .swipe-hint { display: none; }
+
+/* round 2: to-dos, sharing, review */
+.kicker.urgent { color: var(--bad); }
+.snooze { align-items: center; gap: 6px; }
+.snooze .chip-btn { padding: 5px 10px; font-size: 0.8rem; }
+.pick-list { display: grid; gap: 6px; }
+.pick { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; text-align: left; padding: 11px 14px; border-radius: 14px; border: 1px solid rgba(245, 201, 92, 0.35); background: rgba(245, 201, 92, 0.06); font-weight: 700; }
+.pick small { color: var(--gold); font-family: var(--f-mono); font-size: 0.7rem; font-weight: 400; white-space: nowrap; }
+.share-img { width: 100%; max-width: 360px; align-self: center; border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.review-list { display: flex; flex-direction: column; gap: 6px; }
+.review-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.review-item.off { opacity: 0.45; }
+.review-item.off .vtext { text-decoration: line-through; }
+.review-item .chip-btn { flex: none; font-size: 0.75rem; padding: 4px 9px; }
+.vdue { margin: 0; font-family: var(--f-mono); font-size: 0.7rem; color: var(--gold); }
+.vdue.late { color: var(--bad); }

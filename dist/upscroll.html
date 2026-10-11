@@ -286,7 +286,7 @@ body:not([data-tab="feed"]) .rail-slot { display: none; }
 }
 .est-readout.revealed { color: var(--gold); }
 .est-track { position: relative; padding: 10px 0; }
-.est-slider { width: 100%; appearance: none; -webkit-appearance: none; height: 8px; border-radius: 999px; background: linear-gradient(90deg, hsl(var(--hue) 70% 40% / 0.4), hsl(var(--hue) 90% 60% / 0.7)); outline-offset: 6px; touch-action: none; }
+.est-slider { width: 100%; appearance: none; -webkit-appearance: none; height: 8px; border-radius: 999px; background: linear-gradient(90deg, hsl(var(--hue) 70% 40% / 0.4), hsl(var(--hue) 90% 60% / 0.7)); outline-offset: 6px; touch-action: pan-y; }
 .est-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); border: 4px solid hsl(var(--hue) 90% 60%); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }
 .est-slider::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); border: 4px solid hsl(var(--hue) 90% 60%); }
 .est-answer {
@@ -698,6 +698,22 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .field.time { flex: 0 0 auto; width: auto; padding: 8px 12px; }
 .remind { display: flex; flex-direction: column; gap: 6px; }
 .view:has(.card.active.done) .swipe-hint { display: none; }
+
+/* round 2: to-dos, sharing, review */
+.kicker.urgent { color: var(--bad); }
+.snooze { align-items: center; gap: 6px; }
+.snooze .chip-btn { padding: 5px 10px; font-size: 0.8rem; }
+.pick-list { display: grid; gap: 6px; }
+.pick { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; text-align: left; padding: 11px 14px; border-radius: 14px; border: 1px solid rgba(245, 201, 92, 0.35); background: rgba(245, 201, 92, 0.06); font-weight: 700; }
+.pick small { color: var(--gold); font-family: var(--f-mono); font-size: 0.7rem; font-weight: 400; white-space: nowrap; }
+.share-img { width: 100%; max-width: 360px; align-self: center; border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.review-list { display: flex; flex-direction: column; gap: 6px; }
+.review-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.review-item.off { opacity: 0.45; }
+.review-item.off .vtext { text-decoration: line-through; }
+.review-item .chip-btn { flex: none; font-size: 0.75rem; padding: 4px 9px; }
+.vdue { margin: 0; font-family: var(--f-mono); font-size: 0.7rem; color: var(--gold); }
+.vdue.late { color: var(--bad); }
 
 </style>
 <div id="app">
@@ -1248,6 +1264,26 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   { id: "cu28", topic: "culture", headline: "Blue jeans got their rivets from a tailor's idea in 1873", body: "Tailor Jacob Davis began reinforcing work trousers with copper rivets so pockets wouldn't tear. He partnered with fabric supplier Levi Strauss, and they received a US patent in 1873.", q: "Why were copper rivets first added to work trousers in the 1870s?", options: ["As a fashionable decoration","To mark the maker's brand name","To hold up suspenders for miners","To stop pockets from tearing"], a: 3, explain: "The word 'denim' likely comes from 'serge de Nîmes', a fabric from the French city of Nîmes.", tip: "To keep jeans dark longer, wash them inside out in cold water, and less often." }
 );
 
+/* ---- src/content/life-admin.js ---- */
+window.UP_CONTENT = window.UP_CONTENT || {};
+(window.UP_CONTENT.actions = window.UP_CONTENT.actions || []).push(
+  { id: "la01", cat: "life", title: "Put the next event in the calendar", body: "Think of the next party, appointment or school thing you know about but haven't written down. Add it now, with a reminder the day before.", xp: 25, timer: 0, steps: [] },
+  { id: "la02", cat: "life", title: "Photograph that paper", body: "Permission slip, receipt, warranty card, parking ticket. Snap a photo of the one paper you'll need later, then put it where it goes.", xp: 20, timer: 0, steps: [] },
+  { id: "la03", cat: "life", title: "Skim this week's school or work emails", body: "Search your inbox for this week's messages from school, daycare or your team. Star anything with a date or a form in it.", xp: 25, timer: 120, steps: [] },
+  { id: "la04", cat: "life", title: "Answer one RSVP", body: "There's probably an invite waiting on a yes or no. Reply now, even if it's \"Can't make it, have fun!\"", xp: 25, timer: 0, steps: [] },
+  { id: "la05", cat: "life", title: "Order the thing you keep running out of", body: "Shampoo, printer ink, contact lenses, batteries. Add it to the cart or the shopping list right now so tomorrow-you doesn't run out.", xp: 20, timer: 0, steps: [] },
+  { id: "la06", cat: "life", title: "Check the next 7 days", body: "Open your calendar and look at the week ahead. Anything that needs a babysitter, a gift, a form or a lift? Add a to-do for it.", xp: 25, timer: 60, steps: [] },
+  { id: "la07", cat: "life", title: "Pay or schedule one bill", body: "Find the next bill that's due and pay it or schedule it. One less late fee, one less thing rattling around your head.", xp: 30, timer: 0, steps: [] },
+  { id: "la08", cat: "life", title: "Renew something before it expires", body: "Library books, a prescription, a parking permit, a subscription you want to keep. Check one expiry date and renew it if it's close.", xp: 25, timer: 0, steps: [] },
+  { id: "la09", cat: "life", title: "Plan tonight's dinner", body: "Decide what's for dinner now, while you're not hungry. Check you have the ingredients, or add the missing one to the list.", xp: 20, timer: 0, steps: [] },
+  { id: "la10", cat: "life", title: "Text the plan", body: "Confirm one logistics detail with someone: who's doing pickup, what time the game starts, who's bringing what. \"Just checking: I'm on pickup Thursday, right?\"", xp: 20, timer: 0, steps: [] },
+  { id: "la11", cat: "life", title: "Clear one notification badge", body: "Pick the app with the red badge that bugs you most and deal with it: read, reply, or mark all as read. Then turn its badge off if it never matters.", xp: 15, timer: 0, steps: [] },
+  { id: "la12", cat: "life", title: "Set out tomorrow's thing", body: "Put tomorrow's must-bring item by the door now: the library books, the gym bag, the signed form, the return parcel.", xp: 20, timer: 0, steps: [] },
+  { id: "la13", cat: "life", title: "Write the grocery list", body: "Open your notes or shopping list and add three things you know you need. A list in your pocket beats one in your head.", xp: 15, timer: 0, steps: [] },
+  { id: "la14", cat: "life", title: "Make the two-minute call", body: "Is there a quick call you've been avoiding, like booking an appointment or asking a question? If the office is open, make it now.", xp: 35, timer: 0, steps: [] },
+  { id: "la15", cat: "life", title: "Back up today's photos", body: "Check that your phone's photos are backing up, or send today's best ones to the family chat so they live somewhere else too.", xp: 15, timer: 0, steps: [] }
+);
+
 /* ---- src/content/life.js ---- */
 window.UP_CONTENT = window.UP_CONTENT || {};
 window.UP_CONTENT.actions = [
@@ -1545,7 +1581,12 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   function fmtNum(n, unit) {
     const abs = Math.abs(n);
     let s;
-    if (abs >= 1e12) s = trim(n / 1e12) + " trillion";
+    if (abs >= 1e15) {
+      const exp = Math.floor(Math.log10(abs));
+      const sup = String(exp).split("").map((c) => "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079"[+c]).join("");
+      s = trim(n / Math.pow(10, exp)) + " \u00d7 10" + sup;
+    }
+    else if (abs >= 1e12) s = trim(n / 1e12) + " trillion";
     else if (abs >= 1e9) s = trim(n / 1e9) + " billion";
     else if (abs >= 1e6) s = trim(n / 1e6) + " million";
     else if (abs >= 10000) s = Math.round(n).toLocaleString("en-US");
@@ -1560,6 +1601,39 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   }
   function trim(x) {
     return (Math.round(x * 10) / 10).toString();
+  }
+
+  // "dentist tomorrow", "zoo slip by thursday", "call mom tonight" -> end of that day
+  const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  function parseDue(text) {
+    const t = " " + String(text).toLowerCase() + " ";
+    const end = (d) => { d.setHours(23, 59, 0, 0); return d.getTime(); };
+    const base = new Date();
+    if (/\b(today|tonight|this evening)\b/.test(t)) return end(base);
+    if (/\btomorrow\b/.test(t)) { base.setDate(base.getDate() + 1); return end(base); }
+    if (/\b(this )?weekend\b/.test(t)) { base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7)); return end(base); }
+    if (/\bnext week\b/.test(t)) { base.setDate(base.getDate() + ((8 - base.getDay()) % 7 || 7)); return end(base); }
+    for (let i = 0; i < 7; i++) {
+      const name = WEEKDAYS[i];
+      const re = new RegExp("\\b(by |on |this |next )?(" + name + "|" + name.slice(0, 3) + ")\\b");
+      const m = t.match(re);
+      if (m) {
+        let add = (i - base.getDay() + 7) % 7;
+        if (m[1] === "next " && add < 7) add += add === 0 ? 7 : 0;
+        base.setDate(base.getDate() + add);
+        return end(base);
+      }
+    }
+    return null;
+  }
+  function dueLabel(ts) {
+    if (!ts) return "";
+    const days = Math.round((new Date(ts).setHours(12) - new Date().setHours(12)) / DAY);
+    if (days < 0) return "Overdue";
+    if (days === 0) return "Due today";
+    if (days === 1) return "Due tomorrow";
+    if (days < 7) return "Due " + new Date(ts).toLocaleDateString(undefined, { weekday: "long" });
+    return "Due " + new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
   function timeAgo(ts) {
@@ -1662,7 +1736,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
   Object.assign(UP, {
     $, $$, h, clamp, now, DAY, MIN, dayKey, daysBetween, hash, mulberry, pick, shuffle, weighted,
-    fmtNum, timeAgo, debounce, reducedMotion, slug, uid, sfx, buzz, safeStorage, copyText,
+    fmtNum, timeAgo, parseDue, dueLabel, debounce, reducedMotion, slug, uid, sfx, buzz, safeStorage, copyText,
   });
 })();
 
@@ -1933,6 +2007,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   /* ---------- vault ---------- */
   function addVault(kind, text, extra = {}) {
     const item = { id: UP.uid("v"), kind, text: String(text).trim().slice(0, 600), createdAt: now(), done: false, ...extra };
+    if (kind === "task" && item.due == null) { const due = UP.parseDue(item.text); if (due) item.due = due; }
     if (!item.text) return null;
     state.vault.unshift(item);
     if (state.vault.length > 800) state.vault.length = 800;
@@ -2333,6 +2408,14 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return (Array.isArray(res) ? res : []).filter((x) => x && typeof x.text === "string" && ["task", "idea", "question"].includes(x.kind));
   }
 
+  /* ---------- help get a to-do done ---------- */
+  function helpTask(task, onText, signal) {
+    return sample(
+      `Someone has this on their to-do list: "${task}". Help them do it in the next few minutes. If it involves messaging someone, write the exact message they can copy. If it's a call, give a 2-line script. Otherwise give the 3 smallest concrete steps. Plain text, no markdown, under 90 words.`,
+      { onText, signal, cache: { gcTime: 3600000 } }
+    );
+  }
+
   /* ---------- expand a saved idea ---------- */
   function expandIdea(idea, onText, signal) {
     return sample(
@@ -2341,7 +2424,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     );
   }
 
-  UP.ai = { init, available, status: () => status, digHole, digging, deeper, answer, untangle, expandIdea, handleError };
+  UP.ai = { init, available, status: () => status, digHole, digging, deeper, answer, untangle, expandIdea, helpTask, handleError };
 })();
 
 /* ---- src/js/engine.js ---- */
@@ -2391,6 +2474,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   const session = { start: now(), cards: 0, learned: 0, correct: 0, answered: 0, deeds: 0, captures: 0, xp: 0, words: 0, stars: 0 };
 
   function goals() { return new Set(UP.state.goals || []); }
+  function openQuest(type) { const q = UP.state.quests; return !!(q && q.list.some((x) => x.type === type && !x.done)); }
 
   function lastKinds(history, n) { return history.slice(-n).map((s) => s.kind); }
 
@@ -2481,7 +2565,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   function openTasks() {
     const ot = UP.state.oneThing;
     const oneId = ot && ot.day === UP.dayKey() ? ot.vid : null;
-    return UP.state.vault.filter((v) => v.kind === "task" && v.id !== oneId && !v.done && !v.archived && now() - v.createdAt > 20 * MIN && (!v.r || now() - v.r > 20 * 3600000) && !sessionUsed.has(v.id));
+    return UP.state.vault
+      .filter((v) => v.kind === "task" && v.id !== oneId && !v.done && !v.archived && now() - v.createdAt > 2 * MIN &&
+        !(v.snooze > now()) && (!v.r || now() - v.r > 3 * 3600000) && !sessionUsed.has(v.id))
+      .sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || (a.r || 0) - (b.r || 0));
   }
   function staleIdeas() {
     return UP.state.vault.filter((v) => v.kind === "idea" && !v.archived && now() - v.createdAt > 20 * 3600000 && (!v.r || now() - v.r > 5 * DAY) && !sessionUsed.has(v.id));
@@ -2495,7 +2582,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const out = [];
     for (const [id, i] of learnedAt) {
       const r = UP.state.srs[id];
-      if (r && r.n === 1 && histLen - i >= 9) out.push(id);
+      if (r && r.n === 1 && histLen - i >= 15) out.push(id);
     }
     return out;
   }
@@ -2559,8 +2646,14 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     if (!spec && firstEver && history.length < 3 && filter === "mix") {
       spec = [pickLegendary, pickEstimate, () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
     }
+    // your own list gets a guaranteed slot in the first few cards of every session
+    if (!spec && !firstEver && !session.taskShown && filter !== "learn" && filter !== "calm" && history.length <= 3 && !histK.includes("task") && (history.length >= 1 || st.lastBrief === UP.dayKey())) {
+      const t = openTasks()[0];
+      if (t) { spec = { kind: "task", id: t.id, data: t }; session.taskShown = true; }
+    }
     const ot = st.oneThing;
-    if (!spec && ot && ot.day === UP.dayKey() && !ot.done && sinceOne >= 16 && filter !== "learn") {
+    if (!spec && ot && ot.day === UP.dayKey() && !ot.done && (sinceOne >= 16 || (!session.oneShown && history.length >= 2)) && filter !== "learn") {
+      session.oneShown = true;
       spec = { kind: "one", id: "one-" + sinceOne + "-" + session.cards };
       sinceOne = 0;
     }
@@ -2572,7 +2665,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     }
     // memory checks: never two in a row, at most about one in four cards
     if (!spec && ok("review") && histK[histK.length - 1] !== "review") {
-      const recent = lastKinds(history, 8).filter((k) => k === "review").length;
+      const recent = lastKinds(history, 10).filter((k) => k === "review").length;
       const dueCount = UP.store.dueReviews().length + freshDue().length;
       const cap = dueCount > 15 ? 3 : 2; // a big backlog earns a little more room
       if (dueCount && recent < cap && (sinceReview >= 4 || rand() < 0.2 + Math.min(0.2, dueCount * 0.015))) spec = pickReview();
@@ -2602,7 +2695,17 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       const QK = { sprint: "sprint", breathe: "breathe", bullseye: "estimate", reflect: "reflect", capture: "capture", word: "word", deed: "action" };
       for (const q of (st.quests && st.quests.list) || []) if (!q.done && QK[q.type] && W[QK[q.type]]) W[QK[q.type]] *= 2.6;
       // hook before homework: no chores in the first cards of a session, or for brand-new users
-      if (session.cards + history.length < 5 || newUser) for (const k of ["capture", "reflect", "task", "idea", "capsule"]) W[k] = 0;
+      if (session.cards + history.length < 5 || newUser) for (const k of ["capture", "reflect", "capsule"]) W[k] = 0;
+      // respect the goals people picked
+      if (g.size && !g.has("mind")) { W.fact *= 0.6; W.estimate *= 0.5; W.sprint *= 0.3; if (!g.has("words")) W.word *= 0.4; }
+      if (g.size && !g.has("calm")) { W.breathe *= 0.4; W.reflect *= 0.5; }
+      if (g.has("order")) { const ts = openTasks(); W.task = ts.length ? 10 + (ts[0].due && ts[0].due - now() < 2 * DAY ? 10 : 0) : 0; }
+      // heavy journal prompts belong to calm moments, not a late-night scroll
+      const hr = new Date().getHours();
+      if (filter === "mix" && (hr >= 23 || hr < 6)) W.reflect = 0;
+      // caps that keep the mix fresh: one sprint a session, estimates at most 1 in 7
+      if (session.sprints >= 1 && !openQuest("sprint")) W.sprint = 0;
+      if (lastKinds(history, 6).includes("estimate")) W.estimate = 0;
       if (newUser) W.action *= 0.4;
       // no kind twice within the last three cards
       for (const k of histK) if (k in W) W[k] = 0;
@@ -2630,6 +2733,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     // bookkeeping
     if (spec.kind === "chest") { sinceChest = 0; chestGap = Math.min(22, chestGap + 2); nextChestAt = chestGap + Math.floor(rand() * 5); } else sinceChest++;
     if (spec.kind === "receipt") sinceReceipt = 0; else sinceReceipt++;
+    if (spec.kind === "task") session.taskShown = true;
+    if (spec.kind === "sprint") session.sprints = (session.sprints || 0) + 1;
     if (spec.kind === "review") sinceReview = 0; else sinceReview++;
     if (spec.kind !== "one") sinceOne++;
     if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, history.length); }
@@ -2654,7 +2759,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       case "capture": return pickCapture();
       case "reflect": return pickReflect();
       case "sprint": return { kind: "sprint", id: UP.uid("sprint") };
-      case "task": { const t = pick(openTasks()); return t && { kind: "task", id: t.id, data: t }; }
+      case "task": { const t = openTasks()[0]; return t && { kind: "task", id: t.id, data: t }; }
       case "idea": { const t = pick(staleIdeas()); return t && { kind: "idea", id: t.id, data: t }; }
       case "capsule": { const j = pick(capsules()); return j && { kind: "capsule", id: j.id, data: j }; }
       case "review": return pickReview();
@@ -2778,6 +2883,11 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       const deep = h("button", { class: "rail-btn deep", "aria-label": "Go deeper with Claude", title: "Go deeper" }, icon("spark"), h("span", null, "Deeper"));
       deep.addEventListener("click", () => UP.ui.deeper(spec));
       r.append(deep);
+    }
+    if (["fact", "ai", "word", "estimate"].includes(spec.kind)) {
+      const share = h("button", { class: "rail-btn", "aria-label": "Share as an image", title: "Share" }, icon("send"), h("span", null, "Share"));
+      share.addEventListener("click", () => UP.ui.shareCard(spec));
+      r.append(share);
     }
     if (!["brief", "receipt", "chest", "task", "idea", "capsule"].includes(spec.kind)) r.append(more, less);
     return r;
@@ -2904,7 +3014,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       ...Array.from({ length: 7 }, (_, i) => h("i", { class: i < r.b ? "on" : "" })));
     const el = frame(spec, { topic: isWord ? "Words" : d.__kind === "ai" ? d.topic : topicOf(d), topicKey: isWord ? "words" : d.topic, meta: strength, hue: 212 });
     const inner = el._inner;
-    inner.append(h("p", { class: "kicker" }, "You learned this " + timeAgo(r.f || now()) + ". Still got it?"));
+    const ago = now() - (r.f || now());
+    inner.append(h("p", { class: "kicker" }, ago < 3600000 ? "Remember this one?" : "From " + timeAgo(r.f) + ". Still got it?"));
     let q, options, a;
     if (isWord && r.b >= 2 && Math.random() < 0.6) {
       const wo = engine.wordReverse(d);
@@ -3001,20 +3112,24 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     };
     // start somewhere random so the slider's midpoint never hints at the answer
     const startPos = 0.2 + Math.random() * 0.6;
-    let guess = nice(toVal(startPos));
+    const isYear = !d.unit && d.min >= 1000 && d.max <= 2200;
+    const whole = Number.isInteger(d.answer) && Math.abs(d.answer) < 1e6;
+    const fmt = (v) => (isYear ? String(Math.round(v)) : fmtNum(v, d.unit));
+    const pickVal = (p) => { let v = nice(toVal(p)); if (whole && Math.abs(v) >= 1) v = Math.round(v); return v; };
+    let guess = pickVal(startPos);
     inner.append(h("h2", { class: "headline est-q" }, d.q));
-    const readout = h("div", { class: "est-readout" }, fmtNum(guess, d.unit));
+    const readout = h("div", { class: "est-readout" }, fmt(guess));
     const slider = h("input", { type: "range", min: "0", max: "1000", value: String(Math.round(startPos * 1000)), class: "est-slider", "aria-label": "Your estimate", id: "est-" + spec.key });
-    const scale = h("div", { class: "est-scale" }, h("span", null, fmtNum(d.min, d.unit)), h("span", null, fmtNum(d.max, d.unit)));
+    const scale = h("div", { class: "est-scale" }, h("span", null, fmt(d.min)), h("span", null, fmt(d.max)));
     const track = h("div", { class: "est-track" }, slider, h("i", { class: "est-answer", hidden: true }));
     slider.addEventListener("input", () => {
-      guess = nice(toVal(slider.value / 1000));
-      readout.textContent = fmtNum(guess, d.unit);
-      slider.setAttribute("aria-valuetext", fmtNum(guess, d.unit));
+      guess = pickVal(slider.value / 1000);
+      readout.textContent = fmt(guess);
+      slider.setAttribute("aria-valuetext", fmt(guess));
       if (Math.random() < 0.3) sfx.tick();
     });
     // keep vertical swipes from being eaten by the slider on touch screens
-    slider.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
+
     const lock = h("button", { class: "btn primary" }, "Lock in my guess");
     const box = h("div", { class: "est" }, readout, track, scale, lock);
     inner.append(box);
@@ -3051,10 +3166,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       mark.hidden = false;
       mark.style.left = toPos(ans) * 100 + "%";
       readout.classList.add("revealed");
-      UP.ui.countUp(readout, guess, ans, d.unit);
+      UP.ui.countUp(readout, guess, ans, d.unit, isYear ? fmt : null);
       const offText = ratio && ratio >= 2 ? "Off by " + (Math.round(ratio * 10) / 10) + "x" : "Off by " + Math.round(pctOff * 100) + "%";
       box.append(
-        h("div", { class: "verdict " + tier, tabindex: "-1" }, h("strong", null, label), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "You said " + fmtNum(guess, d.unit) + ". " + offText + ".")),
+        h("div", { class: "verdict " + tier, tabindex: "-1" }, h("strong", null, label), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "You said " + fmt(guess) + ". " + offText + ".")),
         h("div", { class: "after" }, h("p", { class: "explain" }, d.explain), d.src ? h("p", { class: "src" }, "Source: " + d.src) : null)
       );
       el.classList.add("done");
@@ -3296,27 +3411,37 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   /* ---------- resurfacing your own stuff ---------- */
   function task(spec) {
     const v = spec.data;
-    const el = frame(spec, { topic: "Added " + timeAgo(v.createdAt), topicKey: "task" });
+    const due = UP.dueLabel(v.due);
+    const el = frame(spec, { topic: due || "Added " + timeAgo(v.createdAt), topicKey: "task" });
     const inner = el._inner;
-    inner.append(h("p", { class: "kicker" }, "Still on your list"), h("h2", { class: "headline" }, v.text));
+    inner.append(h("p", { class: "kicker" + (due === "Overdue" || due === "Due today" ? " urgent" : "") }, due ? due + ". Still on your list." : "Still on your list"), h("h2", { class: "headline" }, v.text));
     if (v.step) inner.append(h("p", { class: "tip" }, h("b", null, "Smallest first step "), v.step));
     const result = h("div", { class: "result" });
     const done = h("button", { class: "btn primary" }, icon("check"), "Done");
-    const later = h("button", { class: "btn ghost" }, "Not yet");
+    const help = h("button", { class: "btn ghost needs-ai" }, icon("spark"), "Help me do it");
+    help.addEventListener("click", () => UP.ui.claudeSheet("Let's get it done", v.text, (onText, signal) => UP.ai.helpTask(v.text, onText, signal)));
     const drop = h("button", { class: "btn ghost" }, "Drop it");
-    const row = h("div", { class: "row" }, done, later, drop);
-    inner.append(row, result);
+    const row = h("div", { class: "row" }, done, help, drop);
+    // a real snooze: pick when it should come back
+    const until = (hours) => { v.snooze = now() + hours * 3600000; store.save(); };
+    const tonight = () => { const d = new Date(); d.setHours(18, 0, 0, 0); return Math.max(1, (d - now()) / 3600000); };
+    const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); return (d - now()) / 3600000; };
+    const weekend = () => { const d = new Date(); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); d.setHours(9, 0, 0, 0); return (d - now()) / 3600000; };
+    const snoozeRow = h("div", { class: "row snooze" }, h("span", { class: "hint" }, "Remind me"),
+      ...[["In an hour", () => 1], [new Date().getHours() < 17 ? "Tonight" : "Later tonight", () => (new Date().getHours() < 17 ? tonight() : 2)], ["Tomorrow", tomorrow], ["Weekend", weekend]].map(([label, hrs]) =>
+        h("button", { class: "chip-btn", onclick: () => { until(hrs()); UP.ui.toast("Okay, " + label.toLowerCase() + "."); UP.ui.advance(); } }, label)));
+    inner.append(row, snoozeRow, result);
     done.addEventListener("click", () => {
       const already = v.rewarded;
       v.done = true; v.doneAt = now(); v.rewarded = true;
       const ot = UP.state.oneThing;
       if (ot && ot.vid === v.id) ot.done = true;
       row.remove();
+      snoozeRow.remove();
       const amt = already ? 0 : completeDeed(el, spec, result, 35);
       result.append(h("div", { class: "verdict ok" }, h("strong", null, "Crossed off. That's the feed working for you."), amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null));
       store.save();
     });
-    later.addEventListener("click", () => { v.r = now(); store.save(); UP.ui.toast("It'll come back tomorrow"); UP.ui.advance(); });
     drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Dropped. One less thing."); UP.ui.advance(); });
     el._enter = () => { v.r = now(); };
     return el;
@@ -3538,12 +3663,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const qs = store.ensureQuests();
     inner.append(
       h("h2", { class: "headline" }, hello),
-      h("p", { class: "body" }, briefStreakLine(streak)),
-      h("div", { class: "brief-grid" },
-        stat(String(due), due === 1 ? "memory check due" : "memory checks due"),
-        stat(String(st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).length), "open to-dos"),
-        stat(String(store.mastered()), "cards mastered")
-      ),
+      h("p", { class: "body" }, briefStreakLine(streak) + (due ? " A few things you learned are ready to lock in." : "")),
       oneThingBlock(),
       h("p", { class: "kicker" }, "Today's quests"),
       h("ul", { class: "quests" }, ...qs.list.map((q) => {
@@ -3569,7 +3689,14 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         box.append(h("p", { class: "kicker" }, "Today's one thing"), h("p", { class: "one-text" + (ot.done ? " done" : "") }, ot.text));
         return;
       }
-      const b = h("button", { class: "btn primary wide" }, "Set today's one thing");
+      // pick from the list you already have, most urgent first
+      const open = st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || b.createdAt - a.createdAt);
+      if (open.length) {
+        box.append(h("p", { class: "kicker" }, open.length + (open.length === 1 ? " to-do" : " to-dos") + ". Pick today's one thing."),
+          h("div", { class: "pick-list" }, ...open.slice(0, 3).map((v) => h("button", { class: "pick", onclick: () => { useAsOneThing(v); gain(10, box, "One thing"); draw(); } },
+            h("span", null, v.text), v.due ? h("small", null, UP.dueLabel(v.due)) : null))));
+      }
+      const b = h("button", { class: "btn " + (open.length ? "ghost" : "primary") + " wide" }, open.length ? "Something else" : "Set today's one thing");
       b.addEventListener("click", () => UP.ui.compose({
         title: "What one thing would make today a win?",
         placeholder: "Finish the proposal draft",
@@ -3580,6 +3707,11 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     };
     draw();
     return box;
+  }
+  function useAsOneThing(v) {
+    v.one = true;
+    UP.state.oneThing = { day: UP.dayKey(), text: v.text, vid: v.id, done: false };
+    store.save();
   }
   function setOneThing(text) {
     const v = store.addVault("task", text, { one: true });
@@ -3667,7 +3799,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const st = UP.state, out = [];
     const soon = now() + 30 * 3600000;
     const due = Object.values(st.srs).filter((r) => r.d <= soon).length;
-    if (due) out.push(due + (due === 1 ? " memory check" : " memory checks") + " to lock in what you learned");
+    if (due) out.push("A few memory checks to lock in today's stars");
     const caps = st.journal.filter((j) => !j.back && j.createdAt + 20 * 3600000 > now() && j.createdAt + 20 * 3600000 < soon).length;
     if (caps) out.push(caps + (caps === 1 ? " time capsule opens" : " time capsules open"));
     const todos = st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).length;
@@ -4090,7 +4222,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       root.append(form);
       {
         const unt = h("button", { class: "btn ghost small needs-ai" }, icon("spark"), "Untangle a brain dump");
-        unt.addEventListener("click", untangle);
+        unt.addEventListener("click", () => untangle());
         root.append(h("div", { class: "vault-tools" }, unt));
       }
     }
@@ -4144,6 +4276,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       row.append(cb);
     }
     const main = h("div", { class: "vmain" }, h("p", { class: "vtext" }, v.text));
+    if (v.due && !v.done) main.append(h("p", { class: "vdue" + (v.due < Date.now() ? " late" : "") }, UP.dueLabel(v.due)));
     if (v.step) main.append(h("p", { class: "vstep" }, "First step: " + v.step));
     if (v.body) main.append(h("p", { class: "vstep" }, v.body));
     main.append(h("p", { class: "vmeta" }, timeAgo(v.createdAt)));
@@ -4160,11 +4293,14 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return row;
   }
 
-  function untangle() {
+  function untangle(prefill) {
     const id = "dump-" + Date.now();
     const ta = h("textarea", { id, class: "field", rows: "7", placeholder: "Type everything on your mind, messy is fine. Dentist, mom's birthday gift, why do cats knead, fix bike brakes, start running again...", "aria-label": "Brain dump" });
+    if (typeof prefill === "string") ta.value = prefill;
     const go = h("button", { class: "btn primary wide" }, icon("spark"), "Sort it for me");
     const out = h("div", { class: "untangle-out", "aria-live": "polite" });
+    const LABEL = { task: "To-do", idea: "Idea", question: "Question" };
+    const NEXT = { task: "idea", idea: "question", question: "task" };
     go.addEventListener("click", async () => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }
@@ -4173,18 +4309,35 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       try {
         const items = await UP.ai.untangle(text);
         if (!items.length) { out.textContent = "Couldn't find separate items in that. Try listing a few things."; return; }
+        // review before filing: fix the type, drop what's wrong
         out.innerHTML = "";
-        const ul = h("ul", { class: "captured" });
-        for (const it of items) {
-          store.addVault(it.kind, it.text, it.step ? { step: String(it.step).slice(0, 120) } : {});
-          ul.append(h("li", null, h("b", null, { task: "To-do", idea: "Idea", question: "Question" }[it.kind] + " "), it.text));
-        }
-        UP.state.stats.captures += items.length;
-        store.questProgress("capture");
-        store.award(10 + items.length * 3, { reason: "Untangled", anchor: go });
-        out.append(h("p", { class: "hint" }, items.length + " items filed in your vault."), ul);
-        ta.value = "";
-        render();
+        items.forEach((it) => (it.keep = true));
+        const list = h("div", { class: "review-list" });
+        const file = h("button", { class: "btn primary wide" });
+        const draw = () => {
+          list.replaceChildren(...items.map((it) => {
+            const kind = h("button", { class: "chip-btn kind-" + it.kind, title: "Change type" }, LABEL[it.kind]);
+            kind.addEventListener("click", () => { it.kind = NEXT[it.kind]; draw(); });
+            const keep = h("button", { class: "icon-btn", "aria-label": it.keep ? "Remove " + it.text : "Keep " + it.text, "aria-pressed": String(it.keep) }, icon(it.keep ? "close" : "plus"));
+            keep.addEventListener("click", () => { it.keep = !it.keep; draw(); });
+            return h("div", { class: "review-item" + (it.keep ? "" : " off") }, kind, h("div", { class: "vmain" }, h("p", { class: "vtext" }, it.text), it.step && it.kind === "task" ? h("p", { class: "vstep" }, "First step: " + it.step) : null), keep);
+          }));
+          const n = items.filter((i) => i.keep).length;
+          file.textContent = n ? "File " + n + (n === 1 ? " item" : " items") : "Nothing to file";
+          file.disabled = !n;
+        };
+        file.addEventListener("click", () => {
+          const keep = items.filter((i) => i.keep);
+          for (const it of keep) store.addVault(it.kind, it.text, it.step && it.kind === "task" ? { step: String(it.step).slice(0, 120) } : {});
+          UP.state.stats.captures += keep.length;
+          store.questProgress("capture");
+          store.award(10 + keep.length * 3, { reason: "Untangled", anchor: file });
+          out.replaceChildren(h("p", { class: "hint" }, keep.length + " items filed in your vault. To-dos will come back to you in the feed."));
+          ta.value = "";
+          if (document.body.dataset.tab === "vault") render();
+        });
+        draw();
+        out.append(h("p", { class: "hint" }, "Check it over. Tap a label to change it, or remove anything that's wrong."), list, file);
       } catch (e) {
         out.textContent = UP.ai.handleError(e) || "Stopped.";
       } finally {
@@ -4194,13 +4347,12 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     UP.ui.closeSheet();
     setTimeout(() => {
       const body = h("div", { class: "compose" }, h("p", { class: "lede" }, "Dump everything on your mind. Claude splits it into to-dos, ideas and questions, and finds the first tiny step for each to-do."), ta, go, out);
-      // reuse the generic sheet through compose-like markup
       UP.ui.sheetRaw("Untangle", body);
       setTimeout(() => ta.focus(), 80);
     }, 10);
   }
 
-  UP.vault = { render };
+  UP.vault = { render, untangle };
 })();
 
 /* ---- src/js/ui.js ---- */
@@ -4447,15 +4599,16 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   }
 
   ui.banner = banner;
-  ui.countUp = (el, from, to, unit) => {
-    if (UP.reducedMotion()) { el.textContent = UP.fmtNum(to, unit); return; }
+  ui.countUp = (el, from, to, unit, fmt) => {
+    const show = fmt || ((v) => UP.fmtNum(v, unit));
+    if (UP.reducedMotion()) { el.textContent = show(to); return; }
     const t0 = performance.now(), dur = 900;
     const log = from > 0 && to > 0;
     const step = (t) => {
       const p = Math.min(1, (t - t0) / dur);
       const e = 1 - Math.pow(1 - p, 3);
       const v = log ? Math.exp(Math.log(from) + (Math.log(to) - Math.log(from)) * e) : from + (to - from) * e;
-      el.textContent = UP.fmtNum(p >= 1 ? to : v, unit);
+      el.textContent = show(p >= 1 ? to : v);
       if (p < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -4595,6 +4748,82 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     sheet("See you later", body);
   };
 
+  /* ---------- share a card as a picture ---------- */
+  function wrapLines(ctx, text, maxW) {
+    const words = String(text).split(/\s+/), lines = [];
+    let line = "";
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+  ui.shareCard = async (spec) => {
+    const d = spec.data || {};
+    const hue = engine.TOPICS[d.topic] ? engine.TOPICS[d.topic].hue : spec.kind === "word" ? 340 : spec.kind === "ai" ? 265 : 172;
+    let kicker, title, body;
+    if (spec.kind === "word") { kicker = "A word worth knowing"; title = d.word; body = d.def + (d.example ? "\n\n\u201c" + d.example + "\u201d" : ""); }
+    else if (spec.kind === "estimate") { kicker = "Guess first"; title = d.q; body = "Answer: " + UP.fmtNum(d.answer, d.unit) + ". " + (d.explain || ""); }
+    else { kicker = spec.kind === "ai" ? d.topic : (engine.TOPICS[d.topic] || { label: "Did you know" }).label; title = d.headline; body = d.body; }
+    try { await document.fonts.ready; } catch (e) { /* draw with fallbacks */ }
+    const c = document.createElement("canvas");
+    c.width = 1080; c.height = 1350;
+    const x = c.getContext("2d");
+    const bg = x.createLinearGradient(0, 0, 0, 1350);
+    bg.addColorStop(0, "hsl(" + hue + ",45%,14%)"); bg.addColorStop(0.7, "#0a0e1b"); bg.addColorStop(1, "#0a0e1b");
+    x.fillStyle = bg; x.fillRect(0, 0, 1080, 1350);
+    const glow = x.createRadialGradient(900, 80, 0, 900, 80, 700);
+    glow.addColorStop(0, "hsla(" + hue + ",80%,55%,0.45)"); glow.addColorStop(1, "hsla(" + hue + ",80%,55%,0)");
+    x.fillStyle = glow; x.fillRect(0, 0, 1080, 1350);
+    const stars = UP.mulberry(UP.hash(spec.id || "x"));
+    for (let i = 0; i < 70; i++) { x.fillStyle = "rgba(220,228,255," + (0.15 + stars() * 0.5) + ")"; x.beginPath(); x.arc(stars() * 1080, stars() * 1350, stars() * 2.2, 0, 7); x.fill(); }
+    x.fillStyle = "hsl(" + hue + ",85%,80%)";
+    x.font = '700 30px "JetBrains Mono", monospace';
+    x.fillText(String(kicker).toUpperCase(), 96, 190);
+    x.fillStyle = "#eef1fa";
+    let size = 84;
+    x.font = '800 ' + size + 'px "Bricolage Grotesque", sans-serif';
+    let tl = wrapLines(x, title, 888);
+    while (tl.length > 5 && size > 54) { size -= 6; x.font = '800 ' + size + 'px "Bricolage Grotesque", sans-serif'; tl = wrapLines(x, title, 888); }
+    let y = 300;
+    for (const l of tl) { x.fillText(l, 96, y); y += size * 1.08; }
+    x.fillStyle = "#c3cadf";
+    x.font = '400 40px "Figtree", sans-serif';
+    y += 30;
+    for (const para of String(body || "").split("\n")) {
+      for (const l of wrapLines(x, para, 888)) { if (y > 1180) break; x.fillText(l, 96, y); y += 56; }
+    }
+    x.fillStyle = "#f5c95c";
+    x.font = '800 40px "Bricolage Grotesque", sans-serif';
+    x.fillText("upscroll", 96, 1262);
+    x.fillStyle = "#8b95b3";
+    x.font = '400 28px "Figtree", sans-serif';
+    x.fillText("a feed that gives back", 300, 1260);
+    const url = c.toDataURL("image/png");
+    const text = title + "\n\n" + (body || "") + "\n\n(via Upscroll)";
+    const save = h("button", { class: "btn primary" }, "Save image");
+    const copy = h("button", { class: "btn ghost" }, icon("copy"), "Copy text");
+    const note = h("p", { class: "hint", "aria-live": "polite" });
+    save.addEventListener("click", async () => {
+      const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+      let ok = false;
+      try {
+        const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+        if (dl) { await dl.save({ filename: "upscroll-card.png", data: blob }); ok = true; }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        try { const u = URL.createObjectURL(blob); const a = h("a", { href: u, download: "upscroll-card.png" }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); ok = true; } catch (e) { ok = false; }
+      }
+      note.textContent = ok ? "Saved. Send it to someone who'd love it." : "Long-press the picture to save it.";
+    });
+    copy.addEventListener("click", async () => {
+      const ok = await UP.copyText(text);
+      note.textContent = ok ? "Copied. Paste it anywhere." : "Select the text in the picture's caption to copy it.";
+    });
+    sheet("Share", h("div", { class: "compose share" }, h("img", { src: url, alt: title, class: "share-img" }), h("div", { class: "row" }, save, copy), note), { tall: true });
+  };
+
   ui.quickCapture = () => {
     let kind = "task";
     const kinds = [["task", "To-do"], ["idea", "Idea"], ["question", "Question"]];
@@ -4622,7 +4851,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     };
     save.addEventListener("click", go);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); } });
-    sheet("Capture", h("div", { class: "compose" }, chips, input, save));
+    const sort = h("button", { class: "btn ghost wide needs-ai" }, icon("spark"), "Messy list? Let Claude sort it");
+    sort.addEventListener("click", () => { const text = input.value.trim(); closeSheet(); setTimeout(() => UP.vault.untangle(text), 260); });
+    sheet("Capture", h("div", { class: "compose" }, chips, input, save, sort));
     setTimeout(() => input.focus(), 80);
   };
 

@@ -53,7 +53,7 @@
       root.append(form);
       {
         const unt = h("button", { class: "btn ghost small needs-ai" }, icon("spark"), "Untangle a brain dump");
-        unt.addEventListener("click", untangle);
+        unt.addEventListener("click", () => untangle());
         root.append(h("div", { class: "vault-tools" }, unt));
       }
     }
@@ -107,6 +107,7 @@
       row.append(cb);
     }
     const main = h("div", { class: "vmain" }, h("p", { class: "vtext" }, v.text));
+    if (v.due && !v.done) main.append(h("p", { class: "vdue" + (v.due < Date.now() ? " late" : "") }, UP.dueLabel(v.due)));
     if (v.step) main.append(h("p", { class: "vstep" }, "First step: " + v.step));
     if (v.body) main.append(h("p", { class: "vstep" }, v.body));
     main.append(h("p", { class: "vmeta" }, timeAgo(v.createdAt)));
@@ -123,11 +124,14 @@
     return row;
   }
 
-  function untangle() {
+  function untangle(prefill) {
     const id = "dump-" + Date.now();
     const ta = h("textarea", { id, class: "field", rows: "7", placeholder: "Type everything on your mind, messy is fine. Dentist, mom's birthday gift, why do cats knead, fix bike brakes, start running again...", "aria-label": "Brain dump" });
+    if (typeof prefill === "string") ta.value = prefill;
     const go = h("button", { class: "btn primary wide" }, icon("spark"), "Sort it for me");
     const out = h("div", { class: "untangle-out", "aria-live": "polite" });
+    const LABEL = { task: "To-do", idea: "Idea", question: "Question" };
+    const NEXT = { task: "idea", idea: "question", question: "task" };
     go.addEventListener("click", async () => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }
@@ -136,18 +140,35 @@
       try {
         const items = await UP.ai.untangle(text);
         if (!items.length) { out.textContent = "Couldn't find separate items in that. Try listing a few things."; return; }
+        // review before filing: fix the type, drop what's wrong
         out.innerHTML = "";
-        const ul = h("ul", { class: "captured" });
-        for (const it of items) {
-          store.addVault(it.kind, it.text, it.step ? { step: String(it.step).slice(0, 120) } : {});
-          ul.append(h("li", null, h("b", null, { task: "To-do", idea: "Idea", question: "Question" }[it.kind] + " "), it.text));
-        }
-        UP.state.stats.captures += items.length;
-        store.questProgress("capture");
-        store.award(10 + items.length * 3, { reason: "Untangled", anchor: go });
-        out.append(h("p", { class: "hint" }, items.length + " items filed in your vault."), ul);
-        ta.value = "";
-        render();
+        items.forEach((it) => (it.keep = true));
+        const list = h("div", { class: "review-list" });
+        const file = h("button", { class: "btn primary wide" });
+        const draw = () => {
+          list.replaceChildren(...items.map((it) => {
+            const kind = h("button", { class: "chip-btn kind-" + it.kind, title: "Change type" }, LABEL[it.kind]);
+            kind.addEventListener("click", () => { it.kind = NEXT[it.kind]; draw(); });
+            const keep = h("button", { class: "icon-btn", "aria-label": it.keep ? "Remove " + it.text : "Keep " + it.text, "aria-pressed": String(it.keep) }, icon(it.keep ? "close" : "plus"));
+            keep.addEventListener("click", () => { it.keep = !it.keep; draw(); });
+            return h("div", { class: "review-item" + (it.keep ? "" : " off") }, kind, h("div", { class: "vmain" }, h("p", { class: "vtext" }, it.text), it.step && it.kind === "task" ? h("p", { class: "vstep" }, "First step: " + it.step) : null), keep);
+          }));
+          const n = items.filter((i) => i.keep).length;
+          file.textContent = n ? "File " + n + (n === 1 ? " item" : " items") : "Nothing to file";
+          file.disabled = !n;
+        };
+        file.addEventListener("click", () => {
+          const keep = items.filter((i) => i.keep);
+          for (const it of keep) store.addVault(it.kind, it.text, it.step && it.kind === "task" ? { step: String(it.step).slice(0, 120) } : {});
+          UP.state.stats.captures += keep.length;
+          store.questProgress("capture");
+          store.award(10 + keep.length * 3, { reason: "Untangled", anchor: file });
+          out.replaceChildren(h("p", { class: "hint" }, keep.length + " items filed in your vault. To-dos will come back to you in the feed."));
+          ta.value = "";
+          if (document.body.dataset.tab === "vault") render();
+        });
+        draw();
+        out.append(h("p", { class: "hint" }, "Check it over. Tap a label to change it, or remove anything that's wrong."), list, file);
       } catch (e) {
         out.textContent = UP.ai.handleError(e) || "Stopped.";
       } finally {
@@ -157,11 +178,10 @@
     UP.ui.closeSheet();
     setTimeout(() => {
       const body = h("div", { class: "compose" }, h("p", { class: "lede" }, "Dump everything on your mind. Claude splits it into to-dos, ideas and questions, and finds the first tiny step for each to-do."), ta, go, out);
-      // reuse the generic sheet through compose-like markup
       UP.ui.sheetRaw("Untangle", body);
       setTimeout(() => ta.focus(), 80);
     }, 10);
   }
 
-  UP.vault = { render };
+  UP.vault = { render, untangle };
 })();

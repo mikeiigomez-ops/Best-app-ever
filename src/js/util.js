@@ -87,7 +87,12 @@
   function fmtNum(n, unit) {
     const abs = Math.abs(n);
     let s;
-    if (abs >= 1e12) s = trim(n / 1e12) + " trillion";
+    if (abs >= 1e15) {
+      const exp = Math.floor(Math.log10(abs));
+      const sup = String(exp).split("").map((c) => "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079"[+c]).join("");
+      s = trim(n / Math.pow(10, exp)) + " \u00d7 10" + sup;
+    }
+    else if (abs >= 1e12) s = trim(n / 1e12) + " trillion";
     else if (abs >= 1e9) s = trim(n / 1e9) + " billion";
     else if (abs >= 1e6) s = trim(n / 1e6) + " million";
     else if (abs >= 10000) s = Math.round(n).toLocaleString("en-US");
@@ -102,6 +107,39 @@
   }
   function trim(x) {
     return (Math.round(x * 10) / 10).toString();
+  }
+
+  // "dentist tomorrow", "zoo slip by thursday", "call mom tonight" -> end of that day
+  const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  function parseDue(text) {
+    const t = " " + String(text).toLowerCase() + " ";
+    const end = (d) => { d.setHours(23, 59, 0, 0); return d.getTime(); };
+    const base = new Date();
+    if (/\b(today|tonight|this evening)\b/.test(t)) return end(base);
+    if (/\btomorrow\b/.test(t)) { base.setDate(base.getDate() + 1); return end(base); }
+    if (/\b(this )?weekend\b/.test(t)) { base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7)); return end(base); }
+    if (/\bnext week\b/.test(t)) { base.setDate(base.getDate() + ((8 - base.getDay()) % 7 || 7)); return end(base); }
+    for (let i = 0; i < 7; i++) {
+      const name = WEEKDAYS[i];
+      const re = new RegExp("\\b(by |on |this |next )?(" + name + "|" + name.slice(0, 3) + ")\\b");
+      const m = t.match(re);
+      if (m) {
+        let add = (i - base.getDay() + 7) % 7;
+        if (m[1] === "next " && add < 7) add += add === 0 ? 7 : 0;
+        base.setDate(base.getDate() + add);
+        return end(base);
+      }
+    }
+    return null;
+  }
+  function dueLabel(ts) {
+    if (!ts) return "";
+    const days = Math.round((new Date(ts).setHours(12) - new Date().setHours(12)) / DAY);
+    if (days < 0) return "Overdue";
+    if (days === 0) return "Due today";
+    if (days === 1) return "Due tomorrow";
+    if (days < 7) return "Due " + new Date(ts).toLocaleDateString(undefined, { weekday: "long" });
+    return "Due " + new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
   function timeAgo(ts) {
@@ -204,6 +242,6 @@
 
   Object.assign(UP, {
     $, $$, h, clamp, now, DAY, MIN, dayKey, daysBetween, hash, mulberry, pick, shuffle, weighted,
-    fmtNum, timeAgo, debounce, reducedMotion, slug, uid, sfx, buzz, safeStorage, copyText,
+    fmtNum, timeAgo, parseDue, dueLabel, debounce, reducedMotion, slug, uid, sfx, buzz, safeStorage, copyText,
   });
 })();

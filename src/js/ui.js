@@ -241,15 +241,16 @@
   }
 
   ui.banner = banner;
-  ui.countUp = (el, from, to, unit) => {
-    if (UP.reducedMotion()) { el.textContent = UP.fmtNum(to, unit); return; }
+  ui.countUp = (el, from, to, unit, fmt) => {
+    const show = fmt || ((v) => UP.fmtNum(v, unit));
+    if (UP.reducedMotion()) { el.textContent = show(to); return; }
     const t0 = performance.now(), dur = 900;
     const log = from > 0 && to > 0;
     const step = (t) => {
       const p = Math.min(1, (t - t0) / dur);
       const e = 1 - Math.pow(1 - p, 3);
       const v = log ? Math.exp(Math.log(from) + (Math.log(to) - Math.log(from)) * e) : from + (to - from) * e;
-      el.textContent = UP.fmtNum(p >= 1 ? to : v, unit);
+      el.textContent = show(p >= 1 ? to : v);
       if (p < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -389,6 +390,82 @@
     sheet("See you later", body);
   };
 
+  /* ---------- share a card as a picture ---------- */
+  function wrapLines(ctx, text, maxW) {
+    const words = String(text).split(/\s+/), lines = [];
+    let line = "";
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+  ui.shareCard = async (spec) => {
+    const d = spec.data || {};
+    const hue = engine.TOPICS[d.topic] ? engine.TOPICS[d.topic].hue : spec.kind === "word" ? 340 : spec.kind === "ai" ? 265 : 172;
+    let kicker, title, body;
+    if (spec.kind === "word") { kicker = "A word worth knowing"; title = d.word; body = d.def + (d.example ? "\n\n\u201c" + d.example + "\u201d" : ""); }
+    else if (spec.kind === "estimate") { kicker = "Guess first"; title = d.q; body = "Answer: " + UP.fmtNum(d.answer, d.unit) + ". " + (d.explain || ""); }
+    else { kicker = spec.kind === "ai" ? d.topic : (engine.TOPICS[d.topic] || { label: "Did you know" }).label; title = d.headline; body = d.body; }
+    try { await document.fonts.ready; } catch (e) { /* draw with fallbacks */ }
+    const c = document.createElement("canvas");
+    c.width = 1080; c.height = 1350;
+    const x = c.getContext("2d");
+    const bg = x.createLinearGradient(0, 0, 0, 1350);
+    bg.addColorStop(0, "hsl(" + hue + ",45%,14%)"); bg.addColorStop(0.7, "#0a0e1b"); bg.addColorStop(1, "#0a0e1b");
+    x.fillStyle = bg; x.fillRect(0, 0, 1080, 1350);
+    const glow = x.createRadialGradient(900, 80, 0, 900, 80, 700);
+    glow.addColorStop(0, "hsla(" + hue + ",80%,55%,0.45)"); glow.addColorStop(1, "hsla(" + hue + ",80%,55%,0)");
+    x.fillStyle = glow; x.fillRect(0, 0, 1080, 1350);
+    const stars = UP.mulberry(UP.hash(spec.id || "x"));
+    for (let i = 0; i < 70; i++) { x.fillStyle = "rgba(220,228,255," + (0.15 + stars() * 0.5) + ")"; x.beginPath(); x.arc(stars() * 1080, stars() * 1350, stars() * 2.2, 0, 7); x.fill(); }
+    x.fillStyle = "hsl(" + hue + ",85%,80%)";
+    x.font = '700 30px "JetBrains Mono", monospace';
+    x.fillText(String(kicker).toUpperCase(), 96, 190);
+    x.fillStyle = "#eef1fa";
+    let size = 84;
+    x.font = '800 ' + size + 'px "Bricolage Grotesque", sans-serif';
+    let tl = wrapLines(x, title, 888);
+    while (tl.length > 5 && size > 54) { size -= 6; x.font = '800 ' + size + 'px "Bricolage Grotesque", sans-serif'; tl = wrapLines(x, title, 888); }
+    let y = 300;
+    for (const l of tl) { x.fillText(l, 96, y); y += size * 1.08; }
+    x.fillStyle = "#c3cadf";
+    x.font = '400 40px "Figtree", sans-serif';
+    y += 30;
+    for (const para of String(body || "").split("\n")) {
+      for (const l of wrapLines(x, para, 888)) { if (y > 1180) break; x.fillText(l, 96, y); y += 56; }
+    }
+    x.fillStyle = "#f5c95c";
+    x.font = '800 40px "Bricolage Grotesque", sans-serif';
+    x.fillText("upscroll", 96, 1262);
+    x.fillStyle = "#8b95b3";
+    x.font = '400 28px "Figtree", sans-serif';
+    x.fillText("a feed that gives back", 300, 1260);
+    const url = c.toDataURL("image/png");
+    const text = title + "\n\n" + (body || "") + "\n\n(via Upscroll)";
+    const save = h("button", { class: "btn primary" }, "Save image");
+    const copy = h("button", { class: "btn ghost" }, icon("copy"), "Copy text");
+    const note = h("p", { class: "hint", "aria-live": "polite" });
+    save.addEventListener("click", async () => {
+      const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+      let ok = false;
+      try {
+        const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+        if (dl) { await dl.save({ filename: "upscroll-card.png", data: blob }); ok = true; }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        try { const u = URL.createObjectURL(blob); const a = h("a", { href: u, download: "upscroll-card.png" }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); ok = true; } catch (e) { ok = false; }
+      }
+      note.textContent = ok ? "Saved. Send it to someone who'd love it." : "Long-press the picture to save it.";
+    });
+    copy.addEventListener("click", async () => {
+      const ok = await UP.copyText(text);
+      note.textContent = ok ? "Copied. Paste it anywhere." : "Select the text in the picture's caption to copy it.";
+    });
+    sheet("Share", h("div", { class: "compose share" }, h("img", { src: url, alt: title, class: "share-img" }), h("div", { class: "row" }, save, copy), note), { tall: true });
+  };
+
   ui.quickCapture = () => {
     let kind = "task";
     const kinds = [["task", "To-do"], ["idea", "Idea"], ["question", "Question"]];
@@ -416,7 +493,9 @@
     };
     save.addEventListener("click", go);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); } });
-    sheet("Capture", h("div", { class: "compose" }, chips, input, save));
+    const sort = h("button", { class: "btn ghost wide needs-ai" }, icon("spark"), "Messy list? Let Claude sort it");
+    sort.addEventListener("click", () => { const text = input.value.trim(); closeSheet(); setTimeout(() => UP.vault.untangle(text), 260); });
+    sheet("Capture", h("div", { class: "compose" }, chips, input, save, sort));
     setTimeout(() => input.focus(), 80);
   };
 

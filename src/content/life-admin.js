@@ -1,0 +1,18 @@
+window.UP_CONTENT = window.UP_CONTENT || {};
+(window.UP_CONTENT.actions = window.UP_CONTENT.actions || []).push(
+  { id: "la01", cat: "life", title: "Put the next event in the calendar", body: "Think of the next party, appointment or school thing you know about but haven't written down. Add it now, with a reminder the day before.", xp: 25, timer: 0, steps: [] },
+  { id: "la02", cat: "life", title: "Photograph that paper", body: "Permission slip, receipt, warranty card, parking ticket. Snap a photo of the one paper you'll need later, then put it where it goes.", xp: 20, timer: 0, steps: [] },
+  { id: "la03", cat: "life", title: "Skim this week's school or work emails", body: "Search your inbox for this week's messages from school, daycare or your team. Star anything with a date or a form in it.", xp: 25, timer: 120, steps: [] },
+  { id: "la04", cat: "life", title: "Answer one RSVP", body: "There's probably an invite waiting on a yes or no. Reply now, even if it's \"Can't make it, have fun!\"", xp: 25, timer: 0, steps: [] },
+  { id: "la05", cat: "life", title: "Order the thing you keep running out of", body: "Shampoo, printer ink, contact lenses, batteries. Add it to the cart or the shopping list right now so tomorrow-you doesn't run out.", xp: 20, timer: 0, steps: [] },
+  { id: "la06", cat: "life", title: "Check the next 7 days", body: "Open your calendar and look at the week ahead. Anything that needs a babysitter, a gift, a form or a lift? Add a to-do for it.", xp: 25, timer: 60, steps: [] },
+  { id: "la07", cat: "life", title: "Pay or schedule one bill", body: "Find the next bill that's due and pay it or schedule it. One less late fee, one less thing rattling around your head.", xp: 30, timer: 0, steps: [] },
+  { id: "la08", cat: "life", title: "Renew something before it expires", body: "Library books, a prescription, a parking permit, a subscription you want to keep. Check one expiry date and renew it if it's close.", xp: 25, timer: 0, steps: [] },
+  { id: "la09", cat: "life", title: "Plan tonight's dinner", body: "Decide what's for dinner now, while you're not hungry. Check you have the ingredients, or add the missing one to the list.", xp: 20, timer: 0, steps: [] },
+  { id: "la10", cat: "life", title: "Text the plan", body: "Confirm one logistics detail with someone: who's doing pickup, what time the game starts, who's bringing what. \"Just checking: I'm on pickup Thursday, right?\"", xp: 20, timer: 0, steps: [] },
+  { id: "la11", cat: "life", title: "Clear one notification badge", body: "Pick the app with the red badge that bugs you most and deal with it: read, reply, or mark all as read. Then turn its badge off if it never matters.", xp: 15, timer: 0, steps: [] },
+  { id: "la12", cat: "life", title: "Set out tomorrow's thing", body: "Put tomorrow's must-bring item by the door now: the library books, the gym bag, the signed form, the return parcel.", xp: 20, timer: 0, steps: [] },
+  { id: "la13", cat: "life", title: "Write the grocery list", body: "Open your notes or shopping list and add three things you know you need. A list in your pocket beats one in your head.", xp: 15, timer: 0, steps: [] },
+  { id: "la14", cat: "life", title: "Make the two-minute call", body: "Is there a quick call you've been avoiding, like booking an appointment or asking a question? If the office is open, make it now.", xp: 35, timer: 0, steps: [] },
+  { id: "la15", cat: "life", title: "Back up today's photos", body: "Check that your phone's photos are backing up, or send today's best ones to the family chat so they live somewhere else too.", xp: 15, timer: 0, steps: [] }
+);

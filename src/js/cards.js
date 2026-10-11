@@ -90,6 +90,11 @@
       deep.addEventListener("click", () => UP.ui.deeper(spec));
       r.append(deep);
     }
+    if (["fact", "ai", "word", "estimate"].includes(spec.kind)) {
+      const share = h("button", { class: "rail-btn", "aria-label": "Share as an image", title: "Share" }, icon("send"), h("span", null, "Share"));
+      share.addEventListener("click", () => UP.ui.shareCard(spec));
+      r.append(share);
+    }
     if (!["brief", "receipt", "chest", "task", "idea", "capsule"].includes(spec.kind)) r.append(more, less);
     return r;
   }
@@ -215,7 +220,8 @@
       ...Array.from({ length: 7 }, (_, i) => h("i", { class: i < r.b ? "on" : "" })));
     const el = frame(spec, { topic: isWord ? "Words" : d.__kind === "ai" ? d.topic : topicOf(d), topicKey: isWord ? "words" : d.topic, meta: strength, hue: 212 });
     const inner = el._inner;
-    inner.append(h("p", { class: "kicker" }, "You learned this " + timeAgo(r.f || now()) + ". Still got it?"));
+    const ago = now() - (r.f || now());
+    inner.append(h("p", { class: "kicker" }, ago < 3600000 ? "Remember this one?" : "From " + timeAgo(r.f) + ". Still got it?"));
     let q, options, a;
     if (isWord && r.b >= 2 && Math.random() < 0.6) {
       const wo = engine.wordReverse(d);
@@ -312,20 +318,24 @@
     };
     // start somewhere random so the slider's midpoint never hints at the answer
     const startPos = 0.2 + Math.random() * 0.6;
-    let guess = nice(toVal(startPos));
+    const isYear = !d.unit && d.min >= 1000 && d.max <= 2200;
+    const whole = Number.isInteger(d.answer) && Math.abs(d.answer) < 1e6;
+    const fmt = (v) => (isYear ? String(Math.round(v)) : fmtNum(v, d.unit));
+    const pickVal = (p) => { let v = nice(toVal(p)); if (whole && Math.abs(v) >= 1) v = Math.round(v); return v; };
+    let guess = pickVal(startPos);
     inner.append(h("h2", { class: "headline est-q" }, d.q));
-    const readout = h("div", { class: "est-readout" }, fmtNum(guess, d.unit));
+    const readout = h("div", { class: "est-readout" }, fmt(guess));
     const slider = h("input", { type: "range", min: "0", max: "1000", value: String(Math.round(startPos * 1000)), class: "est-slider", "aria-label": "Your estimate", id: "est-" + spec.key });
-    const scale = h("div", { class: "est-scale" }, h("span", null, fmtNum(d.min, d.unit)), h("span", null, fmtNum(d.max, d.unit)));
+    const scale = h("div", { class: "est-scale" }, h("span", null, fmt(d.min)), h("span", null, fmt(d.max)));
     const track = h("div", { class: "est-track" }, slider, h("i", { class: "est-answer", hidden: true }));
     slider.addEventListener("input", () => {
-      guess = nice(toVal(slider.value / 1000));
-      readout.textContent = fmtNum(guess, d.unit);
-      slider.setAttribute("aria-valuetext", fmtNum(guess, d.unit));
+      guess = pickVal(slider.value / 1000);
+      readout.textContent = fmt(guess);
+      slider.setAttribute("aria-valuetext", fmt(guess));
       if (Math.random() < 0.3) sfx.tick();
     });
     // keep vertical swipes from being eaten by the slider on touch screens
-    slider.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
+
     const lock = h("button", { class: "btn primary" }, "Lock in my guess");
     const box = h("div", { class: "est" }, readout, track, scale, lock);
     inner.append(box);
@@ -362,10 +372,10 @@
       mark.hidden = false;
       mark.style.left = toPos(ans) * 100 + "%";
       readout.classList.add("revealed");
-      UP.ui.countUp(readout, guess, ans, d.unit);
+      UP.ui.countUp(readout, guess, ans, d.unit, isYear ? fmt : null);
       const offText = ratio && ratio >= 2 ? "Off by " + (Math.round(ratio * 10) / 10) + "x" : "Off by " + Math.round(pctOff * 100) + "%";
       box.append(
-        h("div", { class: "verdict " + tier, tabindex: "-1" }, h("strong", null, label), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "You said " + fmtNum(guess, d.unit) + ". " + offText + ".")),
+        h("div", { class: "verdict " + tier, tabindex: "-1" }, h("strong", null, label), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "You said " + fmt(guess) + ". " + offText + ".")),
         h("div", { class: "after" }, h("p", { class: "explain" }, d.explain), d.src ? h("p", { class: "src" }, "Source: " + d.src) : null)
       );
       el.classList.add("done");
@@ -607,27 +617,37 @@
   /* ---------- resurfacing your own stuff ---------- */
   function task(spec) {
     const v = spec.data;
-    const el = frame(spec, { topic: "Added " + timeAgo(v.createdAt), topicKey: "task" });
+    const due = UP.dueLabel(v.due);
+    const el = frame(spec, { topic: due || "Added " + timeAgo(v.createdAt), topicKey: "task" });
     const inner = el._inner;
-    inner.append(h("p", { class: "kicker" }, "Still on your list"), h("h2", { class: "headline" }, v.text));
+    inner.append(h("p", { class: "kicker" + (due === "Overdue" || due === "Due today" ? " urgent" : "") }, due ? due + ". Still on your list." : "Still on your list"), h("h2", { class: "headline" }, v.text));
     if (v.step) inner.append(h("p", { class: "tip" }, h("b", null, "Smallest first step "), v.step));
     const result = h("div", { class: "result" });
     const done = h("button", { class: "btn primary" }, icon("check"), "Done");
-    const later = h("button", { class: "btn ghost" }, "Not yet");
+    const help = h("button", { class: "btn ghost needs-ai" }, icon("spark"), "Help me do it");
+    help.addEventListener("click", () => UP.ui.claudeSheet("Let's get it done", v.text, (onText, signal) => UP.ai.helpTask(v.text, onText, signal)));
     const drop = h("button", { class: "btn ghost" }, "Drop it");
-    const row = h("div", { class: "row" }, done, later, drop);
-    inner.append(row, result);
+    const row = h("div", { class: "row" }, done, help, drop);
+    // a real snooze: pick when it should come back
+    const until = (hours) => { v.snooze = now() + hours * 3600000; store.save(); };
+    const tonight = () => { const d = new Date(); d.setHours(18, 0, 0, 0); return Math.max(1, (d - now()) / 3600000); };
+    const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); return (d - now()) / 3600000; };
+    const weekend = () => { const d = new Date(); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); d.setHours(9, 0, 0, 0); return (d - now()) / 3600000; };
+    const snoozeRow = h("div", { class: "row snooze" }, h("span", { class: "hint" }, "Remind me"),
+      ...[["In an hour", () => 1], [new Date().getHours() < 17 ? "Tonight" : "Later tonight", () => (new Date().getHours() < 17 ? tonight() : 2)], ["Tomorrow", tomorrow], ["Weekend", weekend]].map(([label, hrs]) =>
+        h("button", { class: "chip-btn", onclick: () => { until(hrs()); UP.ui.toast("Okay, " + label.toLowerCase() + "."); UP.ui.advance(); } }, label)));
+    inner.append(row, snoozeRow, result);
     done.addEventListener("click", () => {
       const already = v.rewarded;
       v.done = true; v.doneAt = now(); v.rewarded = true;
       const ot = UP.state.oneThing;
       if (ot && ot.vid === v.id) ot.done = true;
       row.remove();
+      snoozeRow.remove();
       const amt = already ? 0 : completeDeed(el, spec, result, 35);
       result.append(h("div", { class: "verdict ok" }, h("strong", null, "Crossed off. That's the feed working for you."), amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null));
       store.save();
     });
-    later.addEventListener("click", () => { v.r = now(); store.save(); UP.ui.toast("It'll come back tomorrow"); UP.ui.advance(); });
     drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Dropped. One less thing."); UP.ui.advance(); });
     el._enter = () => { v.r = now(); };
     return el;
@@ -849,12 +869,7 @@
     const qs = store.ensureQuests();
     inner.append(
       h("h2", { class: "headline" }, hello),
-      h("p", { class: "body" }, briefStreakLine(streak)),
-      h("div", { class: "brief-grid" },
-        stat(String(due), due === 1 ? "memory check due" : "memory checks due"),
-        stat(String(st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).length), "open to-dos"),
-        stat(String(store.mastered()), "cards mastered")
-      ),
+      h("p", { class: "body" }, briefStreakLine(streak) + (due ? " A few things you learned are ready to lock in." : "")),
       oneThingBlock(),
       h("p", { class: "kicker" }, "Today's quests"),
       h("ul", { class: "quests" }, ...qs.list.map((q) => {
@@ -880,7 +895,14 @@
         box.append(h("p", { class: "kicker" }, "Today's one thing"), h("p", { class: "one-text" + (ot.done ? " done" : "") }, ot.text));
         return;
       }
-      const b = h("button", { class: "btn primary wide" }, "Set today's one thing");
+      // pick from the list you already have, most urgent first
+      const open = st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || b.createdAt - a.createdAt);
+      if (open.length) {
+        box.append(h("p", { class: "kicker" }, open.length + (open.length === 1 ? " to-do" : " to-dos") + ". Pick today's one thing."),
+          h("div", { class: "pick-list" }, ...open.slice(0, 3).map((v) => h("button", { class: "pick", onclick: () => { useAsOneThing(v); gain(10, box, "One thing"); draw(); } },
+            h("span", null, v.text), v.due ? h("small", null, UP.dueLabel(v.due)) : null))));
+      }
+      const b = h("button", { class: "btn " + (open.length ? "ghost" : "primary") + " wide" }, open.length ? "Something else" : "Set today's one thing");
       b.addEventListener("click", () => UP.ui.compose({
         title: "What one thing would make today a win?",
         placeholder: "Finish the proposal draft",
@@ -891,6 +913,11 @@
     };
     draw();
     return box;
+  }
+  function useAsOneThing(v) {
+    v.one = true;
+    UP.state.oneThing = { day: UP.dayKey(), text: v.text, vid: v.id, done: false };
+    store.save();
   }
   function setOneThing(text) {
     const v = store.addVault("task", text, { one: true });
@@ -978,7 +1005,7 @@
     const st = UP.state, out = [];
     const soon = now() + 30 * 3600000;
     const due = Object.values(st.srs).filter((r) => r.d <= soon).length;
-    if (due) out.push(due + (due === 1 ? " memory check" : " memory checks") + " to lock in what you learned");
+    if (due) out.push("A few memory checks to lock in today's stars");
     const caps = st.journal.filter((j) => !j.back && j.createdAt + 20 * 3600000 > now() && j.createdAt + 20 * 3600000 < soon).length;
     if (caps) out.push(caps + (caps === 1 ? " time capsule opens" : " time capsules open"));
     const todos = st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).length;

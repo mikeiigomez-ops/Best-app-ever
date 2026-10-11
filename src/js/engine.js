@@ -44,6 +44,7 @@
   const session = { start: now(), cards: 0, learned: 0, correct: 0, answered: 0, deeds: 0, captures: 0, xp: 0, words: 0, stars: 0 };
 
   function goals() { return new Set(UP.state.goals || []); }
+  function openQuest(type) { const q = UP.state.quests; return !!(q && q.list.some((x) => x.type === type && !x.done)); }
 
   function lastKinds(history, n) { return history.slice(-n).map((s) => s.kind); }
 
@@ -134,7 +135,10 @@
   function openTasks() {
     const ot = UP.state.oneThing;
     const oneId = ot && ot.day === UP.dayKey() ? ot.vid : null;
-    return UP.state.vault.filter((v) => v.kind === "task" && v.id !== oneId && !v.done && !v.archived && now() - v.createdAt > 20 * MIN && (!v.r || now() - v.r > 20 * 3600000) && !sessionUsed.has(v.id));
+    return UP.state.vault
+      .filter((v) => v.kind === "task" && v.id !== oneId && !v.done && !v.archived && now() - v.createdAt > 2 * MIN &&
+        !(v.snooze > now()) && (!v.r || now() - v.r > 3 * 3600000) && !sessionUsed.has(v.id))
+      .sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || (a.r || 0) - (b.r || 0));
   }
   function staleIdeas() {
     return UP.state.vault.filter((v) => v.kind === "idea" && !v.archived && now() - v.createdAt > 20 * 3600000 && (!v.r || now() - v.r > 5 * DAY) && !sessionUsed.has(v.id));
@@ -148,7 +152,7 @@
     const out = [];
     for (const [id, i] of learnedAt) {
       const r = UP.state.srs[id];
-      if (r && r.n === 1 && histLen - i >= 9) out.push(id);
+      if (r && r.n === 1 && histLen - i >= 15) out.push(id);
     }
     return out;
   }
@@ -212,8 +216,14 @@
     if (!spec && firstEver && history.length < 3 && filter === "mix") {
       spec = [pickLegendary, pickEstimate, () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
     }
+    // your own list gets a guaranteed slot in the first few cards of every session
+    if (!spec && !firstEver && !session.taskShown && filter !== "learn" && filter !== "calm" && history.length <= 3 && !histK.includes("task") && (history.length >= 1 || st.lastBrief === UP.dayKey())) {
+      const t = openTasks()[0];
+      if (t) { spec = { kind: "task", id: t.id, data: t }; session.taskShown = true; }
+    }
     const ot = st.oneThing;
-    if (!spec && ot && ot.day === UP.dayKey() && !ot.done && sinceOne >= 16 && filter !== "learn") {
+    if (!spec && ot && ot.day === UP.dayKey() && !ot.done && (sinceOne >= 16 || (!session.oneShown && history.length >= 2)) && filter !== "learn") {
+      session.oneShown = true;
       spec = { kind: "one", id: "one-" + sinceOne + "-" + session.cards };
       sinceOne = 0;
     }
@@ -225,7 +235,7 @@
     }
     // memory checks: never two in a row, at most about one in four cards
     if (!spec && ok("review") && histK[histK.length - 1] !== "review") {
-      const recent = lastKinds(history, 8).filter((k) => k === "review").length;
+      const recent = lastKinds(history, 10).filter((k) => k === "review").length;
       const dueCount = UP.store.dueReviews().length + freshDue().length;
       const cap = dueCount > 15 ? 3 : 2; // a big backlog earns a little more room
       if (dueCount && recent < cap && (sinceReview >= 4 || rand() < 0.2 + Math.min(0.2, dueCount * 0.015))) spec = pickReview();
@@ -255,7 +265,17 @@
       const QK = { sprint: "sprint", breathe: "breathe", bullseye: "estimate", reflect: "reflect", capture: "capture", word: "word", deed: "action" };
       for (const q of (st.quests && st.quests.list) || []) if (!q.done && QK[q.type] && W[QK[q.type]]) W[QK[q.type]] *= 2.6;
       // hook before homework: no chores in the first cards of a session, or for brand-new users
-      if (session.cards + history.length < 5 || newUser) for (const k of ["capture", "reflect", "task", "idea", "capsule"]) W[k] = 0;
+      if (session.cards + history.length < 5 || newUser) for (const k of ["capture", "reflect", "capsule"]) W[k] = 0;
+      // respect the goals people picked
+      if (g.size && !g.has("mind")) { W.fact *= 0.6; W.estimate *= 0.5; W.sprint *= 0.3; if (!g.has("words")) W.word *= 0.4; }
+      if (g.size && !g.has("calm")) { W.breathe *= 0.4; W.reflect *= 0.5; }
+      if (g.has("order")) { const ts = openTasks(); W.task = ts.length ? 10 + (ts[0].due && ts[0].due - now() < 2 * DAY ? 10 : 0) : 0; }
+      // heavy journal prompts belong to calm moments, not a late-night scroll
+      const hr = new Date().getHours();
+      if (filter === "mix" && (hr >= 23 || hr < 6)) W.reflect = 0;
+      // caps that keep the mix fresh: one sprint a session, estimates at most 1 in 7
+      if (session.sprints >= 1 && !openQuest("sprint")) W.sprint = 0;
+      if (lastKinds(history, 6).includes("estimate")) W.estimate = 0;
       if (newUser) W.action *= 0.4;
       // no kind twice within the last three cards
       for (const k of histK) if (k in W) W[k] = 0;
@@ -283,6 +303,8 @@
     // bookkeeping
     if (spec.kind === "chest") { sinceChest = 0; chestGap = Math.min(22, chestGap + 2); nextChestAt = chestGap + Math.floor(rand() * 5); } else sinceChest++;
     if (spec.kind === "receipt") sinceReceipt = 0; else sinceReceipt++;
+    if (spec.kind === "task") session.taskShown = true;
+    if (spec.kind === "sprint") session.sprints = (session.sprints || 0) + 1;
     if (spec.kind === "review") sinceReview = 0; else sinceReview++;
     if (spec.kind !== "one") sinceOne++;
     if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, history.length); }
@@ -307,7 +329,7 @@
       case "capture": return pickCapture();
       case "reflect": return pickReflect();
       case "sprint": return { kind: "sprint", id: UP.uid("sprint") };
-      case "task": { const t = pick(openTasks()); return t && { kind: "task", id: t.id, data: t }; }
+      case "task": { const t = openTasks()[0]; return t && { kind: "task", id: t.id, data: t }; }
       case "idea": { const t = pick(staleIdeas()); return t && { kind: "idea", id: t.id, data: t }; }
       case "capsule": { const j = pick(capsules()); return j && { kind: "capsule", id: j.id, data: j }; }
       case "review": return pickReview();
