@@ -239,7 +239,20 @@
     toastT = setTimeout(() => t.classList.remove("show"), 2200);
   };
 
+  const bannerQ = [];
+  let bannerBusy = false;
   function banner(kicker, title, sub) {
+    bannerQ.push([kicker, title, sub]);
+    if (!bannerBusy) nextBanner();
+  }
+  function nextBanner() {
+    const item = bannerQ.shift();
+    if (!item) { bannerBusy = false; return; }
+    bannerBusy = true;
+    setTimeout(nextBanner, 2900);
+    showBanner(...item);
+  }
+  function showBanner(kicker, title, sub) {
     const b = h("div", { class: "banner", role: "status" }, h("span", { class: "b-kick" }, kicker), h("strong", null, title), sub ? h("span", { class: "b-sub" }, sub) : null);
     document.body.append(b);
     requestAnimationFrame(() => b.classList.add("show"));
@@ -331,7 +344,7 @@
   };
 
   /* streamed Claude answer in a sheet, with optional follow-up chat */
-  ui.claudeSheet = (title, quote, run, chat) => {
+  ui.claudeSheet = (title, quote, run, chat, actions) => {
     const out = h("div", { class: "claude-out", "aria-live": "polite" }, h("p", { class: "thinking" }, "Thinking..."));
     const stop = h("button", { class: "btn ghost small" }, "Stop");
     const thread = h("div", { class: "thread" }, out);
@@ -359,6 +372,7 @@
     }
     (async () => {
       const first = await ask(out, run);
+      if (first != null && actions) foot.prepend(h("div", { class: "row" }, ...actions(first)));
       if (!chat || first == null) return;
       turns.push({ role: "assistant", content: first });
       const fid = "followup-" + Date.now();
@@ -674,7 +688,7 @@
 
     // keyboard
     addEventListener("keydown", (e) => {
-      if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
+      if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])") || $("#session-end:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
       if (document.body.dataset.tab !== "feed") return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
       const inCard = e.target === document.body || (current && current.contains(e.target));
@@ -700,6 +714,7 @@
       spawn(innerWidth - 40, 40, 50, 6);
       // offer a natural stopping point right after the ring closes
       if (!S.receiptShown && S.cards >= 8) { S.receiptShown = true; setTimeout(() => ui.insertNext({ kind: "receipt", id: UP.uid("receipt") }), 400); }
+      else if (!S.receiptShown) S.receiptPending = true;
     });
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));

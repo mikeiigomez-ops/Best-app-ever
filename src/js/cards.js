@@ -232,7 +232,7 @@
           h("h3", { class: "reveal-head" }, d.headline),
           h("p", { class: "body" }, d.body));
         const v = verdict(ok, amt, ok ? nextCheckText(r) : "Now you know. " + nextCheckText(r));
-        if (!ok && early) v.querySelector("strong").textContent = "Almost nobody gets this one.";
+        if (!ok && early) v.querySelector("strong").textContent = isAi ? "Good guess. Now you know." : "Almost nobody gets this one.";
         qz.append(v, reveal, afterBlock(d));
         UP.ui.revealIntoView(reveal);
         el.classList.add("done");
@@ -273,7 +273,7 @@
       if (!ok || isWord) {
         const recap = h("div", { class: "after" });
         if (isWord) recap.append(h("p", { class: "explain" }, h("b", null, d.word + ": "), d.def), h("p", { class: "example" }, d.example));
-        else recap.append(h("p", { class: "explain" }, h("b", null, d.headline + " "), d.body));
+        else recap.append(h("p", { class: "explain" }, h("b", null, d.headline.replace(/[.!?]?$/, ".") + " "), d.body));
         holder.append(recap);
       }
       el.classList.add("done");
@@ -281,7 +281,7 @@
     }
 
     // Strong cards switch to real recall: think of the answer, reveal it, be honest
-    if (!isWord && r.b >= 2 && Math.random() < 0.5) {
+    if (!isWord && r.b >= 1 && Math.random() < 0.45) {
       inner.append(h("h2", { class: "headline q-head" }, d.q));
       const zone = h("div", { class: "quiz" });
       const reveal = h("button", { class: "btn primary" }, "Think of the answer, then reveal");
@@ -734,7 +734,18 @@
     const result = h("div", { class: "result" });
     const done = h("button", { class: "btn primary" }, icon("check"), "Done");
     const help = h("button", { class: "btn ghost needs-ai" }, icon("spark"), "Help me do it");
-    help.addEventListener("click", () => UP.ui.claudeSheet("Let's get it done", v.text, (onText, signal) => UP.ai.helpTask(v.text, onText, signal)));
+    help.addEventListener("click", () => UP.ui.claudeSheet("Let's get it done", v.text, (onText, signal) => UP.ai.helpTask(v.text, onText, signal), null, (answer) => {
+      const firstLine = answer.split(/\n+/).map((x) => x.replace(/^\s*(\d+[.)]|[-*\u2022])\s*/, "").trim()).find((x) => x.length > 3) || "";
+      const copy = h("button", { class: "btn ghost small" }, icon("copy"), "Copy");
+      copy.addEventListener("click", async () => UP.ui.toast((await UP.copyText(answer)) ? "Copied" : "Select the text to copy it"));
+      const step = h("button", { class: "btn ghost small" }, "Save first step");
+      step.addEventListener("click", () => { v.step = firstLine.slice(0, 120); store.save(); step.disabled = true; step.textContent = "Saved"; });
+      const tonight = h("button", { class: "btn ghost small" }, "Remind me tonight");
+      tonight.addEventListener("click", () => { const d = new Date(); d.setHours(18, 0, 0, 0); v.snooze = Math.max(now() + 3600000, d.getTime()); store.save(); UP.ui.closeSheet(); UP.ui.toast("Okay, tonight."); });
+      const did = h("button", { class: "btn primary small" }, icon("check"), "Done it");
+      did.addEventListener("click", () => { UP.ui.closeSheet(); done.click(); });
+      return [did, step, tonight, copy];
+    }));
     const drop = h("button", { class: "btn ghost" }, "Drop it");
     const row = h("div", { class: "row" }, done, help, drop);
     // a real snooze: pick when it should come back

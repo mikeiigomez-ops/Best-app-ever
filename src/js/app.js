@@ -57,7 +57,7 @@
       const next = h("button", { class: "btn primary wide" }, UP.ai.available() ? "Next" : "Start scrolling");
       next.addEventListener("click", () => (UP.ai.available() ? s2() : finish()));
       step.append(
-        h("p", { class: "ob-kicker" }, "Step 1 of " + steps()),
+        h("p", { class: "ob-kicker" }, steps() === 2 ? "Last step" : "Step 1 of 2"),
         h("h2", { class: "ob-title sm" }, "Pick what you want more of."),
         chipGroup(Object.entries(engine.GOALS).map(([k, g]) => [k, g.label, g.sub]), st.goals, true),
         h("p", { class: "ob-sub" }, "Curious about any of these? Optional. The feed learns as you go."),
@@ -90,7 +90,7 @@
       const skip = h("button", { class: "btn ghost wide" }, "No topic, just start");
       skip.addEventListener("click", () => finish());
       step.append(
-        h("p", { class: "ob-kicker" }, "Step 2 of 3"),
+        h("p", { class: "ob-kicker" }, "Last step"),
         h("h2", { class: "ob-title sm" }, "Anything you've been meaning to learn?"),
         h("p", { class: "ob-sub" }, "Name any topic and Claude writes you an endless course, woven into the feed. It gets deeper the further you go."),
         input, chips, go, skip, dots(2)

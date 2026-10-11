@@ -164,7 +164,7 @@
   function pickReview() {
     const fresh = freshDue();
     for (const id of fresh) learnedAt.delete(id);
-    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id) && !sessionUsed.has(id));
+    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id));
     for (const id of due) {
       const data = findItem(id);
       if (data) return { kind: "review", id, data, src: data.__kind };
@@ -235,7 +235,7 @@
     if (!spec && sinceChest >= nextChestAt && filter !== "calm") {
       spec = { kind: "chest", id: UP.uid("chest") };
     }
-    if (!spec && !session.receiptShown && session.cards >= 25 && now() - session.start > 12 * 60000 && filter !== "calm") {
+    if (!spec && !session.receiptShown && filter !== "calm" && ((session.receiptPending && session.cards >= 8) || (session.cards >= 25 && now() - session.start > 12 * 60000))) {
       session.receiptShown = true;
       spec = { kind: "receipt", id: UP.uid("receipt") };
     }

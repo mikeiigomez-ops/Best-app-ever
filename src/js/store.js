@@ -252,6 +252,8 @@
     const item = { id: UP.uid("v"), kind, text: String(text).trim().slice(0, 600), createdAt: now(), done: false, ...extra };
     if (kind === "task" && item.due == null) { const due = UP.parseDue(item.text); if (due) item.due = due; }
     if (!item.text) return null;
+    const dup = state.vault.find((v) => v.kind === kind && !v.done && !v.archived && v.text.toLowerCase() === item.text.toLowerCase());
+    if (dup) return dup;
     state.vault.unshift(item);
     capVault();
     save();
@@ -298,7 +300,12 @@
     for (const [k, def] of Object.entries(base)) {
       const v = saved[k];
       if (v === undefined) continue;
-      if (Array.isArray(def)) { if (Array.isArray(v)) out[k] = v.filter((x) => x && typeof x === "object" && typeof x.id === "string"); }
+      if (Array.isArray(def)) {
+        if (!Array.isArray(v)) continue;
+        if (k === "goals" || k === "interests") out[k] = v.filter((x) => typeof x === "string");
+        else if (k === "calib") out[k] = v.filter((x) => x && typeof x.r === "number");
+        else out[k] = v.filter((x) => x && typeof x === "object" && typeof x.id === "string");
+      }
       else if (def && typeof def === "object") { if (v && typeof v === "object" && !Array.isArray(v)) out[k] = (k === "srs" || k === "days" || k === "seen" || k === "affinity" || k === "kindAffinity" || k === "snooze") ? v : Object.assign(def, v); }
       else if (def === null) { if (v === null || typeof v === "object") out[k] = v; }
       else if (typeof v === typeof def) out[k] = v;

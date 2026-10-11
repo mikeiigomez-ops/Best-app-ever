@@ -117,15 +117,14 @@
     const base = new Date();
     if (/\b(today|tonight|this evening)\b/.test(t)) return end(base);
     if (/\btomorrow\b/.test(t)) { base.setDate(base.getDate() + 1); return end(base); }
-    if (/\b(this )?weekend\b/.test(t)) { base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7)); return end(base); }
+    if (/\b(this )?weekend\b/.test(t)) { if (base.getDay() !== 0) base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7)); return end(base); }
     if (/\bnext week\b/.test(t)) { base.setDate(base.getDate() + ((8 - base.getDay()) % 7 || 7)); return end(base); }
     for (let i = 0; i < 7; i++) {
       const name = WEEKDAYS[i];
-      const re = new RegExp("\\b(by |on |this |next )?(" + name + "|" + name.slice(0, 3) + ")\\b");
-      const m = t.match(re);
+      const m = t.match(new RegExp("\\b(by |on |this |next )?" + name + "\\b")) || t.match(new RegExp("\\b(by |on )" + name.slice(0, 3) + "\\b"));
       if (m) {
         let add = (i - base.getDay() + 7) % 7;
-        if (m[1] === "next " && add < 7) add += add === 0 ? 7 : 0;
+        if (add === 0) add = 7; // "Sunday" said on a Sunday means the next one
         base.setDate(base.getDate() + add);
         return end(base);
       }

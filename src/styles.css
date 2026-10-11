@@ -718,3 +718,4 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .quiz.answered .opt.dim { display: none; }
 .ob-sub.contrast { color: var(--gold-2); font-weight: 600; }
 .swipe-hint { left: 20px; transform: none; align-items: flex-start; }
+.banner { top: 22%; }

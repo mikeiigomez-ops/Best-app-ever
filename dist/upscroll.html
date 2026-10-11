@@ -724,6 +724,7 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .quiz.answered .opt.dim { display: none; }
 .ob-sub.contrast { color: var(--gold-2); font-weight: 600; }
 .swipe-hint { left: 20px; transform: none; align-items: flex-start; }
+.banner { top: 22%; }
 
 </style>
 <div id="app">
@@ -1622,15 +1623,14 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const base = new Date();
     if (/\b(today|tonight|this evening)\b/.test(t)) return end(base);
     if (/\btomorrow\b/.test(t)) { base.setDate(base.getDate() + 1); return end(base); }
-    if (/\b(this )?weekend\b/.test(t)) { base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7)); return end(base); }
+    if (/\b(this )?weekend\b/.test(t)) { if (base.getDay() !== 0) base.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7)); return end(base); }
     if (/\bnext week\b/.test(t)) { base.setDate(base.getDate() + ((8 - base.getDay()) % 7 || 7)); return end(base); }
     for (let i = 0; i < 7; i++) {
       const name = WEEKDAYS[i];
-      const re = new RegExp("\\b(by |on |this |next )?(" + name + "|" + name.slice(0, 3) + ")\\b");
-      const m = t.match(re);
+      const m = t.match(new RegExp("\\b(by |on |this |next )?" + name + "\\b")) || t.match(new RegExp("\\b(by |on )" + name.slice(0, 3) + "\\b"));
       if (m) {
         let add = (i - base.getDay() + 7) % 7;
-        if (m[1] === "next " && add < 7) add += add === 0 ? 7 : 0;
+        if (add === 0) add = 7; // "Sunday" said on a Sunday means the next one
         base.setDate(base.getDate() + add);
         return end(base);
       }
@@ -2042,6 +2042,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const item = { id: UP.uid("v"), kind, text: String(text).trim().slice(0, 600), createdAt: now(), done: false, ...extra };
     if (kind === "task" && item.due == null) { const due = UP.parseDue(item.text); if (due) item.due = due; }
     if (!item.text) return null;
+    const dup = state.vault.find((v) => v.kind === kind && !v.done && !v.archived && v.text.toLowerCase() === item.text.toLowerCase());
+    if (dup) return dup;
     state.vault.unshift(item);
     capVault();
     save();
@@ -2088,7 +2090,12 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     for (const [k, def] of Object.entries(base)) {
       const v = saved[k];
       if (v === undefined) continue;
-      if (Array.isArray(def)) { if (Array.isArray(v)) out[k] = v.filter((x) => x && typeof x === "object" && typeof x.id === "string"); }
+      if (Array.isArray(def)) {
+        if (!Array.isArray(v)) continue;
+        if (k === "goals" || k === "interests") out[k] = v.filter((x) => typeof x === "string");
+        else if (k === "calib") out[k] = v.filter((x) => x && typeof x.r === "number");
+        else out[k] = v.filter((x) => x && typeof x === "object" && typeof x.id === "string");
+      }
       else if (def && typeof def === "object") { if (v && typeof v === "object" && !Array.isArray(v)) out[k] = (k === "srs" || k === "days" || k === "seen" || k === "affinity" || k === "kindAffinity" || k === "snooze") ? v : Object.assign(def, v); }
       else if (def === null) { if (v === null || typeof v === "object") out[k] = v; }
       else if (typeof v === typeof def) out[k] = v;
@@ -2675,7 +2682,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   function pickReview() {
     const fresh = freshDue();
     for (const id of fresh) learnedAt.delete(id);
-    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id) && !sessionUsed.has(id));
+    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id));
     for (const id of due) {
       const data = findItem(id);
       if (data) return { kind: "review", id, data, src: data.__kind };
@@ -2746,7 +2753,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     if (!spec && sinceChest >= nextChestAt && filter !== "calm") {
       spec = { kind: "chest", id: UP.uid("chest") };
     }
-    if (!spec && !session.receiptShown && session.cards >= 25 && now() - session.start > 12 * 60000 && filter !== "calm") {
+    if (!spec && !session.receiptShown && filter !== "calm" && ((session.receiptPending && session.cards >= 8) || (session.cards >= 25 && now() - session.start > 12 * 60000))) {
       session.receiptShown = true;
       spec = { kind: "receipt", id: UP.uid("receipt") };
     }
@@ -3127,7 +3134,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
           h("h3", { class: "reveal-head" }, d.headline),
           h("p", { class: "body" }, d.body));
         const v = verdict(ok, amt, ok ? nextCheckText(r) : "Now you know. " + nextCheckText(r));
-        if (!ok && early) v.querySelector("strong").textContent = "Almost nobody gets this one.";
+        if (!ok && early) v.querySelector("strong").textContent = isAi ? "Good guess. Now you know." : "Almost nobody gets this one.";
         qz.append(v, reveal, afterBlock(d));
         UP.ui.revealIntoView(reveal);
         el.classList.add("done");
@@ -3168,7 +3175,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       if (!ok || isWord) {
         const recap = h("div", { class: "after" });
         if (isWord) recap.append(h("p", { class: "explain" }, h("b", null, d.word + ": "), d.def), h("p", { class: "example" }, d.example));
-        else recap.append(h("p", { class: "explain" }, h("b", null, d.headline + " "), d.body));
+        else recap.append(h("p", { class: "explain" }, h("b", null, d.headline.replace(/[.!?]?$/, ".") + " "), d.body));
         holder.append(recap);
       }
       el.classList.add("done");
@@ -3176,7 +3183,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     }
 
     // Strong cards switch to real recall: think of the answer, reveal it, be honest
-    if (!isWord && r.b >= 2 && Math.random() < 0.5) {
+    if (!isWord && r.b >= 1 && Math.random() < 0.45) {
       inner.append(h("h2", { class: "headline q-head" }, d.q));
       const zone = h("div", { class: "quiz" });
       const reveal = h("button", { class: "btn primary" }, "Think of the answer, then reveal");
@@ -3629,7 +3636,18 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const result = h("div", { class: "result" });
     const done = h("button", { class: "btn primary" }, icon("check"), "Done");
     const help = h("button", { class: "btn ghost needs-ai" }, icon("spark"), "Help me do it");
-    help.addEventListener("click", () => UP.ui.claudeSheet("Let's get it done", v.text, (onText, signal) => UP.ai.helpTask(v.text, onText, signal)));
+    help.addEventListener("click", () => UP.ui.claudeSheet("Let's get it done", v.text, (onText, signal) => UP.ai.helpTask(v.text, onText, signal), null, (answer) => {
+      const firstLine = answer.split(/\n+/).map((x) => x.replace(/^\s*(\d+[.)]|[-*\u2022])\s*/, "").trim()).find((x) => x.length > 3) || "";
+      const copy = h("button", { class: "btn ghost small" }, icon("copy"), "Copy");
+      copy.addEventListener("click", async () => UP.ui.toast((await UP.copyText(answer)) ? "Copied" : "Select the text to copy it"));
+      const step = h("button", { class: "btn ghost small" }, "Save first step");
+      step.addEventListener("click", () => { v.step = firstLine.slice(0, 120); store.save(); step.disabled = true; step.textContent = "Saved"; });
+      const tonight = h("button", { class: "btn ghost small" }, "Remind me tonight");
+      tonight.addEventListener("click", () => { const d = new Date(); d.setHours(18, 0, 0, 0); v.snooze = Math.max(now() + 3600000, d.getTime()); store.save(); UP.ui.closeSheet(); UP.ui.toast("Okay, tonight."); });
+      const did = h("button", { class: "btn primary small" }, icon("check"), "Done it");
+      did.addEventListener("click", () => { UP.ui.closeSheet(); done.click(); });
+      return [did, step, tonight, copy];
+    }));
     const drop = h("button", { class: "btn ghost" }, "Drop it");
     const row = h("div", { class: "row" }, done, help, drop);
     // a real snooze: pick when it should come back
@@ -4832,7 +4850,20 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     toastT = setTimeout(() => t.classList.remove("show"), 2200);
   };
 
+  const bannerQ = [];
+  let bannerBusy = false;
   function banner(kicker, title, sub) {
+    bannerQ.push([kicker, title, sub]);
+    if (!bannerBusy) nextBanner();
+  }
+  function nextBanner() {
+    const item = bannerQ.shift();
+    if (!item) { bannerBusy = false; return; }
+    bannerBusy = true;
+    setTimeout(nextBanner, 2900);
+    showBanner(...item);
+  }
+  function showBanner(kicker, title, sub) {
     const b = h("div", { class: "banner", role: "status" }, h("span", { class: "b-kick" }, kicker), h("strong", null, title), sub ? h("span", { class: "b-sub" }, sub) : null);
     document.body.append(b);
     requestAnimationFrame(() => b.classList.add("show"));
@@ -4924,7 +4955,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   };
 
   /* streamed Claude answer in a sheet, with optional follow-up chat */
-  ui.claudeSheet = (title, quote, run, chat) => {
+  ui.claudeSheet = (title, quote, run, chat, actions) => {
     const out = h("div", { class: "claude-out", "aria-live": "polite" }, h("p", { class: "thinking" }, "Thinking..."));
     const stop = h("button", { class: "btn ghost small" }, "Stop");
     const thread = h("div", { class: "thread" }, out);
@@ -4952,6 +4983,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     }
     (async () => {
       const first = await ask(out, run);
+      if (first != null && actions) foot.prepend(h("div", { class: "row" }, ...actions(first)));
       if (!chat || first == null) return;
       turns.push({ role: "assistant", content: first });
       const fid = "followup-" + Date.now();
@@ -5267,7 +5299,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
     // keyboard
     addEventListener("keydown", (e) => {
-      if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
+      if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])") || $("#session-end:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
       if (document.body.dataset.tab !== "feed") return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
       const inCard = e.target === document.body || (current && current.contains(e.target));
@@ -5293,6 +5325,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       spawn(innerWidth - 40, 40, 50, 6);
       // offer a natural stopping point right after the ring closes
       if (!S.receiptShown && S.cards >= 8) { S.receiptShown = true; setTimeout(() => ui.insertNext({ kind: "receipt", id: UP.uid("receipt") }), 400); }
+      else if (!S.receiptShown) S.receiptPending = true;
     });
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));
@@ -5390,7 +5423,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       const next = h("button", { class: "btn primary wide" }, UP.ai.available() ? "Next" : "Start scrolling");
       next.addEventListener("click", () => (UP.ai.available() ? s2() : finish()));
       step.append(
-        h("p", { class: "ob-kicker" }, "Step 1 of " + steps()),
+        h("p", { class: "ob-kicker" }, steps() === 2 ? "Last step" : "Step 1 of 2"),
         h("h2", { class: "ob-title sm" }, "Pick what you want more of."),
         chipGroup(Object.entries(engine.GOALS).map(([k, g]) => [k, g.label, g.sub]), st.goals, true),
         h("p", { class: "ob-sub" }, "Curious about any of these? Optional. The feed learns as you go."),
@@ -5423,7 +5456,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       const skip = h("button", { class: "btn ghost wide" }, "No topic, just start");
       skip.addEventListener("click", () => finish());
       step.append(
-        h("p", { class: "ob-kicker" }, "Step 2 of 3"),
+        h("p", { class: "ob-kicker" }, "Last step"),
         h("h2", { class: "ob-title sm" }, "Anything you've been meaning to learn?"),
         h("p", { class: "ob-sub" }, "Name any topic and Claude writes you an endless course, woven into the feed. It gets deeper the further you go."),
         input, chips, go, skip, dots(2)
