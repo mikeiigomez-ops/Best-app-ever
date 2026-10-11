@@ -315,15 +315,16 @@
       const first = isFirstRun();
       const plate = first && WB.ui && WB.ui.chips ? this.focusPlate() : null;
       const acts = u.el("div", { class: "wb-front__acts" + (capsKnown ? "" : " is-pending"), "aria-busy": capsKnown ? "false" : "true" });
-      el.appendChild(u.el("div", { class: "wb-front" },
+      el.appendChild(u.el("div", { class: "wb-front" + (plate ? " wb-front--plate" : "") },
         u.el("header", { class: "wb-front__top" },
           u.el("span", { class: "wb-micro", text: "WORKBENCH · NO. 001" }),
           u.el("span", { class: "wb-micro wb-front__date", text: u.fmtDay(Date.now()).toUpperCase() })),
-        u.el("h1", { class: "wb-front__hero" }, "Show me anything you paid for, own, or have to deal with."),
-        u.el("p", { class: "wb-front__sub" }, "A receipt. Inside your fridge. A bill. The corner that's bugging you."),
+        plate,
+        plate ? u.el("p", { class: "wb-micro wb-front__or", text: "OR SHOW ME SOMETHING" }) : null,
+        u.el(plate ? "h2" : "h1", { class: "wb-front__hero" + (plate ? " wb-front__hero--2" : "") }, "Show me anything you paid for, own, or have to deal with."),
+        plate ? null : u.el("p", { class: "wb-front__sub" }, "A receipt. Inside your fridge. A bill. The corner that's bugging you."),
         hints,
         tip,
-        plate,
         u.el("div", { class: "wb-front__spacer" }),
         acts,
         u.el("p", { class: "wb-micro wb-front__foot", text: "YOUR MAIL STAYS CLOSED UNTIL YOU ASK." })));
@@ -339,12 +340,51 @@
           { key: "work", label: "Work projects" }, { key: "family", label: "Family time" }, { key: "budget", label: "Budget" }],
         value: focusKeys(),
         onChange: (v) => {
+          const prev = focusKeys();
+          const added = (v || []).filter((k) => prev.indexOf(k) < 0);
+          if (added.length) this.lastPick = added[added.length - 1];
+          else if ((v || []).indexOf(this.lastPick) < 0) this.lastPick = null;
           if (has("store", "setFocus")) safe("store.setFocus", () => WB.store.setFocus(v));
           this.renderHints();
+          this.renderGo();
           this.renderActs();
         },
       });
-      return u.el("div", { class: "wb-front__plate" }, u.el("span", { class: "wb-micro", text: "WHAT'S ON YOUR PLATE? PICK ANY. OPTIONAL." }), c.el);
+      this.go = u.el("div", { class: "wb-front__go", "aria-live": "polite" });
+      this.renderGo();
+      return u.el("section", { class: "wb-front__plate", "aria-label": "Start here" },
+        u.el("h1", { class: "wb-front__ask" }, "What's on your plate?"),
+        u.el("p", { class: "wb-front__sub", text: "Pick one. The first step takes about a minute." }), c.el, this.go);
+    },
+    /* the chip you picked leads straight to its first one-minute action */
+    goFor(key) {
+      const photo = canPhoto();
+      const cam = () => capture({ intent: "new", source: "camera" });
+      switch (key) {
+        case "space": return photo ? { label: "Photograph the basement", sub: "One photo from the doorway. I split it into zones.", run: cam }
+          : { label: "See a basement split into zones", sub: "The example bench. Every number still moves.", run: openDemo };
+        case "family": return has("bench", "weekSheet") ? { label: "Plan my week", sub: "Six numbers. It shows what family time costs.", run: () => WB.bench.weekSheet() } : null;
+        case "work": case "social": case "design3d": return has("bench", "newProjectSheet") ? { label: key === "social" ? "Type the posts you're making" : key === "design3d" ? "Type the model you're building" : "Type a work project",
+          sub: "A name, how many, how many done. No photo needed.", run: () => WB.bench.newProjectSheet({ side: key === "work" ? "work" : "home" }) } : null;
+        case "budget": return photo ? { label: "Photograph a bill", sub: "The page with the total and the billing days.", run: cam }
+          : { label: "See a bill on the bench", sub: "The example bench. Every number still moves.", run: openDemo };
+        default: return null;
+      }
+    },
+    goNow() {
+      const fk = focusKeys();
+      const key = this.lastPick && fk.indexOf(this.lastPick) >= 0 ? this.lastPick : fk[0];
+      return key ? this.goFor(key) : null;
+    },
+    renderGo() {
+      const u = U(), box = this.go;
+      if (!box) return;
+      box.textContent = "";
+      const g = this.goNow();
+      if (!g) return;
+      box.appendChild(u.el("button", { type: "button", class: "wb-btn wb-btn--primary wb-btn--block wb-front__gobtn", on: { click: g.run } },
+        u.el("span", { class: "wb-btn__dot", "aria-hidden": "true" }), u.el("span", { class: "wb-btn__label", text: g.label })));
+      box.appendChild(u.el("p", { class: "wb-front__gosub", text: g.sub }));
     },
     renderHints() {
       const u = U(), hints = this.hints, tip = this.tip;
@@ -373,8 +413,10 @@
       if (!acts || !acts.isConnected) return;
       const u = U();
       acts.textContent = "";
+      const lead = this.go && this.go.isConnected ? this.goNow() : null;
+      const prim = lead ? "wb-btn--quiet" : "wb-btn--primary";
       if (canPhoto()) {
-        acts.appendChild(u.el("button", { type: "button", class: "wb-btn wb-btn--primary wb-btn--block",
+        acts.appendChild(u.el("button", { type: "button", class: "wb-btn " + prim + " wb-btn--block",
           on: { click: () => capture({ intent: "new", source: "camera" }) } },
           u.el("span", { class: "wb-btn__dot", "aria-hidden": "true" }), u.el("span", { class: "wb-btn__label", text: "Take a photo" })));
         acts.appendChild(u.el("button", { type: "button", class: "wb-btn wb-btn--quiet wb-btn--block",
@@ -383,8 +425,8 @@
         acts.appendChild(u.el("button", { type: "button", class: "wb-link", text: "See one I made earlier", on: { click: openDemo } }));
       } else {
         acts.appendChild(u.el("p", { class: "wb-front__note", text: "Reading photos needs Claude. Here's a bench built from four example photos. Every number still moves." }));
-        acts.appendChild(u.el("button", { type: "button", class: "wb-btn wb-btn--primary wb-btn--block", on: { click: openDemo } },
-          u.el("span", { class: "wb-btn__dot", "aria-hidden": "true" }), u.el("span", { class: "wb-btn__label", text: "Open the example bench" })));
+        acts.appendChild(u.el("button", { type: "button", class: "wb-btn " + prim + " wb-btn--block", on: { click: openDemo } },
+          lead ? null : u.el("span", { class: "wb-btn__dot", "aria-hidden": "true" }), u.el("span", { class: "wb-btn__label", text: "Open the example bench" })));
         if (canMail()) {
           acts.appendChild(u.el("button", { type: "button", class: "wb-btn wb-btn--quiet wb-btn--block", on: { click: () => runMail() } },
             u.el("span", { class: "wb-btn__label", text: "Build one from my mail" })));
@@ -393,11 +435,12 @@
       const fk = focusKeys();
       const links = [];
       const any = (a) => a.some((k) => fk.indexOf(k) >= 0);
-      if (any(["social", "design3d", "work"]) && has("bench", "newProjectSheet")) {
+      const leadKey = lead ? (this.lastPick && fk.indexOf(this.lastPick) >= 0 ? this.lastPick : fk[0]) : null;
+      if (any(["social", "design3d", "work"]) && ["social", "design3d", "work"].indexOf(leadKey) < 0 && has("bench", "newProjectSheet")) {
         links.push(u.el("button", { type: "button", class: "wb-link", text: "Type a project instead",
           on: { click: () => WB.bench.newProjectSheet({ side: fk.indexOf("work") >= 0 ? "work" : "home" }) } }));
       }
-      if (fk.indexOf("family") >= 0 && has("bench", "weekSheet")) {
+      if (fk.indexOf("family") >= 0 && leadKey !== "family" && has("bench", "weekSheet")) {
         links.push(u.el("button", { type: "button", class: "wb-link", text: "Plan my week", on: { click: () => WB.bench.weekSheet() } }));
       }
       if (links.length) acts.appendChild(u.el("div", { class: "wb-front__more" }, links));
@@ -407,7 +450,7 @@
         acts.setAttribute("aria-busy", "false");
       }
     },
-    leave() { this.acts = null; this.hints = null; this.tip = null; },
+    leave() { this.acts = null; this.hints = null; this.tip = null; this.go = null; },
   };
 
   /* ------------------------------------------------------------ forging */
@@ -627,7 +670,21 @@
     bus.on("side:changed", (p) => {
       if (p && (p.side === "work" || p.side === "home") && WB.ui && WB.ui.setSide) WB.ui.setSide(p.side, { animate: true });
     });
-    bus.on("instrument:saved", (p) => { if (p && p.isNew) { markFirstRunDone(); applySide(false); } });
+    bus.on("instrument:saved", (p) => {
+      if (!p || !p.isNew) return;
+      markFirstRunDone(); applySide(false);
+      // made a work thing while clocked out: say where it went instead of letting it vanish from the bench
+      const inst = p.instrument;
+      const S = WB.store;
+      if (!inst || inst.demo || !S || typeof S.side !== "function" || typeof S.sideAt !== "function") return;
+      const side = WB.molds && typeof WB.molds.sideOf === "function" ? WB.molds.sideOf(inst) : inst.side;
+      if (S.side() !== "home" || !S.sideAt() || side !== "work") return;
+      setTimeout(() => {
+        if (S.side() !== "home" || !WB.ui || typeof WB.ui.toast !== "function") return;
+        WB.ui.toast("Saved for work. Clock in to see it on the bench.", { action: { label: "Clock in now",
+          onTap: () => { if (WB.bench && typeof WB.bench.clockIn === "function") WB.bench.clockIn(); } }, ms: 7000 });
+      }, 350);
+    });
     bus.on("instrument:melted", () => applySide(false));
     bus.on("focus:changed", () => applySide(false));
     bus.on("view:enter", (p) => { if (p.view !== "front") autoFront = false; });

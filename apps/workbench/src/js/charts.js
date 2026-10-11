@@ -526,7 +526,7 @@
       let cls = "";
       if (g.due) { st8 = "CHECK-IN DUE"; cls = " ch-lbl--signal"; }
       else if (g.status === "held") { st8 = "HELD"; cls = " ch-lbl--good"; }
-      else if (g.status === "missed") { st8 = "MISSED"; cls = " ch-lbl--warn"; }
+      else if (g.status === "missed") { st8 = "NOT THIS TIME"; cls = ""; }   // neutral: a personal promise, not a grade
       else if (g.status === "closer") { st8 = "CLOSER"; cls = " ch-lbl--good"; }
       P.push('<text class="ch-lbl' + cls + '" x="' + (W - 12) + '" y="' + (top + 15) + '" text-anchor="end">' + esc(st8) + "</text>");
     }

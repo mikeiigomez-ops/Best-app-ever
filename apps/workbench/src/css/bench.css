@@ -15,6 +15,7 @@
   font-size: 26px; line-height: 1; letter-spacing: -0.01em; color: var(--ink);
 }
 .bn-date { color: var(--ink-2); white-space: nowrap; }
+@media (max-width: 380px) { .bn-head:has(.bn-side) .bn-date { display: none; } }
 .bn-more { margin-right: calc(var(--s2) * -1); }
 .bn-rule {
   height: 0; margin: var(--s2) 0 var(--s4);
@@ -222,7 +223,7 @@
 .bn-menu__where { margin: var(--s3) 0 0; color: var(--ink-3); }
 .bn-seg { display: inline-flex; border: var(--hair) solid var(--rule); border-radius: var(--r-card); padding: 3px; gap: 3px; background: var(--paper-2); }
 .bn-seg__btn {
-  min-height: 40px; min-width: 44px; padding: 0 var(--s3); border: 0; border-radius: 7px;
+  min-height: 44px; min-width: 44px; padding: 0 var(--s3); border: 0; border-radius: 7px;
   background: transparent; color: var(--ink-2);
   font-family: var(--font-sans); font-size: var(--t-small); font-weight: 600;
 }
@@ -337,6 +338,20 @@
 }
 .bn-clock__btn:active { background: var(--ink-2); }
 .bn-clock__btn:focus-visible { outline: 2px solid var(--signal); outline-offset: -3px; }
+
+/* TODAY: one finishable step */
+.bn-today { margin: 0 0 var(--s4); }
+.bn-today__line {
+  display: grid; grid-template-columns: auto 1fr; column-gap: var(--s3); row-gap: 2px; align-items: baseline; width: 100%;
+  min-height: 56px; padding: var(--s3) var(--s4); text-align: left;
+  background: var(--paper-2); border: var(--hair) solid var(--rule); border-left: 4px solid var(--signal); border-radius: var(--r-card);
+  color: var(--ink); font: inherit;
+}
+.bn-today__k { grid-row: 1 / span 2; color: var(--signal); font-weight: 600; }
+.bn-today__text { font-family: var(--font-serif); font-size: 18px; line-height: 1.3; overflow-wrap: anywhere; text-wrap: pretty; }
+.bn-today__for { grid-column: 2; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.bn-today__line:active { background: var(--paper-3); }
+.bn-today__line:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 
 /* START WITH */
 .bn-start {

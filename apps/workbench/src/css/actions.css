@@ -394,7 +394,7 @@ button.msn-pin::before { content: ""; position: absolute; inset: -11px; border-r
 
 /* the week's protected blocks, grouped */
 .act-week { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
-.act-week__row { display: flex; align-items: center; gap: var(--s3); min-height: 32px; font-size: var(--t-small); line-height: 1.35; color: var(--ink); }
+.act-week__row { display: flex; align-items: center; gap: var(--s3); min-height: 44px; font-size: var(--t-small); line-height: 1.35; color: var(--ink); }
 .act-week__dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--wk-work); border: var(--hair) solid var(--rule); }
 .act-week__row--focus .act-week__dot { background: var(--wk-focus); border-color: var(--wk-focus); }
 .act-week__row--family .act-week__dot, .act-week__row--morning .act-week__dot { background: var(--wk-family); border-color: var(--wk-family); }

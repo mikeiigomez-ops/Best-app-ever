@@ -216,16 +216,19 @@
 
   function hashFor(name, params) {
     const id = params && (params.id || params.peerKey);
-    return "#/" + encodeURIComponent(name) + (id ? "/" + encodeURIComponent(String(id)) : "");
+    // a mission also carries its zone, so a reload or a shared link resumes the zone you picked
+    const zone = id && params.zoneId ? "/" + encodeURIComponent(String(params.zoneId)) : "";
+    return "#/" + encodeURIComponent(name) + (id ? "/" + encodeURIComponent(String(id)) : "") + zone;
   }
   function parseHash(h) {
-    const m = /^#\/([^/?#]+)(?:\/([^/?#]+))?/.exec(h || "");
+    const m = /^#\/([^/?#]+)(?:\/([^/?#]+))?(?:\/([^/?#]+))?/.exec(h || "");
     if (!m) return null;
     const name = decodeURIComponent(m[1]);
     const params = {};
     if (m[2]) {
       const v = decodeURIComponent(m[2]);
       if (name === "mirror") params.peerKey = v; else params.id = v;
+      if (m[3] && name === "mission") params.zoneId = decodeURIComponent(m[3]);
     }
     return { name, params };
   }

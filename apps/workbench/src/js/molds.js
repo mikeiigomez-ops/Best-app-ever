@@ -569,7 +569,9 @@
   }
   function tracksTarget(inst, base, perWeek) {
     const mold = MOLDS[inst.mold];
-    return Math.min(totalCount(inst), base + perWeek * ((mold.checkDays || 7) / 7));
+    // whole units only: half a post is not something you can finish (0.5 a week still asks for one)
+    const step = Math.max(1, Math.round(perWeek * ((mold.checkDays || 7) / 7) + EPS));
+    return Math.min(totalCount(inst), Math.round(base) + step);
   }
 
   const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -889,7 +891,7 @@
     if (!it) return { baseline: null, target: null, start: null, end: null, points, status: "none", due: false, progress: null, perWeek: null, total };
     const base = isNum(it.baseline) ? it.baseline : doneCount(inst);
     const perWeek = toNum(it.value, 1);
-    const target = Math.min(total, base + perWeek * (mold.checkDays || 7) / 7);
+    const target = tracksTarget(inst, base, perWeek);
     const start = isNum(it.committedAt) ? it.committedAt : now();
     const end = isNum(it.checkAt) ? it.checkAt : start + (mold.checkDays || 7) * DAY;
     const t = now();

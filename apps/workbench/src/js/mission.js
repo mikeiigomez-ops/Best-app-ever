@@ -210,6 +210,8 @@
     V.wasOver = false; V.lastMin = null;
     const inst = V.id ? getInst(V.id) : null;
     if (inst && inst.mold === "zones" && !hidden(inst)) {
+      // no zone in the link: keep the zone of a mission still under way rather than planning the next one
+      if (!V.zoneId && inst.mission && !inst.mission.verified && inst.mission.zoneId) V.zoneId = String(inst.mission.zoneId);
       const z = zoneFor(inst, V.zoneId);
       const m = inst.mission;
       if (z && (!m || m.verified || m.zoneId !== z.id)) {

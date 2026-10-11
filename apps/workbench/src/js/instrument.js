@@ -583,9 +583,14 @@
       S.pins[p.id] = g;
     });
   }
-  /* zone map: clear zones are filled, the next one pulses, the rest are dashed outlines */
+  /* zone map: clear zones are filled, the next one pulses, the rest are dashed outlines.
+     Labels are drawn last, in their own layer, and nudged so no two collide: every name stays readable and tappable. */
   function drawZones(S, ov, sz) {
     const next = nextZoneOf(S.inst);
+    const LH = 18, GAP = 2;
+    const placed = [];
+    const hits = (a) => placed.some((b) => a.x < b.x + b.w + GAP && a.x + a.w + GAP > b.x && a.y < b.y + b.h + GAP && a.y + a.h + GAP > b.y);
+    const labels = [];
     zonesOf(S.inst).forEach((z) => {
       if (!Array.isArray(z.bbox) || z.bbox.length !== 4) return;
       const [bx, by, bw, bh] = z.bbox.map(Number);
@@ -596,16 +601,36 @@
       const hitW = Math.max(44, w), hitH = Math.max(44, hh);
       g.appendChild(svgEl("rect", { class: "ins-zone__hit", x: x + w / 2 - hitW / 2, y: y + hh / 2 - hitH / 2, width: hitW, height: hitH }));
       g.appendChild(svgEl("rect", { class: "ins-zone__r", x, y, width: w, height: hh, rx: 3 }));
-      const name = String(z.name || "").slice(0, 28);
-      const lw = Math.min(Math.max(30, w + 40), name.length * 6.2 + (st === "done" ? 26 : 12));
-      const lx = clamp(x, 0, Math.max(0, sz.w - lw)), ly = clamp(y, 0, Math.max(0, sz.h - 18));
-      g.appendChild(svgEl("rect", { class: "ins-zone__chip", x: lx, y: ly, width: lw, height: 18, rx: 3 }));
-      let tx = lx + 6;
+      ov.appendChild(g);
+      labels.push({ z, st, x, y, w, hh });
+    });
+    // the next zone places first so it keeps its natural spot; then the rest in reading order
+    labels.sort((a, b) => (a.st === "next" ? -1 : b.st === "next" ? 1 : a.y - b.y || a.x - b.x));
+    labels.forEach((L) => {
+      const { z, st, x, y, w, hh } = L;
+      let name = String(z.name || "").slice(0, 28);
+      const widthFor = (n) => Math.min(Math.max(30, w + 40), n.length * 6.2 + (st === "done" ? 26 : 12), sz.w);
+      const at = (cx, cy, lw) => ({ x: clamp(cx, 0, Math.max(0, sz.w - lw)), y: clamp(cy, 0, Math.max(0, sz.h - LH)), w: lw, h: LH });
+      let lw = widthFor(name);
+      const tries = () => {
+        const c = [at(x, y, lw), at(x, y + hh - LH, lw), at(x, y - LH - GAP, lw), at(x, y + hh + GAP, lw), at(x + w - lw, y, lw), at(x + w - lw, y + hh - LH, lw)];
+        for (let k = 1; k <= 8; k++) c.push(at(x, y + k * (LH + GAP), lw), at(x, y - k * (LH + GAP), lw));
+        return c.find((r) => !hits(r)) || null;
+      };
+      let r = tries();
+      if (!r && name.length > 10) { name = name.slice(0, 9) + "…"; lw = widthFor(name); r = tries(); }
+      if (!r) r = at(x, y, lw);
+      placed.push(r);
+      const g = svgEl("g", { class: "ins-zone ins-zone--" + st + " ins-zone--lbl", "data-zone": z.id, "aria-hidden": "true" });
+      g.appendChild(svgEl("rect", { class: "ins-zone__chip", x: r.x, y: r.y, width: r.w, height: LH, rx: 3 }));
+      // a taller transparent hit around the 18px chip; the zone outline underneath keeps its own 44px target
+      g.appendChild(svgEl("rect", { class: "ins-zone__hit", x: r.x, y: r.y + LH / 2 - 13, width: r.w, height: 26 }));
+      let tx = r.x + 6;
       if (st === "done") {
-        g.appendChild(svgEl("path", { class: "ins-zone__check", d: "M" + (lx + 5) + " " + (ly + 9.5) + "l3 3 5-6.5" }));
-        tx = lx + 18;
+        g.appendChild(svgEl("path", { class: "ins-zone__check", d: "M" + (r.x + 5) + " " + (r.y + 9.5) + "l3 3 5-6.5" }));
+        tx = r.x + 18;
       }
-      const t = svgEl("text", { class: "ins-zone__t", x: tx, y: ly + 12.5 });
+      const t = svgEl("text", { class: "ins-zone__t", x: tx, y: r.y + 12.5 });
       t.textContent = name;
       g.appendChild(t);
       ov.appendChild(g);
@@ -1654,7 +1679,7 @@
         const pct = isNum(g.progress) ? Math.round(clamp(g.progress, 0, 1) * 100) : null;
         mono = "CLOSER" + (pct != null ? " · " + pct + "% OF THE WAY" : ""); btn = "quiet";
       }
-      else if (g.status === "missed") { mono = "MISSED · TRY A SMALLER STEP"; btn = "quiet"; }
+      else if (g.status === "missed") { mono = "NOT THIS TIME · TRY A SMALLER STEP"; btn = "quiet"; }
       else { mono = "COMMITTED · CHECK " + fmtDay(it.checkAt || g.end || Date.now()).toUpperCase(); btn = "quiet"; }
     } else if (S.refusal && REFUSE[S.refusal]) {
       text = REFUSE[S.refusal];
@@ -2150,7 +2175,7 @@
       const shown = real.length ? real[real.length - 1].v : g.baseline;
       pv = { formatted: fmt(shown, pf, inst), label: pv.label };
       if (isNum(g.target)) {
-        const tail = g.status === "held" ? "HELD" : g.status === "missed" ? "MISSED" : g.status === "closer" ? "CLOSER" : g.due ? "DUE" : "CHECK " + fmtDay(g.end || Date.now()).toUpperCase();
+        const tail = g.status === "held" ? "HELD" : g.status === "missed" ? "NOT THIS TIME" : g.status === "closer" ? "CLOSER" : g.due ? "DUE" : "CHECK " + fmtDay(g.end || Date.now()).toUpperCase();
         promise = "→ " + fmt(g.target, pf, inst) + " · " + tail;
       }
     }

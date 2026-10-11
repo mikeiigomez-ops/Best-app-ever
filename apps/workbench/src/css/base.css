@@ -197,7 +197,7 @@ button { cursor: pointer; }
 .wb-toast.is-in { opacity: 1; transform: none; }
 .wb-toast__text { flex: 1; padding: var(--s1) 0; }
 .wb-toast__act {
-  min-height: 40px; padding: 0 var(--s3); border: 0; border-radius: var(--r-chip);
+  min-height: 44px; padding: 0 var(--s3); border: 0; border-radius: var(--r-chip);
   background: transparent; color: var(--paper);
   font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: var(--track-micro); text-transform: uppercase;
   text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--signal);
@@ -402,6 +402,17 @@ button { cursor: pointer; }
 .wb-front__hints--5 .wb-hint svg { width: 44px; height: 44px; }
 .wb-front__hints--5 .wb-hint .wb-micro { white-space: normal; text-align: center; font-size: 9px; letter-spacing: 0.04em; line-height: 1.3; }
 .wb-front__plate .wb-micro { display: block; margin-bottom: var(--s2); color: var(--ink-3); }
+/* first run: the plate is the way in; the photo ask sits below it, smaller */
+.wb-front--plate .wb-front__plate { margin-top: var(--s5); }
+.wb-front__ask {
+  margin: 0; font-family: var(--font-serif); font-weight: 400;
+  font-size: var(--t-hero); line-height: 44px; letter-spacing: -0.012em; color: var(--ink); text-wrap: balance;
+}
+.wb-front--plate .wb-front__plate .wb-front__sub { margin: var(--s2) 0 var(--s4); }
+.wb-front__go:not(:empty) { margin-top: var(--s4); }
+.wb-front__gosub { margin: var(--s2) 0 0; font-size: var(--t-small); color: var(--ink-2); text-align: center; text-wrap: pretty; }
+.wb-front__or { margin: var(--s6) 0 0; padding-top: var(--s3); border-top: var(--hair) solid var(--rule); color: var(--ink-3); }
+.wb-front__hero--2 { margin-top: var(--s2); font-size: 24px; line-height: 30px; }
 
 /* ---------------------------------------------------------- hover (pointer devices only) */
 @media (hover: hover) {
@@ -415,10 +426,12 @@ button { cursor: pointer; }
 
 /* ---------------------------------------------------------- wider screens */
 @media (min-width: 480px) {
-  .wb-front__hero { font-size: 46px; line-height: 50px; }
+  .wb-front__hero, .wb-front__ask { font-size: 46px; line-height: 50px; }
+  .wb-front__hero.wb-front__hero--2 { font-size: 28px; line-height: 34px; }
 }
 @media (max-width: 359px) {
-  .wb-front__hero { font-size: 34px; line-height: 38px; }
+  .wb-front__hero, .wb-front__ask { font-size: 34px; line-height: 38px; }
+  .wb-front__hero.wb-front__hero--2 { font-size: 22px; line-height: 28px; }
   .wb-hint svg { width: 44px; height: 44px; }
   .wb-hint__n { display: none; }
 }

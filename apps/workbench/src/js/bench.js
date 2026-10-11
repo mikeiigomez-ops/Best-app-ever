@@ -714,6 +714,51 @@
         h("button", { type: "button", class: "wb-btn wb-btn--quiet bn-start__btn", text: "Done", dataset: { key: "start:done" }, on: { click: () => { haptic(8); doneLoop(first.id); } } })),
       rows);
   }
+  /* TODAY: one finishable step, named the moment the bench opens. Only from what this side shows,
+     so Home never names a work project. Tonight's family evening first, then a zone, then a project step. */
+  function todayStep(items) {
+    const d = new Date(now());
+    const dow = (d.getDay() + 6) % 7;
+    const hour = d.getHours();
+    const home = sideNow() === "home" && modesOn();
+    const real = items.filter((i) => !isHiddenInst(i) && !(home && sideOfInst(i) === "work"));
+    const week = real.find((i) => i.mold === "week");
+    const plan = week && Mo("weekPlan") ? safe("weekPlan", () => WB.molds.weekPlan(week), null) : null;
+    const fam = plan && Array.isArray(plan.family) ? plan.family : [];
+    const tonight = fam.find((b) => b.dow === dow);
+    const startH = tonight ? parseInt(String(tonight.start || "18"), 10) || 18 : 18;
+    if (tonight && hour < startH + Math.round((Number(tonight.minutes) || 180) / 60)) {
+      return { kind: "tonight", inst: week, text: "Family evening tonight from " + (startH > 12 ? startH - 12 + " PM" : startH + " AM") + ". Work waits.", meta: "FROM YOUR WEEK", go: () => go("instrument", { id: week.id }) };
+    }
+    const zones = real.find((i) => i.mold === "zones" && Mo("nextZone") && safe("nextZone", () => WB.molds.nextZone(i), null));
+    if (zones) {
+      const z = WB.molds.nextZone(zones);
+      const mins = Math.round(Number(z.minutes) || 0);
+      return { inst: zones, text: "Clear " + String(z.name || "the next zone") + (mins ? ", about " + mins + " minutes." : "."), meta: String(zones.title || "ZONES").toUpperCase(),
+        go: () => go("mission", { id: zones.id, zoneId: z.id }) };
+    }
+    const proj = real.find((i) => i.mold === "project" && (i.steps || []).some((st) => st && !st.done && st.text));
+    if (proj) {
+      const st = proj.steps.find((x) => x && !x.done && x.text);
+      return { inst: proj, text: String(st.text).replace(/[.\s]*$/, "") + ".", meta: String(proj.title || "PROJECT").toUpperCase(), go: () => go("instrument", { id: proj.id }) };
+    }
+    if (fam.length) {
+      const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      const nextB = fam.slice().sort((a, b) => ((a.dow - dow + 7) % 7) - ((b.dow - dow + 7) % 7)).find((b) => b.dow !== dow) || fam[0];
+      return { inst: week, text: "Next family evening is " + DAYS[nextB.dow] + ". Keep it clear.", meta: "FROM YOUR WEEK", go: () => go("instrument", { id: week.id }) };
+    }
+    return null;
+  }
+  function todayCard(items, startShown) {
+    const t = todayStep(items);
+    // with a START WITH card on the work side, only tonight's family evening earns a second line
+    if (!t || (startShown && t.kind !== "tonight")) return null;
+    return h("section", { class: "bn-today", "aria-label": "Today" },
+      h("button", { type: "button", class: "bn-today__line", dataset: { key: "today:" + t.inst.id }, on: { click: t.go } },
+        h("span", { class: "wb-micro bn-today__k", text: "TODAY" }),
+        h("span", { class: "bn-today__text", text: t.text }),
+        h("span", { class: "wb-micro bn-today__for", text: t.meta })));
+  }
   function clockTime(ms) {
     if (!ms) return "";
     const d = new Date(ms);
@@ -993,8 +1038,10 @@
         h("p", { class: "wb-micro bn-set__sub", text: "NOTHING ELSE NEEDS YOU TODAY" })));
     }
 
-    if (modes && sd === "work") { const sc = startCard(); if (sc) root.appendChild(sc); }
     if (modes && sd === "home") root.appendChild(clockStrip());
+    const sc = modes && sd === "work" ? startCard() : null;
+    if (!ses.ended) { const td = todayCard(sorted, !!sc); if (td) root.appendChild(td); }
+    if (sc) root.appendChild(sc);
 
     const lines = sinceLines(sorted);
     if (lines.length) {

@@ -198,7 +198,7 @@
     let instrumentId = (view === "instrument" || view === "mission") && cur.params && cur.params.id ? String(cur.params.id) : null;
     if (instrumentId && clockedOut()) {
       const shown = has("store", "get") ? safe("store.get", () => WB.store.get(instrumentId), null) : null;
-      if (hiddenInst(shown)) instrumentId = null;
+      if (hiddenInst(shown) || (shown && sideOfInst(shown) === "work")) instrumentId = null;
     }
     // a mission is shown to people here only when you said so on its brief
     const p = { v: 1, name: R.name || "", view, instrumentId, mission: R.missionVisible ? myMission() : null };
