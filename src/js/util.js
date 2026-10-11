@@ -97,8 +97,8 @@
     else if (abs === 0) s = "0";
     else s = Number(n.toPrecision(2)).toString();
     if (!unit) return s;
-    if (unit === "%" || unit === "°C" || unit === "°F" || unit === "°") return s + unit;
-    return s + " " + unit;
+    if (unit === "%" || unit === "°") return s + unit;
+    return s + "\u00a0" + unit;
   }
   function trim(x) {
     return (Math.round(x * 10) / 10).toString();

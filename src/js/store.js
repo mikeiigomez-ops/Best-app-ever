@@ -25,6 +25,8 @@
       xp: 0,
       days: {},
       streak: { count: 0, last: "", best: 0, freezes: 1 },
+      snooze: {},
+      golden: 0,
       combo: 0,
       bestCombo: 0,
       srs: {},
@@ -55,11 +57,11 @@
     "Supercluster", "Cosmic Web", "Quasar", "Singularity", "Universe",
   ];
   function levelInfo(xp) {
-    let level = 1, floor = 0, need = 100;
+    let level = 1, floor = 0, need = 150;
     while (xp >= floor + need) {
       floor += need;
       level++;
-      need = 100 + 45 * (level - 1);
+      need = 150 + 70 * (level - 1);
     }
     return { level, floor, need, into: xp - floor, pct: (xp - floor) / need, title: TITLES[Math.min(level - 1, TITLES.length - 1)] };
   }
@@ -111,7 +113,11 @@
     const after = levelInfo(state.xp);
     bus.emit("xp", { amount, ...meta });
     if (after.level > before) bus.emit("level", after);
-    if (!goalBefore && today().xp >= state.settings.dailyGoal) bus.emit("goal", {});
+    if (!goalBefore && today().xp >= state.settings.dailyGoal) {
+      let freeze = false;
+      if ((state.streak.freezes || 0) < 2 && state.streak.count >= 2) { state.streak.freezes = (state.streak.freezes || 0) + 1; freeze = true; }
+      bus.emit("goal", { freeze });
+    }
     save();
     return amount;
   }
@@ -129,19 +135,25 @@
 
   /* ---------- spaced repetition (Leitner boxes with real intervals) ---------- */
   const BOX_MS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY, 80 * DAY, 180 * DAY];
-  const MASTERED = 5; // survived a gap of a week or more
+  const MASTERED = 6; // survived a gap of about five weeks
+  const STRONG = 4;
   function srsGrade(id, ok, kind) {
     const existing = state.srs[id];
-    if (existing && ok && existing.d > now()) return existing; // not due yet: a right answer doesn't skip ahead
+    if (existing && ok && existing.n >= 2 && existing.d > now()) return existing; // not due yet: a right answer doesn't skip ahead
     const r = existing || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
     r.n += 1;
     if (ok) {
       r.ok += 1;
-      r.b = Math.min(r.b + 1, BOX_MS.length - 1);
+      // credit the real gap: remembering something after 40 days counts as surviving 40 days
+      const elapsed = existing ? now() - (r.seenAt || r.f || now()) : 0;
+      let earned = r.b + 1;
+      while (earned < BOX_MS.length - 1 && elapsed > BOX_MS[earned] * 1.5) earned++;
+      r.b = Math.min(earned, BOX_MS.length - 1);
     } else {
       r.l += 1;
-      r.b = 0;
+      r.b = Math.max(0, r.b - 2); // a slip costs a couple of steps, not everything
     }
+    r.seenAt = now();
     // first exposure answered correctly still gets a same-session check
     const wait = r.n === 1 ? BOX_MS[0] : BOX_MS[Math.max(0, r.b - (ok ? 1 : 0))];
     r.d = now() + wait * (0.9 + Math.random() * 0.2);
@@ -327,18 +339,28 @@
     if (aiKeys.length > 240) {
       aiKeys.sort((a, b) => (aiCards[a].at || 0) - (aiCards[b].at || 0));
       for (const k of aiKeys.slice(0, aiKeys.length - 220)) {
-        if (!state.srs[k]) delete aiCards[k];
+        if (!state.srs[k]) { delete aiCards[k]; aiDirty = true; }
       }
     }
   }
 
+  let aiDirty = true, warnedFull = false;
   function writeLocal() {
     if (!ls) return;
     try {
       ls.setItem(LS_KEY, JSON.stringify(state));
-      ls.setItem(LS_AI, JSON.stringify(aiCards));
-    } catch (e) { /* quota or blocked: the db copy still holds it */ }
+      if (aiDirty) { ls.setItem(LS_AI, JSON.stringify(aiCards)); aiDirty = false; }
+    } catch (e) {
+      // storage full: drop the cheapest history and try once more, then tell the person
+      const keys = Object.keys(state.seen);
+      keys.sort((a, b) => state.seen[a] - state.seen[b]).slice(0, Math.floor(keys.length / 2)).forEach((k) => delete state.seen[k]);
+      try { ls.setItem(LS_KEY, JSON.stringify(state)); } catch (e2) {
+        if (!warnedFull) { warnedFull = true; bus.emit("storagefull", {}); }
+      }
+    }
   }
+  const writeLocalSoon = debounce(writeLocal, 400);
+  const markAi = () => { aiDirty = true; };
 
   /* The cloud copy is split into documents well under the per-document size cap:
      main (scalars), srs-N, vault-N, journal-N, ai-N. Only documents whose content changed are written. */
@@ -392,7 +414,7 @@
   function save() {
     state.updatedAt = now();
     trimSeen();
-    writeLocal();
+    writeLocalSoon();
     pushRemote();
   }
   function flush() {
@@ -428,7 +450,7 @@
       const remote = await readRemote(db.collection("data/users/" + userId));
       let changed = false;
       if (remote) {
-        for (const c of remote.ai || []) if (c && c.id && !aiCards[c.id]) { aiCards[c.id] = c; changed = true; }
+        for (const c of remote.ai || []) if (c && c.id && !aiCards[c.id]) { aiCards[c.id] = c; changed = true; aiDirty = true; }
         delete remote.ai;
         changed = absorb(remote) || changed;
         if (changed) writeLocal();
@@ -448,6 +470,7 @@
     for (const k of Object.keys(state)) delete state[k];
     Object.assign(state, f);
     for (const k of Object.keys(aiCards)) delete aiCards[k];
+    aiDirty = true;
     state.updatedAt = now();
     writeLocal();
     if (db && userId && remoteReady) {
@@ -468,8 +491,8 @@
   Object.defineProperty(UP, "state", { get: () => state, set: (v) => { state = v; }, configurable: true });
   Object.defineProperty(UP, "aiCards", { get: () => aiCards, configurable: true });
   UP.store = {
-    save, flush, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
-    ensureQuests, questProgress, lean, addVault, addJournal, streakAlive, MASTERED, STREAK_MIN, TITLES,
+    save, flush, markAi, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
+    ensureQuests, questProgress, lean, STRONG, addVault, addJournal, streakAlive, MASTERED, STREAK_MIN, TITLES,
     hasCloud: () => !!(db && userId),
   };
 })();

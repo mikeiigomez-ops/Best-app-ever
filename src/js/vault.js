@@ -11,6 +11,7 @@
     { key: "saved", label: "Saved", empty: "Tap Save on any card to keep it here." },
   ];
   let tab = "task";
+  let shown = 100;
 
   function counts() {
     const st = UP.state;
@@ -23,9 +24,9 @@
     const root = $("#vault");
     root.innerHTML = "";
     const c = counts();
-    const seg = h("div", { class: "seg", role: "tablist", "aria-label": "Vault sections" }, ...TABS.map((t) => {
-      const b = h("button", { class: "seg-btn" + (tab === t.key ? " on" : ""), role: "tab", "aria-selected": String(tab === t.key) }, t.label, c[t.key] ? h("span", { class: "count" }, String(c[t.key])) : null);
-      b.addEventListener("click", () => { tab = t.key; render(); });
+    const seg = h("div", { class: "seg", role: "group", "aria-label": "Vault sections" }, ...TABS.map((t) => {
+      const b = h("button", { class: "seg-btn" + (tab === t.key ? " on" : ""), "aria-pressed": String(tab === t.key) }, t.label, c[t.key] ? h("span", { class: "count" }, String(c[t.key])) : null);
+      b.addEventListener("click", () => { tab = t.key; shown = 100; render(); });
       return b;
     }));
     const head = h("div", { class: "vault-head" },
@@ -69,7 +70,12 @@
     } else {
       const items = st.vault.filter((v) => v.kind === tab && !v.archived);
       items.sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0) || b.createdAt - a.createdAt);
-      for (const v of items) list.append(item(v));
+      for (const v of items.slice(0, shown)) list.append(item(v));
+      if (items.length > shown) {
+        const more = h("button", { class: "btn ghost small" }, "Show " + Math.min(100, items.length - shown) + " more");
+        more.addEventListener("click", () => { shown += 100; render(); });
+        list.append(more);
+      }
     }
     if (!list.children.length) list.append(h("p", { class: "empty" }, TABS.find((t) => t.key === tab).empty));
     root.append(list);

@@ -38,6 +38,7 @@
     history.push(spec);
     io.observe(el);
   };
+  let kbNav = false;
   ui.advance = () => {
     const cards = $$(".card", feed);
     const idx = cards.indexOf(current);
@@ -56,13 +57,22 @@
     if (current && current._leave) current._leave();
     if (current) {
       const secs = Math.min(120, (now() - enteredAt) / 1000);
+      // the feed also learns from how you scroll: instant skips count a little against, lingering a little for
+      const ps = current._spec;
+      if (ps && !["brief", "chest", "receipt", "one", "review"].includes(ps.kind)) {
+        const engaged = current.classList.contains("done");
+        if (!engaged && secs < 1.5) store.lean(current._topicKey, ps.kind, -0.15);
+        else if (engaged || secs > 8) store.lean(current._topicKey, ps.kind, 0.06);
+      }
       UP.state.stats.secs += secs;
       store.today().secs += secs;
     }
     current = el;
     enteredAt = now();
-    $$(".card.active", feed).forEach((c) => c.classList.remove("active"));
+    $$(".card.active", feed).forEach((c) => { c.classList.remove("active"); c.inert = true; });
     el.classList.add("active");
+    el.inert = false;
+    if (kbNav) { kbNav = false; el.focus({ preventScroll: true }); }
     const spec = el._spec;
     if (!el._counted) {
       el._counted = true;
@@ -71,14 +81,24 @@
       store.today().cards++;
       if (spec.data && spec.data.id === spec.id && !/^[vj]-/.test(spec.id)) UP.state.seen[spec.id] = now();
     }
+    const slot = $("#rail-slot");
+    if (slot) slot.replaceChildren(...(el._rail ? [el._rail] : []));
     if (el._enter) el._enter();
-    fill(3);
-    prune();
+    fill(5);
+    schedulePrune();
     maybeDig();
     hint(false);
     store.save();
   }
+  let pruneT;
+  function schedulePrune() {
+    // never prune mid-scroll: removing cards during a smooth scroll makes the feed jump
+    clearTimeout(pruneT);
+    pruneT = setTimeout(prune, 900);
+  }
+  let lastScroll = 0;
   function prune() {
+    if (now() - lastScroll < 700) return schedulePrune();
     const cards = $$(".card", feed);
     const idx = cards.indexOf(current);
     if (idx > 40) {
@@ -135,6 +155,8 @@
     $("#lvl-bar i").style.transform = "scaleX(" + L.pct + ")";
     const streak = store.streakAlive();
     $("#streak-num").textContent = String(streak);
+    $("#streak").setAttribute("aria-label", "Streak: " + streak + (streak === 1 ? " day" : " days"));
+    $("#lvl-bar").setAttribute("aria-valuenow", String(Math.round(L.pct * 100)));
     $("#streak").classList.toggle("lit", st.streak.last === UP.dayKey());
     $("#streak").title = st.streak.last === UP.dayKey() ? "Streak safe today" : "Earn " + store.STREAK_MIN + " XP today to keep your streak";
     const c = st.combo;
@@ -196,6 +218,12 @@
     setTimeout(() => f.remove(), 1100);
   }
 
+  ui.announce = (text) => {
+    const live = $("#sr-live");
+    if (!live) return;
+    live.textContent = "";
+    setTimeout(() => { live.textContent = text; }, 30);
+  };
   let toastT;
   ui.toast = (msg) => {
     const t = $("#toast");
@@ -241,6 +269,8 @@
     scrim.addEventListener("click", (e) => { if (e.target === scrim) closeSheet(); });
     close.addEventListener("click", closeSheet);
     document.body.append(scrim);
+    $("#app").inert = true;
+    if (!$("#onboard").hidden) $("#onboard").inert = true;
     requestAnimationFrame(() => scrim.classList.add("show"));
     scrim._onClose = opts.onClose;
     scrim.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeSheet(); } });
@@ -251,6 +281,8 @@
     const s = $(".scrim:not(.closing)");
     if (!s) return;
     s.classList.add("closing");
+    $("#app").inert = !$("#onboard").hidden;
+    $("#onboard").inert = false;
     if (s._onClose) s._onClose();
     s.classList.remove("show");
     setTimeout(() => s.remove(), 250);
@@ -260,11 +292,11 @@
   ui.closeSheet = closeSheet;
   ui.sheetRaw = (title, body) => sheet(title, body, { tall: true });
 
-  ui.compose = ({ title, placeholder, onSave, multi, hint }) => {
+  ui.compose = ({ title, prompt, placeholder, onSave, multi, hint }) => {
     const id = "compose-" + Date.now();
     const input = h(multi ? "textarea" : "input", { id, class: "field", placeholder: placeholder || "", rows: multi ? "4" : null, maxlength: "1200", "aria-label": title });
     const save = h("button", { class: "btn primary wide" }, "Save");
-    const body = h("div", { class: "compose" }, input, hint ? h("p", { class: "hint" }, hint) : null, save);
+    const body = h("div", { class: "compose" }, prompt ? h("p", { class: "compose-prompt" }, prompt) : null, input, hint ? h("p", { class: "hint" }, hint) : null, save);
     sheet(title, body);
     setTimeout(() => input.focus(), 80);
     const go = () => {
@@ -345,6 +377,49 @@
       (turns, onText, signal) => UP.ai.deeper(card, turns, onText, signal));
   };
 
+  ui.endSession = () => {
+    const list = UP.cards.tomorrowList();
+    const mins = Math.max(1, Math.round((now() - S.start) / 60000));
+    const body = h("div", { class: "compose end" },
+      h("p", { class: "compose-prompt" }, "Good session. " + mins + " minute" + (mins === 1 ? "" : "s") + " that paid you back."),
+      h("p", { class: "lede" }, "Go do something offline. Upscroll will be here when you reach for your phone again."),
+      list.length ? h("div", { class: "tomorrow" }, h("p", { class: "kicker" }, "Waiting for you tomorrow"), h("ul", null, ...list.map((x) => h("li", null, x)))) : null,
+      h("button", { class: "btn ghost wide", onclick: () => closeSheet() }, "Actually, a few more")
+    );
+    sheet("See you later", body);
+  };
+
+  ui.quickCapture = () => {
+    let kind = "task";
+    const kinds = [["task", "To-do"], ["idea", "Idea"], ["question", "Question"]];
+    const chips = h("div", { class: "chips" }, ...kinds.map(([k, label]) => {
+      const b = h("button", { class: "chip-btn" + (k === kind ? " on" : ""), "aria-pressed": String(k === kind) }, label);
+      b.addEventListener("click", () => {
+        kind = k;
+        chips.querySelectorAll(".chip-btn").forEach((x) => { const on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
+        input.focus();
+      });
+      return b;
+    }));
+    const input = h("textarea", { id: "quick-capture", class: "field", rows: "3", maxlength: "600", placeholder: "Whatever's on your mind. One per line.", "aria-label": "Capture" });
+    const save = h("button", { class: "btn primary wide" }, "Save to vault");
+    const go = () => {
+      const lines = input.value.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+      if (!lines.length) { input.focus(); return; }
+      lines.forEach((l) => store.addVault(kind, l));
+      UP.state.stats.captures += lines.length; S.captures += lines.length;
+      store.questProgress("capture");
+      store.award(5 * lines.length, { reason: "Captured", anchor: $("#capture-btn") });
+      closeSheet();
+      ui.toast(lines.length === 1 ? "Saved to your vault" : lines.length + " things saved to your vault");
+      if (document.body.dataset.tab === "vault") UP.vault.render();
+    };
+    save.addEventListener("click", go);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); } });
+    sheet("Capture", h("div", { class: "compose" }, chips, input, save));
+    setTimeout(() => input.focus(), 80);
+  };
+
   /* ================= rabbit holes ================= */
   const HOLE_IDEAS = ["How the stock market actually works", "Ancient Rome", "Spanish for travel", "Black holes", "Negotiation", "The science of cooking", "Stoicism", "How AI models work", "Wine basics", "Human evolution", "Investing for beginners", "Photography basics"];
   ui.holes = () => {
@@ -421,7 +496,7 @@
     $$(".tab").forEach((t) => {
       const on = t.dataset.tab === name;
       t.classList.toggle("on", on);
-      t.setAttribute("aria-selected", on ? "true" : "false");
+      if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
     });
     document.body.dataset.tab = name;
     if (name === "sky") UP.sky.show();
@@ -446,6 +521,7 @@
     sizeFx();
     addEventListener("resize", sizeFx);
 
+    feed.addEventListener("scroll", () => { lastScroll = now(); }, { passive: true });
     io = new IntersectionObserver((entries) => {
       // a card becomes current when it crosses the middle of the screen (works for tall cards too)
       for (const e of entries) if (e.isIntersecting) onCurrent(e.target);
@@ -465,20 +541,24 @@
     }));
     $$(".tab").forEach((t) => t.addEventListener("click", () => ui.goTab(t.dataset.tab)));
     $("#holes-btn").addEventListener("click", ui.holes);
+    $("#capture-btn").addEventListener("click", ui.quickCapture);
+    $("#streak").addEventListener("click", () => ui.goTab("sky"));
+    $("#goal-ring").addEventListener("click", () => ui.goTab("sky"));
 
     // keyboard
     addEventListener("keydown", (e) => {
       if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
       if (document.body.dataset.tab !== "feed") return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      const inCard = e.target === document.body || (current && current.contains(e.target));
       const tag = (e.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
       if (e.key === " " && tag === "button") return;
-      if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown" || (e.key === " " && !e.shiftKey)) { e.preventDefault(); ui.advance(); }
-      else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") { e.preventDefault(); back(); }
-      else if (/^[1-4]$/.test(e.key) || /^[a-d]$/i.test(e.key)) {
+      if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown" || (e.key === " " && !e.shiftKey)) { e.preventDefault(); kbNav = true; ui.advance(); }
+      else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") { e.preventDefault(); kbNav = true; back(); }
+      else if (UP.state.settings.shortcuts !== false && inCard && (/^[1-4]$/.test(e.key) || /^[a-d]$/i.test(e.key))) {
         const i = /^[1-4]$/.test(e.key) ? +e.key - 1 : e.key.toLowerCase().charCodeAt(0) - 97;
-        const btn = current && $$(".opt:not(:disabled)", current)[i];
+        const btn = current && $$(".opt:not([aria-disabled])", current)[i];
         if (btn) btn.click();
       }
     });
@@ -488,7 +568,7 @@
     bus.on("combo", renderHud);
     bus.on("boost", renderHud);
     bus.on("level", (L) => { sfx.level(); buzz([20, 40, 20, 40, 60]); banner("Level " + L.level, L.title, "Your sky just got brighter."); spawn(innerWidth / 2, innerHeight / 3, 90, 8); });
-    bus.on("goal", () => { banner("Daily goal", "Ring closed", "Everything from here is bonus."); spawn(innerWidth - 40, 40, 50, 6); });
+    bus.on("goal", ({ freeze }) => { banner("Daily goal", "Ring closed", freeze ? "You earned a streak freeze." : "Everything from here is bonus."); spawn(innerWidth - 40, 40, 50, 6); });
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));
     bus.on("allquests", () => { banner("All quests done", "Bonus unlocked", "A bonus is next in your feed."); ui.insertNext({ kind: "chest", id: UP.uid("chest") }); });
@@ -504,8 +584,16 @@
       if (tab === "sky") UP.sky.show();
       ui.toast("Synced with your other devices");
     });
+    bus.on("storagefull", () => ui.toast("This browser's storage is full. Older history was trimmed to keep saving."));
     bus.on("ai", (s) => document.body.classList.toggle("has-ai", s === "ready"));
 
+    // on-screen keyboard: lift bottom sheets by its height
+    if (window.visualViewport) {
+      const vv = window.visualViewport;
+      const kb = () => document.documentElement.style.setProperty("--kb", Math.max(0, innerHeight - vv.height - vv.offsetTop) + "px");
+      vv.addEventListener("resize", kb);
+      vv.addEventListener("scroll", kb);
+    }
     renderHud();
     setInterval(renderHud, 60000);
   };

@@ -20,14 +20,15 @@ const js = [...contentFiles, ...jsOrder]
   .replace(/<\/script/gi, "<\\/script");
 const body = read(src("body.html"));
 
-const FONTS = "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;700&display=swap";
+const FONTS = "https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,600;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;700&display=swap";
 const DESC = "A feed that gives back: bite-size learning with spaced repetition, real-world micro-quests, and a vault for everything on your mind.";
 
 const head = `<title>Upscroll</title>
 <meta name="description" content="${DESC}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="${FONTS}">
+<link rel="preload" as="style" href="${FONTS}">
+<link rel="stylesheet" href="${FONTS}" media="print" onload="this.media='all'">
 <style>
 ${css}
 </style>`;
@@ -49,7 +50,7 @@ const standalone = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#0a0e1b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">

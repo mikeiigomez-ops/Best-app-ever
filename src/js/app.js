@@ -6,6 +6,12 @@
   function onboarding() {
     const ob = $("#onboard");
     ob.hidden = false;
+    ob.setAttribute("role", "dialog");
+    ob.setAttribute("aria-modal", "true");
+    ob.setAttribute("aria-label", "Set up Upscroll");
+    $("#app").inert = true;
+    // after each step renders, move focus to its heading so keyboard and screen-reader users follow along
+    const focusStep = () => setTimeout(() => { const t = step.querySelector(".ob-title"); if (t) { t.tabIndex = -1; t.focus({ preventScroll: true }); } }, 30);
     const st = UP.state;
     const step = h("div", { class: "ob-step" });
     ob.innerHTML = "";
@@ -14,6 +20,7 @@
 
     function s0() {
       step.innerHTML = "";
+      focusStep();
       step.append(
         h("p", { class: "ob-kicker" }, "A feed that gives back"),
         h("h1", { class: "ob-title" }, "Every swipe leaves you a little better off."),
@@ -40,6 +47,7 @@
     }
     function s1() {
       step.innerHTML = "";
+      focusStep();
       st.goals = st.goals.length ? st.goals : ["mind"];
       step.append(
         h("p", { class: "ob-kicker" }, "Step 1 of 3"),
@@ -52,6 +60,7 @@
     }
     function s2() {
       step.innerHTML = "";
+      focusStep();
       const topics = Object.entries(engine.TOPICS).filter(([k]) => k !== "holes" && k !== "words").map(([k, t]) => [k, t.label]);
       step.append(
         h("p", { class: "ob-kicker" }, "Step 2 of 3"),
@@ -64,6 +73,7 @@
     }
     function s3() {
       step.innerHTML = "";
+      focusStep();
       const avail = UP.ai.available();
       const input = h("input", { id: "ob-hole", class: "field", placeholder: "e.g. How the stock market works", maxlength: "80", "aria-label": "Topic to learn" });
       const status = h("p", { class: "ob-sub", "aria-live": "polite" });
@@ -86,7 +96,7 @@
         }
         finish();
       });
-      step.append(
+      step.append(...[
         h("p", { class: "ob-kicker" }, "Step 3 of 3"),
         h("h2", { class: "ob-title sm" }, "Anything you've been meaning to learn?"),
         avail
@@ -98,11 +108,12 @@
         avail ? h("button", { class: "btn ghost wide", onclick: () => { input.value = ""; finish(); } }, "Skip for now") : null,
         status,
         dots(3)
-      );
+      ].filter(Boolean));
     }
     function finish() {
       st.onboarded = true;
       store.save();
+      $("#app").inert = false;
       ob.classList.add("leaving");
       setTimeout(() => { ob.hidden = true; ob.classList.remove("leaving"); }, 400);
       UP.ui.start();

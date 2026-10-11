@@ -57,7 +57,8 @@
       `You write cards for a learning feed that replaces doomscrolling. Topic: "${hole.topic}".\n` +
       `The reader has already done ${done} cards on it. This batch should cover ${stage}, building on what came before, one idea per card, in a sensible teaching order.\n` +
       (recent.length ? `Do NOT repeat these earlier cards:\n- ${recent.join("\n- ")}\n` : "") +
-      `Every claim must be accurate and well established; if the topic is practical (a skill, a language, a craft), make cards the reader can use today.\n` +
+      `Accuracy rules: only include claims you are at least 95% sure of and that experts broadly agree on. Skip myths, contested or fast-changing claims, and anything surprising you can't stand behind; if the honest answer is debated, teach the debate instead. If the topic is practical (a skill, a language, a craft), make cards the reader can use today.\n` +
+      `Quiz rules: the card is shown QUESTION FIRST, then the headline and body are revealed, so the question must be a self-contained, intriguing guess the reader can reason about; prefer applying the idea to a new case over restating it. Options must be similar in length and grammar, with distractors that are common misconceptions, and the correct one must not tend to be the longest.\n` +
       `Reply with only a JSON array of ${n} objects with exactly these keys:\n` +
       `{"headline": a surprising or clarifying statement, max 70 chars,\n "body": 1-3 vivid sentences explaining it, max 260 chars,\n "q": a self-contained multiple-choice question testing the idea, max 110 chars,\n "options": 4 short answer strings (max 40 chars), one correct,\n "a": index of the correct option (vary it),\n "explain": one extra detail shown after answering, max 150 chars,\n "tip": a practical "try this" line or ""}\n` +
       `Example: [{"headline":"...","body":"...","q":"...","options":["...","...","...","..."],"a":2,"explain":"...","tip":""}]`;
@@ -80,6 +81,7 @@
           at: now(),
         }));
         for (const c of cards) UP.aiCards[c.id] = c;
+        UP.store.markAi();
         hole.count = done + cards.length;
         hole.headlines = (hole.headlines || []).concat(cards.map((c) => c.headline)).slice(-40);
         hole.queue = (hole.queue || []).concat(cards.map((c) => c.id));

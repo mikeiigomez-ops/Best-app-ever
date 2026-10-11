@@ -38,7 +38,7 @@
   };
   const DO_KINDS = new Set(["action", "breathe", "capture", "reflect", "task", "idea", "capsule", "sprint"]);
 
-  let sinceChest = 0, nextChestAt = 9 + Math.floor(rand() * 5);
+  let chestGap = 11, sinceChest = 0, nextChestAt = 11 + Math.floor(rand() * 4);
   let sinceReceipt = 0, sinceReview = 0, sinceOne = 8;
   const sessionUsed = new Set();
   const session = { start: now(), cards: 0, learned: 0, correct: 0, answered: 0, deeds: 0, captures: 0, xp: 0, words: 0, stars: 0 };
@@ -106,8 +106,12 @@
   }
   function pickAction(calmOnly) {
     const g = goals();
-    const list = (C().actions || []).filter((a) => a.cat !== "breathe" && (!calmOnly || a.cat === "mind"));
     const st = UP.state;
+    const hr = new Date().getHours();
+    const night = hr >= 22 || hr < 6;
+    const snoozed = st.snooze || {};
+    const list = (C().actions || []).filter((a) => a.cat !== "breathe" && (!calmOnly || a.cat === "mind") &&
+      !(snoozed[a.id] > now()) && !(night && (a.cat === "body" || a.cat === "life" || a.cat === "social")));
     const fresh = list.filter((a) => !sessionUsed.has(a.id) && (!st.seen[a.id] || now() - st.seen[a.id] > 2 * DAY));
     const pool = fresh.length ? fresh : list.filter((a) => !sessionUsed.has(a.id));
     if (!pool.length) return null;
@@ -138,8 +142,20 @@
   function capsules() {
     return UP.state.journal.filter((j) => now() - j.createdAt > 20 * 3600000 && (!j.back || now() - j.back > 10 * DAY) && !sessionUsed.has(j.id));
   }
+  const learnedAt = new Map(); // id -> history index when first learned this session
+  function noteLearned(id) { learnedAt.set(id, histLen); }
+  function freshDue() {
+    const out = [];
+    for (const [id, i] of learnedAt) {
+      const r = UP.state.srs[id];
+      if (r && r.n === 1 && histLen - i >= 9) out.push(id);
+    }
+    return out;
+  }
   function pickReview() {
-    const due = UP.store.dueReviews().filter((id) => !recentlyShown(id));
+    const fresh = freshDue();
+    for (const id of fresh) learnedAt.delete(id);
+    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id));
     for (const id of due) {
       const data = findItem(id);
       if (data) return { kind: "review", id, data, src: data.__kind };
@@ -184,46 +200,66 @@
     const st = UP.state;
     let spec = null;
 
-    if (st.lastBrief !== UP.dayKey() && !history.length) {
+    const newUser = (st.stats.answered || 0) < 6 && session.cards < 8;
+    const firstEver = !st.lastBrief && (st.stats.cards || 0) < 3;
+    const histK = lastKinds(history, 3);
+
+    // the daily brief opens each day, except a brand-new user's very first session (hook first)
+    if (st.lastBrief !== UP.dayKey() && !history.length && !firstEver) {
       spec = { kind: "brief", id: "brief-" + UP.dayKey() };
+    }
+    // a brand-new user's first three cards are scripted: a jaw-dropper, an estimate, a guaranteed bonus
+    if (!spec && firstEver && history.length < 3 && filter === "mix") {
+      spec = [pickLegendary, pickEstimate, () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
     }
     const ot = st.oneThing;
     if (!spec && ot && ot.day === UP.dayKey() && !ot.done && sinceOne >= 16 && filter !== "learn") {
       spec = { kind: "one", id: "one-" + sinceOne + "-" + session.cards };
       sinceOne = 0;
     }
-    if (!spec && sinceChest >= nextChestAt) {
+    if (!spec && sinceChest >= nextChestAt && filter !== "calm") {
       spec = { kind: "chest", id: UP.uid("chest") };
     }
-    if (!spec && sinceReceipt >= 22 && session.cards >= 22) {
+    if (!spec && sinceReceipt >= 24 && session.cards >= 24 && filter !== "calm") {
       spec = { kind: "receipt", id: UP.uid("receipt") };
     }
-    if (!spec && ok("review")) {
-      const dueCount = UP.store.dueReviews().length;
-      if (dueCount && (sinceReview >= 5 || rand() < 0.22 + Math.min(0.25, dueCount * 0.02))) spec = pickReview();
+    // memory checks: never two in a row, at most about one in four cards
+    if (!spec && ok("review") && histK[histK.length - 1] !== "review") {
+      const recent = lastKinds(history, 8).filter((k) => k === "review").length;
+      const dueCount = UP.store.dueReviews().length + freshDue().length;
+      const cap = dueCount > 15 ? 3 : 2; // a big backlog earns a little more room
+      if (dueCount && recent < cap && (sinceReview >= 4 || rand() < 0.2 + Math.min(0.2, dueCount * 0.015))) spec = pickReview();
     }
+    // in Calm, breathing comes round at least every fourth card
+    if (!spec && filter === "calm" && !lastKinds(history, 3).includes("breathe")) spec = pickBreathe();
     if (!spec) {
       const g = goals();
       const ka = (k) => Math.max(0.3, 1 + 0.15 * (st.kindAffinity[k] || 0));
       const holesReady = st.holes.filter((h) => h.active && h.queue && h.queue.length).length;
       const W = {
-        fact: 30 * (g.has("mind") ? 1.3 : 1),
+        fact: 30 * (g.has("mind") ? 1.3 : 1) * (UP.store.dueReviews().length > 20 ? 0.6 : 1),
         ai: holesReady ? 26 + 6 * holesReady : 0,
-        estimate: 9 * (g.has("mind") ? 1.5 : 1),
+        estimate: 10 * (g.has("mind") ? 1.5 : 1),
         word: 7 * (g.has("words") ? 3 : 1),
         action: 11 * (g.has("body") || g.has("order") || g.has("people") ? 1.4 : 1),
         breathe: 2.5 * (g.has("calm") ? 2.5 : 1),
         capture: 4 * (g.has("order") ? 2 : 1),
         reflect: 3.5 * (g.has("calm") ? 2 : 1),
-        sprint: 3 * (g.has("mind") ? 1.5 : 1),
+        sprint: 3.5 * (g.has("mind") ? 1.5 : 1),
         task: openTasks().length ? 7 : 0,
         idea: staleIdeas().length ? 3 : 0,
         capsule: capsules().length ? 3 : 0,
         calmaction: filter === "calm" ? 4 : 0,
       };
-      const last = lastKinds(history, 2);
-      if (last.length === 2 && last[0] === last[1]) W[last[0]] = 0;
-      const lastDo = DO_KINDS.has(last[last.length - 1]);
+      // open daily quests pull their card types forward so every quest is reachable
+      const QK = { sprint: "sprint", breathe: "breathe", bullseye: "estimate", reflect: "reflect", capture: "capture", word: "word", deed: "action" };
+      for (const q of (st.quests && st.quests.list) || []) if (!q.done && QK[q.type] && W[QK[q.type]]) W[QK[q.type]] *= 2.6;
+      // hook before homework: no chores in the first cards of a session, or for brand-new users
+      if (session.cards + history.length < 5 || newUser) for (const k of ["capture", "reflect", "task", "idea", "capsule"]) W[k] = 0;
+      if (newUser) W.action *= 0.4;
+      // no kind twice within the last three cards
+      for (const k of histK) if (k in W) W[k] = 0;
+      const lastDo = DO_KINDS.has(histK[histK.length - 1]);
       for (const k of Object.keys(W)) {
         if (!ok(k)) W[k] = 0;
         else {
@@ -231,7 +267,7 @@
           if (lastDo && DO_KINDS.has(k) && filter === "mix") W[k] *= 0.25;
         }
       }
-      for (let tries = 0; tries < 8 && !spec; tries++) {
+      for (let tries = 0; tries < 10 && !spec; tries++) {
         const kind = weighted(Object.entries(W));
         if (!kind) break;
         spec = build(kind);
@@ -245,13 +281,18 @@
     }
 
     // bookkeeping
-    if (spec.kind === "chest") { sinceChest = 0; nextChestAt = 9 + Math.floor(rand() * 6); } else sinceChest++;
+    if (spec.kind === "chest") { sinceChest = 0; chestGap = Math.min(22, chestGap + 2); nextChestAt = chestGap + Math.floor(rand() * 5); } else sinceChest++;
     if (spec.kind === "receipt") sinceReceipt = 0; else sinceReceipt++;
     if (spec.kind === "review") sinceReview = 0; else sinceReview++;
     if (spec.kind !== "one") sinceOne++;
     if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, history.length); }
     spec.key = UP.uid("c");
     return spec;
+  }
+
+  // a finished real-world quest sometimes earns a bonus right away: reward doing, not swiping
+  function deedDone() {
+    if (rand() < 0.35) sinceChest = Math.max(sinceChest, nextChestAt);
   }
 
   function build(kind) {
@@ -274,13 +315,24 @@
     return null;
   }
 
+  // distractors come from the same part of speech, so grammar never gives the answer away
   function wordOptions(word) {
-    const others = UP.shuffle((C().words || []).filter((w) => w.id !== word.id)).slice(0, 3).map((w) => w.def);
-    const opts = UP.shuffle([word.def, ...others]);
+    const all = (C().words || []).filter((w) => w.id !== word.id);
+    const same = UP.shuffle(all.filter((w) => w.pos === word.pos));
+    const pool = same.length >= 3 ? same : same.concat(UP.shuffle(all.filter((w) => w.pos !== word.pos)));
+    const opts = UP.shuffle([word.def, ...pool.slice(0, 3).map((w) => w.def)]);
     return { options: opts, a: opts.indexOf(word.def) };
   }
+  // the reverse direction: see the meaning, recall the word
+  function wordReverse(word) {
+    const all = (C().words || []).filter((w) => w.id !== word.id);
+    const same = UP.shuffle(all.filter((w) => w.pos === word.pos));
+    const pool = same.length >= 3 ? same : same.concat(UP.shuffle(all));
+    const opts = UP.shuffle([word.word, ...pool.slice(0, 3).map((w) => w.word)]);
+    return { options: opts, a: opts.indexOf(word.word) };
+  }
 
-  UP.engine = { next, TOPICS, GOALS, FILTERS, session, pickLegendary, findItem, wordOptions, holesNeedingCards };
+  UP.engine = { next, TOPICS, GOALS, FILTERS, session, pickLegendary, findItem, wordOptions, wordReverse, holesNeedingCards, noteLearned, deedDone, build };
 
   function holesNeedingCards() {
     return UP.state.holes.filter((h) => h.active && (!h.queue || h.queue.length < 3) && !UP.ai.digging(h.id));
