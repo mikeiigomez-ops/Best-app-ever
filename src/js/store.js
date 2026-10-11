@@ -19,7 +19,7 @@
       createdAt: now(),
       updatedAt: 0,
       onboarded: false,
-      settings: { sound: true, haptics: true, dailyGoal: 150 },
+      settings: { sound: true, haptics: true, shortcuts: true, dailyGoal: 200 },
       goals: [],
       interests: [],
       xp: 0,
@@ -44,6 +44,7 @@
       quests: null,
       questLog: {},
       wipedAt: 0,
+      calib: [],
       lastBrief: "",
       oneThing: null,
     };
@@ -110,7 +111,8 @@
     const before = levelInfo(state.xp).level;
     const goalBefore = today().xp >= state.settings.dailyGoal;
     state.xp += amount;
-    today().xp += amount;
+    // bonus XP fills the level bar but not the daily ring, so the ring measures real use
+    if (!meta.bonus) today().xp += amount;
     touchStreak();
     const after = levelInfo(state.xp);
     bus.emit("xp", { amount, ...meta });
@@ -139,10 +141,10 @@
   /* ---------- spaced repetition (Leitner boxes with real intervals) ---------- */
   const BOX_MS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY, 80 * DAY, 180 * DAY];
   const MASTERED = 6; // survived a gap of about five weeks
-  const STRONG = 4;
+  const STRONG = 3;
   function srsGrade(id, ok, kind) {
     const existing = state.srs[id];
-    if (existing && ok && existing.n >= 2 && existing.d > now()) return existing; // not due yet: a right answer doesn't skip ahead
+    if (existing && existing.n >= 2 && existing.d > now()) return existing; // not due yet: early answers don't move the schedule
     const r = existing || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
     r.n += 1;
     if (ok) {

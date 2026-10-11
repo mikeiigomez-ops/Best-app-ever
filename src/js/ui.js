@@ -29,6 +29,7 @@
   }
   ui.insertNext = (spec) => {
     spec.key = UP.uid("c");
+    engine.mark(spec);
     // replace the card right after the current one so it is literally next
     const cards = $$(".card", feed);
     const idx = cards.indexOf(current);
@@ -213,7 +214,7 @@
     const c = centerOf(anchor);
     const f = h("div", { class: "float-xp" }, "+" + amount);
     f.style.left = c.x + "px";
-    f.style.top = c.y + "px";
+    f.style.top = Math.max(40, c.y - 46) + "px";
     document.body.append(f);
     setTimeout(() => f.remove(), 1100);
   }
@@ -383,6 +384,30 @@
   };
 
   ui.endSession = () => {
+    // a real ending: the feed is put away until you ask for it again
+    const list = UP.cards.tomorrowList();
+    const mins = Math.max(1, Math.round((now() - S.start) / 60000));
+    const end = $("#session-end");
+    end.replaceChildren(
+      h("div", { class: "end-inner" },
+        h("p", { class: "ob-kicker" }, "Session complete"),
+        h("h2", { class: "ob-title sm" }, mins + " minute" + (mins === 1 ? "" : "s") + " that paid you back."),
+        h("div", { class: "end-stats" },
+          h("div", { class: "stat" }, h("b", null, String(S.learned)), h("span", null, "new things learned")),
+          h("div", { class: "stat" }, h("b", null, String(S.deeds)), h("span", null, "real-world wins")),
+          h("div", { class: "stat" }, h("b", null, "+" + S.xp), h("span", null, "XP"))),
+        list.length ? h("div", { class: "tomorrow" }, h("p", { class: "kicker" }, "Waiting for you tomorrow"), h("ul", null, ...list.map((x) => h("li", null, x)))) : null,
+        h("p", { class: "lede" }, "Go do something offline. It'll all be here."),
+        h("button", { class: "btn ghost wide", onclick: () => { end.hidden = true; $("#app").inert = false; S.start = now(); } }, "Start another session")
+      )
+    );
+    closeSheet();
+    end.hidden = false;
+    $("#app").inert = true;
+    setTimeout(() => { const t = end.querySelector(".ob-title"); if (t) { t.tabIndex = -1; t.focus({ preventScroll: true }); } }, 50);
+    store.flush();
+  };
+  ui.endSheetOld = () => {
     const list = UP.cards.tomorrowList();
     const mins = Math.max(1, Math.round((now() - S.start) / 60000));
     const body = h("div", { class: "compose end" },
@@ -521,7 +546,7 @@
         const del = h("button", { class: "icon-btn", "aria-label": "Remove " + hole.topic }, icon("trash"));
         del.addEventListener("click", () => { UP.state.holes = UP.state.holes.filter((x) => x !== hole); store.save(); renderList(); });
         list.append(h("div", { class: "hole" },
-          h("div", { class: "hole-main" }, h("b", null, hole.topic), h("span", null, (hole.count || 0) + " cards dug" + (UP.ai.digging(hole.id) ? " · digging..." : ""))),
+          h("div", { class: "hole-main" }, h("b", null, hole.topic), h("span", null, (hole.count || 0) + " lessons · " + Object.entries(UP.state.srs).filter(([id, r]) => UP.aiCards[id] && UP.aiCards[id].hole === hole.id && r.b >= 2).length + " remembered" + (UP.ai.digging(hole.id) ? " · writing more..." : ""))),
           tog, del));
       }
       if (!UP.state.holes.length) list.append(h("p", { class: "hint" }, "No rabbit holes yet. Pick anything you've been meaning to understand."));
@@ -596,8 +621,9 @@
   function hint(show) {
     const el = $("#swipe-hint");
     if (!el) return;
-    if (show) el.hidden = false;
-    else if (S.cards > 1) el.hidden = true;
+    const k = current && current._spec.kind;
+    if (show) el.hidden = k === "brief" || k === "receipt";
+    else if (S.cards > 1 || k === "brief" || k === "receipt") el.hidden = true;
   }
 
   /* ================= build shell ================= */
@@ -656,7 +682,12 @@
     bus.on("combo", renderHud);
     bus.on("boost", renderHud);
     bus.on("level", (L) => { sfx.level(); buzz([20, 40, 20, 40, 60]); banner("Level " + L.level, L.title, "Your sky just got brighter."); spawn(innerWidth / 2, innerHeight / 3, 90, 8); });
-    bus.on("goal", ({ freeze }) => { banner("Daily goal", "Ring closed", freeze ? "You earned a streak freeze." : "Everything from here is bonus."); spawn(innerWidth - 40, 40, 50, 6); });
+    bus.on("goal", ({ freeze }) => {
+      banner("Daily goal", "Ring closed", freeze ? "You earned a streak freeze." : "A good place to stop, or keep going.");
+      spawn(innerWidth - 40, 40, 50, 6);
+      // offer a natural stopping point right after the ring closes
+      setTimeout(() => ui.insertNext({ kind: "receipt", id: UP.uid("receipt") }), 400);
+    });
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));
     bus.on("allquests", () => { banner("All quests done", "Bonus unlocked", "A bonus is next in your feed."); ui.insertNext({ kind: "chest", id: UP.uid("chest") }); });

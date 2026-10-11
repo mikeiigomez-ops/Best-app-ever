@@ -715,6 +715,11 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .vdue { margin: 0; font-family: var(--f-mono); font-size: 0.7rem; color: var(--gold); }
 .vdue.late { color: var(--bad); }
 .sprint-opts.locked .opt { opacity: 0.4; }
+.reveal-answer { margin: 0; font-family: var(--f-display); font-weight: 800; font-size: 1.3rem; color: var(--good); }
+.session-end { z-index: 45; align-items: center; }
+.end-inner { position: relative; width: 100%; max-width: 480px; padding: 48px 20px; display: flex; flex-direction: column; gap: 16px; animation: rise 0.5s var(--ease); }
+.end-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.calib { display: flex; flex-direction: column; gap: 4px; }
 
 </style>
 <div id="app">
@@ -786,6 +791,7 @@ body.has-ai .needs-ai { display: inline-flex !important; }
   </footer>
 </div>
 <div id="onboard" class="onboard" hidden></div>
+<div id="session-end" class="onboard session-end" role="dialog" aria-modal="true" aria-label="Session complete" hidden></div>
 <canvas id="fx" class="fx" aria-hidden="true"></canvas>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="sr-live" class="sr-only" aria-live="polite"></div>
@@ -1799,7 +1805,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       createdAt: now(),
       updatedAt: 0,
       onboarded: false,
-      settings: { sound: true, haptics: true, dailyGoal: 150 },
+      settings: { sound: true, haptics: true, shortcuts: true, dailyGoal: 200 },
       goals: [],
       interests: [],
       xp: 0,
@@ -1824,6 +1830,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       quests: null,
       questLog: {},
       wipedAt: 0,
+      calib: [],
       lastBrief: "",
       oneThing: null,
     };
@@ -1890,7 +1897,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const before = levelInfo(state.xp).level;
     const goalBefore = today().xp >= state.settings.dailyGoal;
     state.xp += amount;
-    today().xp += amount;
+    // bonus XP fills the level bar but not the daily ring, so the ring measures real use
+    if (!meta.bonus) today().xp += amount;
     touchStreak();
     const after = levelInfo(state.xp);
     bus.emit("xp", { amount, ...meta });
@@ -1919,10 +1927,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   /* ---------- spaced repetition (Leitner boxes with real intervals) ---------- */
   const BOX_MS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY, 80 * DAY, 180 * DAY];
   const MASTERED = 6; // survived a gap of about five weeks
-  const STRONG = 4;
+  const STRONG = 3;
   function srsGrade(id, ok, kind) {
     const existing = state.srs[id];
-    if (existing && ok && existing.n >= 2 && existing.d > now()) return existing; // not due yet: a right answer doesn't skip ahead
+    if (existing && existing.n >= 2 && existing.d > now()) return existing; // not due yet: early answers don't move the schedule
     const r = existing || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
     r.n += 1;
     if (ok) {
@@ -2519,10 +2527,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   const FILTERS = {
     mix: null,
     learn: new Set(["fact", "review", "ai", "estimate", "word", "sprint"]),
-    do: new Set(["action", "capture", "task", "idea", "breathe"]),
+    do: new Set(["action", "capture", "task", "idea", "question", "breathe"]),
     calm: new Set(["breathe", "reflect", "capsule", "calmaction"]),
   };
-  const DO_KINDS = new Set(["action", "breathe", "capture", "reflect", "task", "idea", "capsule", "sprint"]);
+  const DO_KINDS = new Set(["action", "breathe", "capture", "reflect", "task", "idea", "question", "capsule", "sprint"]);
 
   let chestGap = 11, sinceChest = 0, nextChestAt = 11 + Math.floor(rand() * 4);
   let sinceReceipt = 0, sinceReview = 0, sinceOne = 8;
@@ -2626,6 +2634,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         !(v.snooze > now()) && (!v.r || now() - v.r > 3 * 3600000) && !sessionUsed.has(v.id))
       .sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || (a.r || 0) - (b.r || 0));
   }
+  function openQuestions() {
+    return UP.state.vault.filter((v) => v.kind === "question" && !v.archived && now() - v.createdAt > 30 * MIN && (!v.r || now() - v.r > 2 * DAY) && !sessionUsed.has(v.id));
+  }
   function staleIdeas() {
     return UP.state.vault.filter((v) => v.kind === "idea" && !v.archived && now() - v.createdAt > 20 * 3600000 && (!v.r || now() - v.r > 5 * DAY) && !sessionUsed.has(v.id));
   }
@@ -2645,7 +2656,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   function pickReview() {
     const fresh = freshDue();
     for (const id of fresh) learnedAt.delete(id);
-    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id));
+    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id) && !sessionUsed.has(id));
     for (const id of due) {
       const data = findItem(id);
       if (data) return { kind: "review", id, data, src: data.__kind };
@@ -2700,7 +2711,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     }
     // a brand-new user's first three cards are scripted: a jaw-dropper, an estimate, a guaranteed bonus
     if (!spec && firstEver && history.length < 3 && filter === "mix") {
-      spec = [pickLegendary, pickEstimate, () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
+      spec = [pickLegendary, () => pickHoleCard() || pickEstimate(), () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
     }
     // your own list gets a guaranteed slot in the first few cards of every session
     if (!spec && !firstEver && !session.taskShown && filter !== "learn" && filter !== "calm" && history.length <= 3 && !histK.includes("task") && (history.length >= 1 || st.lastBrief === UP.dayKey())) {
@@ -2744,6 +2755,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         sprint: 3.5 * (g.has("mind") ? 1.5 : 1),
         task: openTasks().length ? 7 : 0,
         idea: staleIdeas().length ? 3 : 0,
+        question: openQuestions().length ? 4 : 0,
         capsule: capsules().length ? 3 : 0,
         calmaction: filter === "calm" ? 4 : 0,
       };
@@ -2805,7 +2817,14 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
   // a finished real-world quest sometimes earns a bonus right away: reward doing, not swiping
   function deedDone() {
-    if (rand() < 0.35) sinceChest = Math.max(sinceChest, nextChestAt);
+    if (rand() < 0.35 && sinceChest >= 6) sinceChest = Math.max(sinceChest, nextChestAt);
+  }
+  // cards inserted from outside the mixer (brief, bonus, sky) still count for repeats and spacing
+  function mark(spec) {
+    if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, histLen); learnedAt.delete(spec.id); }
+    if (spec.kind === "chest") sinceChest = 0;
+    if (spec.kind === "review") sinceReview = 0;
+    if (spec.kind === "sprint") session.sprints = (session.sprints || 0) + 1;
   }
 
   function build(kind) {
@@ -2822,6 +2841,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       case "sprint": return { kind: "sprint", id: UP.uid("sprint") };
       case "task": { const t = openTasks()[0]; return t && { kind: "task", id: t.id, data: t }; }
       case "idea": { const t = pick(staleIdeas()); return t && { kind: "idea", id: t.id, data: t }; }
+      case "question": { const t = pick(openQuestions()); return t && { kind: "question", id: t.id, data: t }; }
       case "capsule": { const j = pick(capsules()); return j && { kind: "capsule", id: j.id, data: j }; }
       case "review": return pickReview();
     }
@@ -2845,7 +2865,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return { options: opts, a: opts.indexOf(word.word) };
   }
 
-  UP.engine = { next, TOPICS, GOALS, FILTERS, session, pickLegendary, findItem, wordOptions, wordReverse, holesNeedingCards, noteLearned, deedDone, build };
+  UP.engine = { next, TOPICS, GOALS, FILTERS, session, pickLegendary, findItem, wordOptions, wordReverse, holesNeedingCards, noteLearned, deedDone, build, mark };
 
   function holesNeedingCards() {
     return UP.state.holes.filter((h) => h.active && (!h.queue || h.queue.length < 3) && !UP.ai.digging(h.id));
@@ -2870,6 +2890,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     capture: { label: "Capture", hue: 95 },
     reflect: { label: "Journal", hue: 255 },
     task: { label: "From your vault", hue: 95 },
+    question: { label: "From your vault", hue: 200 },
     idea: { label: "From your vault", hue: 48 },
     capsule: { label: "Time capsule", hue: 255 },
     sprint: { label: "Math sprint", hue: 186 },
@@ -2916,7 +2937,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       if (save.classList.contains("on")) return;
       save.classList.add("on");
       const d = spec.data || {};
-      const text = d.headline || (d.word ? d.word + " — " + d.def : "") || d.title || d.text || "Saved card";
+      const text = d.headline || (d.word ? d.word + " — " + d.def : "") || d.title || d.q || d.text || "Saved card";
       store.addVault("saved", text, { ref: spec.id, body: d.body || d.example || "" });
       save.setAttribute("aria-pressed", "true");
       save.querySelector("span:last-child").textContent = "Saved";
@@ -2939,7 +2960,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       UP.ui.toast("Got it. Less of this.");
       setTimeout(() => UP.ui.advance(), 450);
     });
-    if (spec.kind !== "brief" && spec.kind !== "receipt" && spec.kind !== "chest") r.append(save);
+    if (["fact", "ai", "word", "review", "estimate", "action"].includes(spec.kind)) r.append(save);
     if (learnable) {
       const deep = h("button", { class: "rail-btn deep", "aria-label": "Go deeper with Claude", title: "Go deeper" }, icon("spark"), h("span", null, "Deeper"));
       deep.addEventListener("click", () => UP.ui.deeper(spec));
@@ -3021,6 +3042,13 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return t ? t.label : d.topic;
   }
 
+  function lessonLabel(d) {
+    const m = String(d.id).match(/-(\d+)-[a-z0-9]+$/);
+    const n = m ? +m[1] + 1 : null;
+    if (!n) return "by Claude";
+    return "Lesson " + n + " \u00b7 " + (n <= 6 ? "Foundations" : n <= 18 ? "Going deeper" : "Expert") + " \u00b7 by Claude";
+  }
+
   /* ---------- fact + rabbit-hole ---------- */
   function fact(spec) {
     const d = spec.data;
@@ -3030,7 +3058,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       topic: isAi ? d.topic : topicOf(d),
       topicKey: isAi ? "holes" : d.topic,
       hue: isAi ? 265 : t ? t.hue : undefined,
-      meta: isAi ? h("span", { class: "by" }, "by Claude") : null,
+      meta: isAi ? h("span", { class: "by" }, lessonLabel(d)) : null,
     });
     const inner = el._inner;
     // Ask first, reveal second: guessing before reading makes the answer stick (and makes it a real game)
@@ -3077,6 +3105,53 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const inner = el._inner;
     const ago = now() - (r.f || now());
     inner.append(h("p", { class: "kicker" }, ago < 3600000 ? "Remember this one?" : "From " + timeAgo(r.f) + ". Still got it?"));
+
+    function grade(ok, anchor, holder) {
+      const st = UP.state;
+      st.stats.reviews++; if (ok) st.stats.reviewsCorrect++;
+      S.answered++; if (ok) S.correct++;
+      store.comboHit(ok);
+      const rr = store.srsGrade(spec.id, ok, d.__kind);
+      if (ok) store.questProgress("review");
+      const amt = gain(ok ? 15 : 3, anchor, ok ? "Remembered" : "Relearned");
+      ok ? sfx.good(st.combo) : sfx.bad();
+      buzz(ok ? 12 : [20, 40, 20]);
+      if (ok) UP.ui.burst(anchor, 14);
+      strength.querySelectorAll("i").forEach((x, i) => x.classList.toggle("on", i < rr.b));
+      const sub = ok ? (rr.b >= store.MASTERED ? "Mastered. This one is yours now." : nextCheckText(rr)) : "It drops back a little. You'll see it again soon.";
+      const v = verdict(ok, amt, sub);
+      holder.append(v);
+      if (!ok || isWord) {
+        const recap = h("div", { class: "after" });
+        if (isWord) recap.append(h("p", { class: "explain" }, h("b", null, d.word + ": "), d.def), h("p", { class: "example" }, d.example));
+        else recap.append(h("p", { class: "explain" }, h("b", null, d.headline + " "), d.body));
+        holder.append(recap);
+      }
+      el.classList.add("done");
+      return v;
+    }
+
+    // Strong cards switch to real recall: think of the answer, reveal it, be honest
+    if (!isWord && r.b >= 2 && Math.random() < 0.5) {
+      inner.append(h("h2", { class: "headline q-head" }, d.q));
+      const zone = h("div", { class: "quiz" });
+      const reveal = h("button", { class: "btn primary" }, "Think of the answer, then reveal");
+      zone.append(reveal);
+      reveal.addEventListener("click", () => {
+        reveal.remove();
+        const knew = h("button", { class: "btn primary" }, icon("check"), "I knew it");
+        const forgot = h("button", { class: "btn ghost" }, "I didn't");
+        const row = h("div", { class: "row" }, knew, forgot);
+        zone.append(h("div", { class: "reveal" }, h("p", { class: "reveal-answer" }, d.options[d.a]), h("p", { class: "body" }, d.headline)), row);
+        knew.focus({ preventScroll: true });
+        const pickIt = (ok, btn) => { row.remove(); const v = grade(ok, btn, zone); v.tabIndex = -1; v.focus({ preventScroll: true }); UP.ui.announce(v.textContent); };
+        knew.addEventListener("click", () => pickIt(true, knew));
+        forgot.addEventListener("click", () => pickIt(false, forgot));
+      });
+      inner.append(zone);
+      return el;
+    }
+
     let q, options, a;
     if (isWord && r.b >= 2 && Math.random() < 0.6) {
       const wo = engine.wordReverse(d);
@@ -3085,7 +3160,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       inner.append(h("h2", { class: "headline" }, d.def));
     } else if (isWord) {
       const wo = engine.wordOptions(d);
-      q = "What does “" + d.word + "” mean?";
+      q = "What does \u201c" + d.word + "\u201d mean?";
       options = wo.options; a = wo.a;
       inner.append(h("h2", { class: "headline word-big" }, d.word));
     } else {
@@ -3095,32 +3170,40 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       a = order.indexOf(d.a);
       q = d.q;
     }
-    const qz = quiz({
-      q, options, a,
-      onAnswer(ok, btn) {
-        const st = UP.state;
-        st.stats.reviews++; if (ok) st.stats.reviewsCorrect++;
-        S.answered++; if (ok) S.correct++;
-        store.comboHit(ok);
-        const rr = store.srsGrade(spec.id, ok, d.__kind);
-        if (ok) store.questProgress("review");
-        const amt = gain(ok ? 15 : 3, btn, ok ? "Remembered" : "Relearned");
-        ok ? sfx.good(st.combo) : sfx.bad();
-        buzz(ok ? 12 : [20, 40, 20]);
-        if (ok) UP.ui.burst(btn, 14);
-        strength.querySelectorAll("i").forEach((x, i) => x.classList.toggle("on", i < rr.b));
-        const sub = ok ? (rr.b >= store.MASTERED ? "Mastered. This one is yours now." : nextCheckText(rr)) : "Back to the start. You'll see it again soon.";
-        qz.append(verdict(ok, amt, sub));
-        if (!ok || isWord) {
-          const recap = h("div", { class: "after" });
-          if (isWord) recap.append(h("p", { class: "explain" }, h("b", null, d.word + ": "), d.def), h("p", { class: "example" }, d.example));
-          else recap.append(h("p", { class: "explain" }, h("b", null, d.headline + " "), d.body));
-          qz.append(recap);
-        }
-        el.classList.add("done");
-      },
-    });
+    const qz = quiz({ q, options, a, onAnswer(ok, btn) { grade(ok, btn, qz); } });
     inner.append(qz);
+    return el;
+  }
+
+  /* ---------- a question you saved, resurfaced ---------- */
+  function question(spec) {
+    const v = spec.data;
+    const el = frame(spec, { topic: "Saved " + timeAgo(v.createdAt), topicKey: "question", rail: false, label: "From your vault" });
+    const inner = el._inner;
+    inner.append(h("p", { class: "kicker" }, "You wondered"), h("h2", { class: "headline" }, v.text));
+    const result = h("div", { class: "result" });
+    const ask = h("button", { class: "btn primary needs-ai" }, icon("spark"), "Ask Claude");
+    ask.addEventListener("click", () => { v.r = now(); store.save(); gain(5, ask, "Curious"); UP.ui.claudeSheet("Answer", v.text, (onText, signal) => UP.ai.answer(v.text, onText, signal)); });
+    const found = h("button", { class: "btn ghost" }, "I found out");
+    found.addEventListener("click", () => UP.ui.compose({
+      title: "What did you find out?", prompt: v.text, placeholder: "The short answer is...", multi: true,
+      onSave(text) {
+        v.archived = true; v.answer = text.slice(0, 600);
+        store.addJournal("I wondered: " + v.text.slice(0, 100), text);
+        row.remove();
+        const amt = gain(15, result, "Answered");
+        sfx.done();
+        result.append(h("div", { class: "verdict ok" }, h("strong", null, "Mystery solved."), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "Saved to your journal as a time capsule.")));
+        store.save();
+      },
+    }));
+    const later = h("button", { class: "btn ghost" }, "Later");
+    later.addEventListener("click", () => { v.r = now(); store.save(); UP.ui.advance(); });
+    const drop = h("button", { class: "btn ghost" }, "Archive");
+    drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Archived"); UP.ui.advance(); });
+    const row = h("div", { class: "row" }, ask, found, later, drop);
+    inner.append(row, result);
+    el._enter = () => { v.r = now(); store.save(); };
     return el;
   }
 
@@ -3140,6 +3223,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         store.today().learned++;
         store.comboHit(ok);
         const r = store.srsGrade(spec.id, ok, "word");
+        engine.noteLearned(spec.id);
         store.questProgress("learn"); store.questProgress("word");
         const amt = gain(ok ? 10 : 3, btn, "Word");
         ok ? sfx.good(st.combo) : sfx.bad();
@@ -3210,6 +3294,11 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       const st = UP.state;
       st.stats.estimates++;
       st.stats.estErr += pctOff > 5 ? 5 : pctOff;
+      if (ans > 0 && guess > 0) {
+        st.calib = Array.isArray(st.calib) ? st.calib : [];
+        st.calib.push({ r: Math.round(Math.log10(guess / ans) * 100) / 100, t: d.topic, hit: pctOff <= 0.25 ? 1 : 0 });
+        if (st.calib.length > 120) st.calib.splice(0, st.calib.length - 120);
+      }
       let label;
       if (pctOff <= 0.1) label = "Bullseye.";
       else if (pctOff <= 0.25) label = "Sharp.";
@@ -3670,7 +3759,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       let headline, body;
       if (roll < 0.14) {
         const x = 30 + Math.floor(Math.random() * 4) * 10;
-        store.award(x, { reason: "Bonus", anchor: gem });
+        store.award(x, { reason: "Bonus", anchor: gem, bonus: true });
         headline = "+" + x + " XP"; body = "Straight into your level bar.";
       } else if (roll < 0.34) {
         headline = "Pick your next card"; body = "Two sealed cards. Your call.";
@@ -3699,7 +3788,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         if (leg) {
           UP.ui.insertNext(leg);
           headline = "A legendary card"; body = "One of the most mind-bending facts in the deck. It's next. Swipe up.";
-        } else { store.award(40, { reason: "Bonus", anchor: gem }); headline = "+40 XP"; body = "Straight into your level bar."; }
+        } else { store.award(40, { reason: "Bonus", anchor: gem, bonus: true }); headline = "+40 XP"; body = "Straight into your level bar."; }
       } else {
         S.boost = (S.boost || 0) + 5;
         headline = "Double XP"; body = "Your next 5 rewards count twice.";
@@ -3875,7 +3964,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return out;
   }
 
-  const R = { one, fact, ai: fact, review, word, estimate, action, breathe, capture, reflect, task, idea, capsule, sprint, chest, brief, receipt };
+  const R = { question, one, fact, ai: fact, review, word, estimate, action, breathe, capture, reflect, task, idea, capsule, sprint, chest, brief, receipt };
   UP.cards = {
     render(spec) {
       const fn = R[spec.kind] || fact;
@@ -4028,7 +4117,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       h("p", { class: "kicker", style: { "--hue": s.hue } }, (engine.TOPICS[s.topic] || { label: s.topic }).label + " · learned " + UP.timeAgo(rec.f || Date.now())),
       h("p", { class: "compose-prompt" }, isWord ? item.word + ": " + item.def : item.headline),
       h("p", { class: "lede" }, isWord ? item.example : item.body),
-      h("div", { class: "star-meta" }, pips, h("span", { class: "hint" }, rec.b >= store.MASTERED ? "Mastered" : rec.b >= store.STRONG ? "Strong" : "Still settling in"))
+      h("div", { class: "star-meta" }, pips, h("span", { class: "hint" }, rec.b >= store.MASTERED ? "Mastered" : rec.b >= store.STRONG ? "Strong" : "Still settling in")),
+      h("div", { class: "row" },
+        h("button", { class: "btn primary", onclick: () => { UP.ui.closeSheet(); UP.ui.goTab("feed"); UP.ui.insertNext({ kind: "review", id: s.id, data: item }); setTimeout(() => UP.ui.advance(), 300); } }, "Test me now"),
+        h("button", { class: "btn ghost needs-ai", onclick: () => { UP.ui.closeSheet(); setTimeout(() => UP.ui.deeper({ kind: isWord ? "word" : "fact", id: s.id, data: item }), 260); } }, "Go deeper"))
     );
     UP.ui.sheetRaw(isWord ? "A word you know" : "A star in your sky", body);
   }
@@ -4094,10 +4186,23 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         big(String(st.streak.freezes || 0), "streak freezes"),
         big(String(st.golden || 0), "golden stars")
       ),
+      calibration(),
       h("h4", null, "Last 12 weeks"),
       heatmap(),
       settings()
     ].filter(Boolean));
+  }
+
+  function calibration() {
+    const log = UP.state.calib || [];
+    if (log.length < 4) return null;
+    const recent = log.slice(-40);
+    const hit = Math.round((recent.reduce((s, x) => s + x.hit, 0) / recent.length) * 100);
+    const bias = recent.reduce((s, x) => s + x.r, 0) / recent.length;
+    const factor = Math.pow(10, Math.abs(bias));
+    const lean = Math.abs(bias) < 0.08 ? "You don't lean high or low. That's rare." :
+      "You tend to " + (bias < 0 ? "underestimate" : "overestimate") + " by about " + (factor < 1.95 ? Math.round((factor - 1) * 100) + "%" : (Math.round(factor * 10) / 10) + "x") + ".";
+    return h("div", { class: "calib" }, h("h4", null, "Your calibration"), h("p", { class: "sky-lede" }, hit + "% of your last " + recent.length + " estimates landed within 25%. " + lean));
   }
 
   function constellationLine() {
@@ -4175,8 +4280,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       ints.append(b);
     }
     const toggle = (label, key) => {
-      const b = h("button", { class: "chip-btn" + (st.settings[key] ? " on" : ""), "aria-pressed": String(!!st.settings[key]) }, label);
-      b.addEventListener("click", () => { st.settings[key] = !st.settings[key]; b.classList.toggle("on"); b.setAttribute("aria-pressed", String(st.settings[key])); store.save(); });
+      const isOn = () => st.settings[key] !== false;
+      const b = h("button", { class: "chip-btn" + (isOn() ? " on" : ""), "aria-pressed": String(isOn()) }, label);
+      b.addEventListener("click", () => { st.settings[key] = !isOn(); b.classList.toggle("on"); b.setAttribute("aria-pressed", String(st.settings[key])); store.save(); });
       return b;
     };
     const goalSel = h("div", { class: "chips" }, ...[50, 100, 150, 250, 400].map((n) => {
@@ -4451,6 +4557,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   }
   ui.insertNext = (spec) => {
     spec.key = UP.uid("c");
+    engine.mark(spec);
     // replace the card right after the current one so it is literally next
     const cards = $$(".card", feed);
     const idx = cards.indexOf(current);
@@ -4635,7 +4742,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const c = centerOf(anchor);
     const f = h("div", { class: "float-xp" }, "+" + amount);
     f.style.left = c.x + "px";
-    f.style.top = c.y + "px";
+    f.style.top = Math.max(40, c.y - 46) + "px";
     document.body.append(f);
     setTimeout(() => f.remove(), 1100);
   }
@@ -4805,6 +4912,30 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   };
 
   ui.endSession = () => {
+    // a real ending: the feed is put away until you ask for it again
+    const list = UP.cards.tomorrowList();
+    const mins = Math.max(1, Math.round((now() - S.start) / 60000));
+    const end = $("#session-end");
+    end.replaceChildren(
+      h("div", { class: "end-inner" },
+        h("p", { class: "ob-kicker" }, "Session complete"),
+        h("h2", { class: "ob-title sm" }, mins + " minute" + (mins === 1 ? "" : "s") + " that paid you back."),
+        h("div", { class: "end-stats" },
+          h("div", { class: "stat" }, h("b", null, String(S.learned)), h("span", null, "new things learned")),
+          h("div", { class: "stat" }, h("b", null, String(S.deeds)), h("span", null, "real-world wins")),
+          h("div", { class: "stat" }, h("b", null, "+" + S.xp), h("span", null, "XP"))),
+        list.length ? h("div", { class: "tomorrow" }, h("p", { class: "kicker" }, "Waiting for you tomorrow"), h("ul", null, ...list.map((x) => h("li", null, x)))) : null,
+        h("p", { class: "lede" }, "Go do something offline. It'll all be here."),
+        h("button", { class: "btn ghost wide", onclick: () => { end.hidden = true; $("#app").inert = false; S.start = now(); } }, "Start another session")
+      )
+    );
+    closeSheet();
+    end.hidden = false;
+    $("#app").inert = true;
+    setTimeout(() => { const t = end.querySelector(".ob-title"); if (t) { t.tabIndex = -1; t.focus({ preventScroll: true }); } }, 50);
+    store.flush();
+  };
+  ui.endSheetOld = () => {
     const list = UP.cards.tomorrowList();
     const mins = Math.max(1, Math.round((now() - S.start) / 60000));
     const body = h("div", { class: "compose end" },
@@ -4943,7 +5074,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         const del = h("button", { class: "icon-btn", "aria-label": "Remove " + hole.topic }, icon("trash"));
         del.addEventListener("click", () => { UP.state.holes = UP.state.holes.filter((x) => x !== hole); store.save(); renderList(); });
         list.append(h("div", { class: "hole" },
-          h("div", { class: "hole-main" }, h("b", null, hole.topic), h("span", null, (hole.count || 0) + " cards dug" + (UP.ai.digging(hole.id) ? " · digging..." : ""))),
+          h("div", { class: "hole-main" }, h("b", null, hole.topic), h("span", null, (hole.count || 0) + " lessons · " + Object.entries(UP.state.srs).filter(([id, r]) => UP.aiCards[id] && UP.aiCards[id].hole === hole.id && r.b >= 2).length + " remembered" + (UP.ai.digging(hole.id) ? " · writing more..." : ""))),
           tog, del));
       }
       if (!UP.state.holes.length) list.append(h("p", { class: "hint" }, "No rabbit holes yet. Pick anything you've been meaning to understand."));
@@ -5018,8 +5149,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   function hint(show) {
     const el = $("#swipe-hint");
     if (!el) return;
-    if (show) el.hidden = false;
-    else if (S.cards > 1) el.hidden = true;
+    const k = current && current._spec.kind;
+    if (show) el.hidden = k === "brief" || k === "receipt";
+    else if (S.cards > 1 || k === "brief" || k === "receipt") el.hidden = true;
   }
 
   /* ================= build shell ================= */
@@ -5078,7 +5210,12 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     bus.on("combo", renderHud);
     bus.on("boost", renderHud);
     bus.on("level", (L) => { sfx.level(); buzz([20, 40, 20, 40, 60]); banner("Level " + L.level, L.title, "Your sky just got brighter."); spawn(innerWidth / 2, innerHeight / 3, 90, 8); });
-    bus.on("goal", ({ freeze }) => { banner("Daily goal", "Ring closed", freeze ? "You earned a streak freeze." : "Everything from here is bonus."); spawn(innerWidth - 40, 40, 50, 6); });
+    bus.on("goal", ({ freeze }) => {
+      banner("Daily goal", "Ring closed", freeze ? "You earned a streak freeze." : "A good place to stop, or keep going.");
+      spawn(innerWidth - 40, 40, 50, 6);
+      // offer a natural stopping point right after the ring closes
+      setTimeout(() => ui.insertNext({ kind: "receipt", id: UP.uid("receipt") }), 400);
+    });
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));
     bus.on("allquests", () => { banner("All quests done", "Bonus unlocked", "A bonus is next in your feed."); ui.insertNext({ kind: "chest", id: UP.uid("chest") }); });

@@ -709,3 +709,8 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .vdue { margin: 0; font-family: var(--f-mono); font-size: 0.7rem; color: var(--gold); }
 .vdue.late { color: var(--bad); }
 .sprint-opts.locked .opt { opacity: 0.4; }
+.reveal-answer { margin: 0; font-family: var(--f-display); font-weight: 800; font-size: 1.3rem; color: var(--good); }
+.session-end { z-index: 45; align-items: center; }
+.end-inner { position: relative; width: 100%; max-width: 480px; padding: 48px 20px; display: flex; flex-direction: column; gap: 16px; animation: rise 0.5s var(--ease); }
+.end-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.calib { display: flex; flex-direction: column; gap: 4px; }

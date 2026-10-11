@@ -33,10 +33,10 @@
   const FILTERS = {
     mix: null,
     learn: new Set(["fact", "review", "ai", "estimate", "word", "sprint"]),
-    do: new Set(["action", "capture", "task", "idea", "breathe"]),
+    do: new Set(["action", "capture", "task", "idea", "question", "breathe"]),
     calm: new Set(["breathe", "reflect", "capsule", "calmaction"]),
   };
-  const DO_KINDS = new Set(["action", "breathe", "capture", "reflect", "task", "idea", "capsule", "sprint"]);
+  const DO_KINDS = new Set(["action", "breathe", "capture", "reflect", "task", "idea", "question", "capsule", "sprint"]);
 
   let chestGap = 11, sinceChest = 0, nextChestAt = 11 + Math.floor(rand() * 4);
   let sinceReceipt = 0, sinceReview = 0, sinceOne = 8;
@@ -140,6 +140,9 @@
         !(v.snooze > now()) && (!v.r || now() - v.r > 3 * 3600000) && !sessionUsed.has(v.id))
       .sort((a, b) => (a.due || Infinity) - (b.due || Infinity) || (a.r || 0) - (b.r || 0));
   }
+  function openQuestions() {
+    return UP.state.vault.filter((v) => v.kind === "question" && !v.archived && now() - v.createdAt > 30 * MIN && (!v.r || now() - v.r > 2 * DAY) && !sessionUsed.has(v.id));
+  }
   function staleIdeas() {
     return UP.state.vault.filter((v) => v.kind === "idea" && !v.archived && now() - v.createdAt > 20 * 3600000 && (!v.r || now() - v.r > 5 * DAY) && !sessionUsed.has(v.id));
   }
@@ -159,7 +162,7 @@
   function pickReview() {
     const fresh = freshDue();
     for (const id of fresh) learnedAt.delete(id);
-    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id));
+    const due = [...fresh, ...UP.store.dueReviews()].filter((id, i, arr) => arr.indexOf(id) === i && !recentlyShown(id) && !sessionUsed.has(id));
     for (const id of due) {
       const data = findItem(id);
       if (data) return { kind: "review", id, data, src: data.__kind };
@@ -214,7 +217,7 @@
     }
     // a brand-new user's first three cards are scripted: a jaw-dropper, an estimate, a guaranteed bonus
     if (!spec && firstEver && history.length < 3 && filter === "mix") {
-      spec = [pickLegendary, pickEstimate, () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
+      spec = [pickLegendary, () => pickHoleCard() || pickEstimate(), () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
     }
     // your own list gets a guaranteed slot in the first few cards of every session
     if (!spec && !firstEver && !session.taskShown && filter !== "learn" && filter !== "calm" && history.length <= 3 && !histK.includes("task") && (history.length >= 1 || st.lastBrief === UP.dayKey())) {
@@ -258,6 +261,7 @@
         sprint: 3.5 * (g.has("mind") ? 1.5 : 1),
         task: openTasks().length ? 7 : 0,
         idea: staleIdeas().length ? 3 : 0,
+        question: openQuestions().length ? 4 : 0,
         capsule: capsules().length ? 3 : 0,
         calmaction: filter === "calm" ? 4 : 0,
       };
@@ -319,7 +323,14 @@
 
   // a finished real-world quest sometimes earns a bonus right away: reward doing, not swiping
   function deedDone() {
-    if (rand() < 0.35) sinceChest = Math.max(sinceChest, nextChestAt);
+    if (rand() < 0.35 && sinceChest >= 6) sinceChest = Math.max(sinceChest, nextChestAt);
+  }
+  // cards inserted from outside the mixer (brief, bonus, sky) still count for repeats and spacing
+  function mark(spec) {
+    if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, histLen); learnedAt.delete(spec.id); }
+    if (spec.kind === "chest") sinceChest = 0;
+    if (spec.kind === "review") sinceReview = 0;
+    if (spec.kind === "sprint") session.sprints = (session.sprints || 0) + 1;
   }
 
   function build(kind) {
@@ -336,6 +347,7 @@
       case "sprint": return { kind: "sprint", id: UP.uid("sprint") };
       case "task": { const t = openTasks()[0]; return t && { kind: "task", id: t.id, data: t }; }
       case "idea": { const t = pick(staleIdeas()); return t && { kind: "idea", id: t.id, data: t }; }
+      case "question": { const t = pick(openQuestions()); return t && { kind: "question", id: t.id, data: t }; }
       case "capsule": { const j = pick(capsules()); return j && { kind: "capsule", id: j.id, data: j }; }
       case "review": return pickReview();
     }
@@ -359,7 +371,7 @@
     return { options: opts, a: opts.indexOf(word.word) };
   }
 
-  UP.engine = { next, TOPICS, GOALS, FILTERS, session, pickLegendary, findItem, wordOptions, wordReverse, holesNeedingCards, noteLearned, deedDone, build };
+  UP.engine = { next, TOPICS, GOALS, FILTERS, session, pickLegendary, findItem, wordOptions, wordReverse, holesNeedingCards, noteLearned, deedDone, build, mark };
 
   function holesNeedingCards() {
     return UP.state.holes.filter((h) => h.active && (!h.queue || h.queue.length < 3) && !UP.ai.digging(h.id));

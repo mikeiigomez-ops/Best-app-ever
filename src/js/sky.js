@@ -139,7 +139,10 @@
       h("p", { class: "kicker", style: { "--hue": s.hue } }, (engine.TOPICS[s.topic] || { label: s.topic }).label + " · learned " + UP.timeAgo(rec.f || Date.now())),
       h("p", { class: "compose-prompt" }, isWord ? item.word + ": " + item.def : item.headline),
       h("p", { class: "lede" }, isWord ? item.example : item.body),
-      h("div", { class: "star-meta" }, pips, h("span", { class: "hint" }, rec.b >= store.MASTERED ? "Mastered" : rec.b >= store.STRONG ? "Strong" : "Still settling in"))
+      h("div", { class: "star-meta" }, pips, h("span", { class: "hint" }, rec.b >= store.MASTERED ? "Mastered" : rec.b >= store.STRONG ? "Strong" : "Still settling in")),
+      h("div", { class: "row" },
+        h("button", { class: "btn primary", onclick: () => { UP.ui.closeSheet(); UP.ui.goTab("feed"); UP.ui.insertNext({ kind: "review", id: s.id, data: item }); setTimeout(() => UP.ui.advance(), 300); } }, "Test me now"),
+        h("button", { class: "btn ghost needs-ai", onclick: () => { UP.ui.closeSheet(); setTimeout(() => UP.ui.deeper({ kind: isWord ? "word" : "fact", id: s.id, data: item }), 260); } }, "Go deeper"))
     );
     UP.ui.sheetRaw(isWord ? "A word you know" : "A star in your sky", body);
   }
@@ -205,10 +208,23 @@
         big(String(st.streak.freezes || 0), "streak freezes"),
         big(String(st.golden || 0), "golden stars")
       ),
+      calibration(),
       h("h4", null, "Last 12 weeks"),
       heatmap(),
       settings()
     ].filter(Boolean));
+  }
+
+  function calibration() {
+    const log = UP.state.calib || [];
+    if (log.length < 4) return null;
+    const recent = log.slice(-40);
+    const hit = Math.round((recent.reduce((s, x) => s + x.hit, 0) / recent.length) * 100);
+    const bias = recent.reduce((s, x) => s + x.r, 0) / recent.length;
+    const factor = Math.pow(10, Math.abs(bias));
+    const lean = Math.abs(bias) < 0.08 ? "You don't lean high or low. That's rare." :
+      "You tend to " + (bias < 0 ? "underestimate" : "overestimate") + " by about " + (factor < 1.95 ? Math.round((factor - 1) * 100) + "%" : (Math.round(factor * 10) / 10) + "x") + ".";
+    return h("div", { class: "calib" }, h("h4", null, "Your calibration"), h("p", { class: "sky-lede" }, hit + "% of your last " + recent.length + " estimates landed within 25%. " + lean));
   }
 
   function constellationLine() {
@@ -286,8 +302,9 @@
       ints.append(b);
     }
     const toggle = (label, key) => {
-      const b = h("button", { class: "chip-btn" + (st.settings[key] ? " on" : ""), "aria-pressed": String(!!st.settings[key]) }, label);
-      b.addEventListener("click", () => { st.settings[key] = !st.settings[key]; b.classList.toggle("on"); b.setAttribute("aria-pressed", String(st.settings[key])); store.save(); });
+      const isOn = () => st.settings[key] !== false;
+      const b = h("button", { class: "chip-btn" + (isOn() ? " on" : ""), "aria-pressed": String(isOn()) }, label);
+      b.addEventListener("click", () => { st.settings[key] = !isOn(); b.classList.toggle("on"); b.setAttribute("aria-pressed", String(st.settings[key])); store.save(); });
       return b;
     };
     const goalSel = h("div", { class: "chips" }, ...[50, 100, 150, 250, 400].map((n) => {

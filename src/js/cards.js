@@ -15,6 +15,7 @@
     capture: { label: "Capture", hue: 95 },
     reflect: { label: "Journal", hue: 255 },
     task: { label: "From your vault", hue: 95 },
+    question: { label: "From your vault", hue: 200 },
     idea: { label: "From your vault", hue: 48 },
     capsule: { label: "Time capsule", hue: 255 },
     sprint: { label: "Math sprint", hue: 186 },
@@ -61,7 +62,7 @@
       if (save.classList.contains("on")) return;
       save.classList.add("on");
       const d = spec.data || {};
-      const text = d.headline || (d.word ? d.word + " — " + d.def : "") || d.title || d.text || "Saved card";
+      const text = d.headline || (d.word ? d.word + " — " + d.def : "") || d.title || d.q || d.text || "Saved card";
       store.addVault("saved", text, { ref: spec.id, body: d.body || d.example || "" });
       save.setAttribute("aria-pressed", "true");
       save.querySelector("span:last-child").textContent = "Saved";
@@ -84,7 +85,7 @@
       UP.ui.toast("Got it. Less of this.");
       setTimeout(() => UP.ui.advance(), 450);
     });
-    if (spec.kind !== "brief" && spec.kind !== "receipt" && spec.kind !== "chest") r.append(save);
+    if (["fact", "ai", "word", "review", "estimate", "action"].includes(spec.kind)) r.append(save);
     if (learnable) {
       const deep = h("button", { class: "rail-btn deep", "aria-label": "Go deeper with Claude", title: "Go deeper" }, icon("spark"), h("span", null, "Deeper"));
       deep.addEventListener("click", () => UP.ui.deeper(spec));
@@ -166,6 +167,13 @@
     return t ? t.label : d.topic;
   }
 
+  function lessonLabel(d) {
+    const m = String(d.id).match(/-(\d+)-[a-z0-9]+$/);
+    const n = m ? +m[1] + 1 : null;
+    if (!n) return "by Claude";
+    return "Lesson " + n + " \u00b7 " + (n <= 6 ? "Foundations" : n <= 18 ? "Going deeper" : "Expert") + " \u00b7 by Claude";
+  }
+
   /* ---------- fact + rabbit-hole ---------- */
   function fact(spec) {
     const d = spec.data;
@@ -175,7 +183,7 @@
       topic: isAi ? d.topic : topicOf(d),
       topicKey: isAi ? "holes" : d.topic,
       hue: isAi ? 265 : t ? t.hue : undefined,
-      meta: isAi ? h("span", { class: "by" }, "by Claude") : null,
+      meta: isAi ? h("span", { class: "by" }, lessonLabel(d)) : null,
     });
     const inner = el._inner;
     // Ask first, reveal second: guessing before reading makes the answer stick (and makes it a real game)
@@ -222,6 +230,53 @@
     const inner = el._inner;
     const ago = now() - (r.f || now());
     inner.append(h("p", { class: "kicker" }, ago < 3600000 ? "Remember this one?" : "From " + timeAgo(r.f) + ". Still got it?"));
+
+    function grade(ok, anchor, holder) {
+      const st = UP.state;
+      st.stats.reviews++; if (ok) st.stats.reviewsCorrect++;
+      S.answered++; if (ok) S.correct++;
+      store.comboHit(ok);
+      const rr = store.srsGrade(spec.id, ok, d.__kind);
+      if (ok) store.questProgress("review");
+      const amt = gain(ok ? 15 : 3, anchor, ok ? "Remembered" : "Relearned");
+      ok ? sfx.good(st.combo) : sfx.bad();
+      buzz(ok ? 12 : [20, 40, 20]);
+      if (ok) UP.ui.burst(anchor, 14);
+      strength.querySelectorAll("i").forEach((x, i) => x.classList.toggle("on", i < rr.b));
+      const sub = ok ? (rr.b >= store.MASTERED ? "Mastered. This one is yours now." : nextCheckText(rr)) : "It drops back a little. You'll see it again soon.";
+      const v = verdict(ok, amt, sub);
+      holder.append(v);
+      if (!ok || isWord) {
+        const recap = h("div", { class: "after" });
+        if (isWord) recap.append(h("p", { class: "explain" }, h("b", null, d.word + ": "), d.def), h("p", { class: "example" }, d.example));
+        else recap.append(h("p", { class: "explain" }, h("b", null, d.headline + " "), d.body));
+        holder.append(recap);
+      }
+      el.classList.add("done");
+      return v;
+    }
+
+    // Strong cards switch to real recall: think of the answer, reveal it, be honest
+    if (!isWord && r.b >= 2 && Math.random() < 0.5) {
+      inner.append(h("h2", { class: "headline q-head" }, d.q));
+      const zone = h("div", { class: "quiz" });
+      const reveal = h("button", { class: "btn primary" }, "Think of the answer, then reveal");
+      zone.append(reveal);
+      reveal.addEventListener("click", () => {
+        reveal.remove();
+        const knew = h("button", { class: "btn primary" }, icon("check"), "I knew it");
+        const forgot = h("button", { class: "btn ghost" }, "I didn't");
+        const row = h("div", { class: "row" }, knew, forgot);
+        zone.append(h("div", { class: "reveal" }, h("p", { class: "reveal-answer" }, d.options[d.a]), h("p", { class: "body" }, d.headline)), row);
+        knew.focus({ preventScroll: true });
+        const pickIt = (ok, btn) => { row.remove(); const v = grade(ok, btn, zone); v.tabIndex = -1; v.focus({ preventScroll: true }); UP.ui.announce(v.textContent); };
+        knew.addEventListener("click", () => pickIt(true, knew));
+        forgot.addEventListener("click", () => pickIt(false, forgot));
+      });
+      inner.append(zone);
+      return el;
+    }
+
     let q, options, a;
     if (isWord && r.b >= 2 && Math.random() < 0.6) {
       const wo = engine.wordReverse(d);
@@ -230,7 +285,7 @@
       inner.append(h("h2", { class: "headline" }, d.def));
     } else if (isWord) {
       const wo = engine.wordOptions(d);
-      q = "What does “" + d.word + "” mean?";
+      q = "What does \u201c" + d.word + "\u201d mean?";
       options = wo.options; a = wo.a;
       inner.append(h("h2", { class: "headline word-big" }, d.word));
     } else {
@@ -240,32 +295,40 @@
       a = order.indexOf(d.a);
       q = d.q;
     }
-    const qz = quiz({
-      q, options, a,
-      onAnswer(ok, btn) {
-        const st = UP.state;
-        st.stats.reviews++; if (ok) st.stats.reviewsCorrect++;
-        S.answered++; if (ok) S.correct++;
-        store.comboHit(ok);
-        const rr = store.srsGrade(spec.id, ok, d.__kind);
-        if (ok) store.questProgress("review");
-        const amt = gain(ok ? 15 : 3, btn, ok ? "Remembered" : "Relearned");
-        ok ? sfx.good(st.combo) : sfx.bad();
-        buzz(ok ? 12 : [20, 40, 20]);
-        if (ok) UP.ui.burst(btn, 14);
-        strength.querySelectorAll("i").forEach((x, i) => x.classList.toggle("on", i < rr.b));
-        const sub = ok ? (rr.b >= store.MASTERED ? "Mastered. This one is yours now." : nextCheckText(rr)) : "Back to the start. You'll see it again soon.";
-        qz.append(verdict(ok, amt, sub));
-        if (!ok || isWord) {
-          const recap = h("div", { class: "after" });
-          if (isWord) recap.append(h("p", { class: "explain" }, h("b", null, d.word + ": "), d.def), h("p", { class: "example" }, d.example));
-          else recap.append(h("p", { class: "explain" }, h("b", null, d.headline + " "), d.body));
-          qz.append(recap);
-        }
-        el.classList.add("done");
-      },
-    });
+    const qz = quiz({ q, options, a, onAnswer(ok, btn) { grade(ok, btn, qz); } });
     inner.append(qz);
+    return el;
+  }
+
+  /* ---------- a question you saved, resurfaced ---------- */
+  function question(spec) {
+    const v = spec.data;
+    const el = frame(spec, { topic: "Saved " + timeAgo(v.createdAt), topicKey: "question", rail: false, label: "From your vault" });
+    const inner = el._inner;
+    inner.append(h("p", { class: "kicker" }, "You wondered"), h("h2", { class: "headline" }, v.text));
+    const result = h("div", { class: "result" });
+    const ask = h("button", { class: "btn primary needs-ai" }, icon("spark"), "Ask Claude");
+    ask.addEventListener("click", () => { v.r = now(); store.save(); gain(5, ask, "Curious"); UP.ui.claudeSheet("Answer", v.text, (onText, signal) => UP.ai.answer(v.text, onText, signal)); });
+    const found = h("button", { class: "btn ghost" }, "I found out");
+    found.addEventListener("click", () => UP.ui.compose({
+      title: "What did you find out?", prompt: v.text, placeholder: "The short answer is...", multi: true,
+      onSave(text) {
+        v.archived = true; v.answer = text.slice(0, 600);
+        store.addJournal("I wondered: " + v.text.slice(0, 100), text);
+        row.remove();
+        const amt = gain(15, result, "Answered");
+        sfx.done();
+        result.append(h("div", { class: "verdict ok" }, h("strong", null, "Mystery solved."), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "Saved to your journal as a time capsule.")));
+        store.save();
+      },
+    }));
+    const later = h("button", { class: "btn ghost" }, "Later");
+    later.addEventListener("click", () => { v.r = now(); store.save(); UP.ui.advance(); });
+    const drop = h("button", { class: "btn ghost" }, "Archive");
+    drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Archived"); UP.ui.advance(); });
+    const row = h("div", { class: "row" }, ask, found, later, drop);
+    inner.append(row, result);
+    el._enter = () => { v.r = now(); store.save(); };
     return el;
   }
 
@@ -285,6 +348,7 @@
         store.today().learned++;
         store.comboHit(ok);
         const r = store.srsGrade(spec.id, ok, "word");
+        engine.noteLearned(spec.id);
         store.questProgress("learn"); store.questProgress("word");
         const amt = gain(ok ? 10 : 3, btn, "Word");
         ok ? sfx.good(st.combo) : sfx.bad();
@@ -355,6 +419,11 @@
       const st = UP.state;
       st.stats.estimates++;
       st.stats.estErr += pctOff > 5 ? 5 : pctOff;
+      if (ans > 0 && guess > 0) {
+        st.calib = Array.isArray(st.calib) ? st.calib : [];
+        st.calib.push({ r: Math.round(Math.log10(guess / ans) * 100) / 100, t: d.topic, hit: pctOff <= 0.25 ? 1 : 0 });
+        if (st.calib.length > 120) st.calib.splice(0, st.calib.length - 120);
+      }
       let label;
       if (pctOff <= 0.1) label = "Bullseye.";
       else if (pctOff <= 0.25) label = "Sharp.";
@@ -815,7 +884,7 @@
       let headline, body;
       if (roll < 0.14) {
         const x = 30 + Math.floor(Math.random() * 4) * 10;
-        store.award(x, { reason: "Bonus", anchor: gem });
+        store.award(x, { reason: "Bonus", anchor: gem, bonus: true });
         headline = "+" + x + " XP"; body = "Straight into your level bar.";
       } else if (roll < 0.34) {
         headline = "Pick your next card"; body = "Two sealed cards. Your call.";
@@ -844,7 +913,7 @@
         if (leg) {
           UP.ui.insertNext(leg);
           headline = "A legendary card"; body = "One of the most mind-bending facts in the deck. It's next. Swipe up.";
-        } else { store.award(40, { reason: "Bonus", anchor: gem }); headline = "+40 XP"; body = "Straight into your level bar."; }
+        } else { store.award(40, { reason: "Bonus", anchor: gem, bonus: true }); headline = "+40 XP"; body = "Straight into your level bar."; }
       } else {
         S.boost = (S.boost || 0) + 5;
         headline = "Double XP"; body = "Your next 5 rewards count twice.";
@@ -1020,7 +1089,7 @@
     return out;
   }
 
-  const R = { one, fact, ai: fact, review, word, estimate, action, breathe, capture, reflect, task, idea, capsule, sprint, chest, brief, receipt };
+  const R = { question, one, fact, ai: fact, review, word, estimate, action, breathe, capture, reflect, task, idea, capsule, sprint, chest, brief, receipt };
   UP.cards = {
     render(spec) {
       const fn = R[spec.kind] || fact;
