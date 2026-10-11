@@ -1,0 +1,21 @@
+<div id="wb-boot" class="wb-boot" aria-hidden="true">
+  <span class="wb-boot__mark">Workbench</span>
+  <span class="wb-boot__line"></span>
+</div>
+<div id="wb-app" class="wb-app">
+  <main id="wb-views">
+    <section id="view-front" class="wb-view" data-view="front" aria-label="Start" hidden></section>
+    <section id="view-forging" class="wb-view" data-view="forging" aria-label="Reading your photo" hidden></section>
+    <section id="view-bench" class="wb-view" data-view="bench" aria-label="Bench" hidden></section>
+    <section id="view-instrument" class="wb-view" data-view="instrument" aria-label="Instrument" hidden></section>
+    <section id="view-mission" class="wb-view" data-view="mission" aria-label="Mission" hidden></section>
+    <section id="view-mirror" class="wb-view" data-view="mirror" aria-label="Shared instrument" hidden></section>
+    <section id="view-end" class="wb-view" data-view="end" aria-label="Bench is set" hidden></section>
+  </main>
+  <div id="wb-peers" class="wb-peers" aria-live="polite"></div>
+  <div id="wb-sheet-root"></div>
+  <div id="wb-toast-root" aria-live="polite"></div>
+  <div id="wb-coach-root"></div>
+  <input id="wb-file-camera" type="file" accept="image/*" capture="environment" hidden aria-label="Take a photo">
+  <input id="wb-file-library" type="file" accept="image/*" hidden aria-label="Choose from photos">
+</div>
