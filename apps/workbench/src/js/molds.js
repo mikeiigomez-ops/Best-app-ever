@@ -898,7 +898,8 @@
     let status = it.status === "held" || it.status === "missed" ? it.status : "open";
     if (status === "open") {
       if (after.some((p) => p.v >= target - 0.01)) status = "held";
-      else if (t >= end) status = last > base ? "closer" : "missed";
+      /* past the check with nothing reported since the commit: ask (due) rather than call it missed */
+      else if (t >= end && after.length) status = last > base ? "closer" : "missed";
     }
     const span = target - base;
     const progress = span > EPS ? clamp((last - base) / span, -1, 1) : null;

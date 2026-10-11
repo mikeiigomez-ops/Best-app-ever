@@ -2136,7 +2136,7 @@ const last = points.length ? points[points.length - 1].v : doneCount(inst);
 let status = it.status === "held" || it.status === "missed" ? it.status : "open";
 if (status === "open") {
 if (after.some((p) => p.v >= target - 0.01)) status = "held";
-else if (t >= end) status = last > base ? "closer" : "missed";
+else if (t >= end && after.length) status = last > base ? "closer" : "missed";
 }
 const span = target - base;
 const progress = span > EPS ? clamp((last - base) / span, -1, 1) : null;
