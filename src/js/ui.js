@@ -69,7 +69,7 @@
       S.cards++;
       UP.state.stats.cards++;
       store.today().cards++;
-      if (spec.id && !String(spec.id).startsWith("v-") && !String(spec.id).startsWith("j-")) UP.state.seen[spec.id] = now();
+      if (spec.data && spec.data.id === spec.id && !/^[vj]-/.test(spec.id)) UP.state.seen[spec.id] = now();
     }
     if (el._enter) el._enter();
     fill(3);
@@ -83,9 +83,9 @@
     const idx = cards.indexOf(current);
     if (idx > 40) {
       const drop = cards.slice(0, idx - 30);
-      const hgt = drop.reduce((s, c) => s + c.offsetHeight, 0);
+      const offset = feed.scrollTop - current.offsetTop;
       drop.forEach((c) => { io.unobserve(c); c.remove(); });
-      feed.scrollTop -= hgt;
+      feed.scrollTop = current.offsetTop + offset;
     }
   }
   function resetFeed() {
@@ -100,10 +100,17 @@
   ui.resetFeed = resetFeed;
 
   /* rabbit holes refill as you scroll (each fetch rides on a swipe, never a timer) */
+  const holeFails = {}; // id -> {n, at}: back off after failures instead of retrying on every swipe
   function maybeDig() {
-    if (!UP.ai.available() || !UP.state.aiOk) return;
+    if (!UP.ai.available() || !UP.state.holes.length) return;
     for (const hole of engine.holesNeedingCards()) {
-      UP.ai.digHole(hole).catch((e) => {
+      const f = holeFails[hole.id];
+      if (f && now() - f.at < Math.min(30 * 60000, 20000 * Math.pow(2, f.n))) continue;
+      UP.ai.digHole(hole).then((cards) => {
+        if (cards.length) delete holeFails[hole.id];
+        else holeFails[hole.id] = { n: ((f && f.n) || 0) + 1, at: now() };
+      }).catch((e) => {
+        holeFails[hole.id] = { n: ((f && f.n) || 0) + 1, at: now() };
         const msg = UP.ai.handleError(e);
         if (msg && !maybeDig.warned) { maybeDig.warned = true; ui.toast(msg); }
       });
@@ -221,8 +228,10 @@
   };
 
   /* ================= sheets ================= */
+  let lastFocus = null;
   function sheet(title, body, opts = {}) {
     closeSheet();
+    lastFocus = document.activeElement;
     const close = h("button", { class: "icon-btn", "aria-label": "Close" }, icon("close"));
     const panel = h("div", { class: "sheet" + (opts.tall ? " tall" : ""), role: "dialog", "aria-modal": "true", "aria-label": title },
       h("div", { class: "sheet-head" }, h("h3", null, title), close),
@@ -234,14 +243,19 @@
     document.body.append(scrim);
     requestAnimationFrame(() => scrim.classList.add("show"));
     scrim._onClose = opts.onClose;
+    scrim.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeSheet(); } });
+    setTimeout(() => { if (!panel.contains(document.activeElement)) close.focus(); }, 60);
     return { panel, scrim };
   }
   function closeSheet() {
-    const s = $(".scrim");
+    const s = $(".scrim:not(.closing)");
     if (!s) return;
+    s.classList.add("closing");
     if (s._onClose) s._onClose();
     s.classList.remove("show");
     setTimeout(() => s.remove(), 250);
+    if (lastFocus && lastFocus.isConnected && lastFocus.focus) { try { lastFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    lastFocus = null;
   }
   ui.closeSheet = closeSheet;
   ui.sheetRaw = (title, body) => sheet(title, body, { tall: true });
@@ -261,8 +275,7 @@
     };
     save.addEventListener("click", go);
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (!multi || e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); }
-      e.stopPropagation();
+      if (e.key === "Enter" && !e.isComposing && (!multi || e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); }
     });
   };
 
@@ -305,8 +318,9 @@
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const q = input.value.trim();
-        if (!q) return;
+        if (!q || send.disabled) return;
         input.value = "";
+        send.disabled = input.disabled = true;
         thread.append(h("p", { class: "me" }, q));
         const ans = h("div", { class: "claude-out" }, h("p", { class: "thinking" }, "Thinking..."));
         thread.append(ans);
@@ -316,8 +330,9 @@
         const text = await ask(ans, (onText, signal) => chat(turns.slice(-8), onText, signal));
         if (text) turns.push({ role: "assistant", content: text });
         else turns.pop();
+        send.disabled = input.disabled = false;
+        input.focus();
       });
-      input.addEventListener("keydown", (e) => e.stopPropagation());
     })();
   };
 
@@ -333,6 +348,7 @@
   /* ================= rabbit holes ================= */
   const HOLE_IDEAS = ["How the stock market actually works", "Ancient Rome", "Spanish for travel", "Black holes", "Negotiation", "The science of cooking", "Stoicism", "How AI models work", "Wine basics", "Human evolution", "Investing for beginners", "Photography basics"];
   ui.holes = () => {
+    let ownScrim = null;
     const avail = UP.ai.available();
     const list = h("div", { class: "hole-list" });
     const renderList = () => {
@@ -378,7 +394,7 @@
         cards2.slice(idx + 1).forEach((c) => { if (!c.classList.contains("done")) { io.unobserve(c); c.remove(); } });
         fill(3);
         renderList();
-        setTimeout(() => { closeSheet(); ui.goTab("feed"); ui.advance(); }, 900);
+        setTimeout(() => { if (ownScrim && ownScrim.isConnected && !ownScrim.classList.contains("closing")) { closeSheet(); ui.goTab("feed"); ui.advance(); } }, 900);
       } catch (err) {
         status.textContent = UP.ai.handleError(err) || "Stopped.";
         renderList();
@@ -386,7 +402,6 @@
         go.disabled = false;
       }
     });
-    input.addEventListener("keydown", (e) => e.stopPropagation());
     const body = h("div", { class: "holes" },
       h("p", { class: "lede" }, "Name anything. Claude turns it into an endless course that gets deeper the further you scroll, mixed right into your feed, with memory checks so it sticks."),
       avail ? form : h("p", { class: "notice" }, "Rabbit holes are written by Claude, so they only work when Upscroll is opened inside Claude. Everything else works here."),
@@ -395,7 +410,8 @@
       h("h4", null, "Your rabbit holes"),
       list
     );
-    sheet("Rabbit holes", body, { tall: true });
+    const mine = sheet("Rabbit holes", body, { tall: true });
+    ownScrim = mine.scrim;
     if (avail) setTimeout(() => input.focus(), 120);
   };
 
@@ -452,10 +468,12 @@
 
     // keyboard
     addEventListener("keydown", (e) => {
-      if ($(".scrim") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
+      if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
       if (document.body.dataset.tab !== "feed") return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
       const tag = (e.target.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (e.key === " " && tag === "button") return;
       if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown" || (e.key === " " && !e.shiftKey)) { e.preventDefault(); ui.advance(); }
       else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") { e.preventDefault(); back(); }
       else if (/^[1-4]$/.test(e.key) || /^[a-d]$/i.test(e.key)) {
@@ -474,7 +492,18 @@
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));
     bus.on("allquests", () => { banner("All quests done", "Bonus unlocked", "A bonus is next in your feed."); ui.insertNext({ kind: "chest", id: UP.uid("chest") }); });
-    bus.on("remote", () => { renderHud(); ui.toast("Progress synced from your other device"); });
+    bus.on("remote", () => {
+      renderHud();
+      // rebuild what's ahead so it reflects the merged progress
+      const cards = $$(".card", feed);
+      const idx = cards.indexOf(current);
+      cards.slice(idx + 1).forEach((c) => { io.unobserve(c); c.remove(); });
+      if (current) fill(3);
+      const tab = document.body.dataset.tab;
+      if (tab === "vault") UP.vault.render();
+      if (tab === "sky") UP.sky.show();
+      ui.toast("Synced with your other devices");
+    });
     bus.on("ai", (s) => document.body.classList.toggle("has-ai", s === "ready"));
 
     renderHud();

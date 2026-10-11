@@ -78,6 +78,7 @@
     if (s.last === t) return;
     if (today().xp < STREAK_MIN) return;
     const gap = s.last ? daysBetween(s.last, t) : 999;
+    if (gap <= 0) return; // clock or timezone moved backwards: keep the streak as is
     let usedFreeze = 0;
     if (gap === 1) s.count += 1;
     else if (gap > 1 && gap - 1 <= s.freezes && s.count > 0) {
@@ -128,9 +129,11 @@
 
   /* ---------- spaced repetition (Leitner boxes with real intervals) ---------- */
   const BOX_MS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY, 80 * DAY, 180 * DAY];
-  const MASTERED = 4;
+  const MASTERED = 5; // survived a gap of a week or more
   function srsGrade(id, ok, kind) {
-    const r = state.srs[id] || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
+    const existing = state.srs[id];
+    if (existing && ok && existing.d > now()) return existing; // not due yet: a right answer doesn't skip ahead
+    const r = existing || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
     r.n += 1;
     if (ok) {
       r.ok += 1;
@@ -230,7 +233,9 @@
     return e;
   }
 
-  /* ---------- persistence: local first, synced to the artifact db when present ---------- */
+  /* ---------- persistence: local first, synced to the artifact db when present ----------
+     The cloud copy is merged field by field (never last-writer-wins on the whole object),
+     and merged INTO the live state object so every reference the UI holds stays valid. */
   const ls = safeStorage();
   let db = null, userId = null, remoteReady = false;
 
@@ -252,6 +257,64 @@
       } else base[k] = saved[k];
     }
     return base;
+  }
+
+  // Combine a remote snapshot into the live state. Returns true when anything changed.
+  function absorb(remote) {
+    const L = state;
+    const before = JSON.stringify(L);
+    const remoteNewer = (remote.updatedAt || 0) > (L.updatedAt || 0);
+    const maxNum = (a, b) => Math.max(a || 0, b || 0);
+    L.xp = maxNum(L.xp, remote.xp);
+    L.bestCombo = maxNum(L.bestCombo, remote.bestCombo);
+    L.onboarded = !!(L.onboarded || remote.onboarded);
+    L.createdAt = Math.min(L.createdAt || now(), remote.createdAt || now());
+    for (const [k, d] of Object.entries(remote.days || {})) {
+      const mine = L.days[k] || (L.days[k] = { xp: 0, cards: 0, learned: 0, deeds: 0, secs: 0 });
+      for (const f of Object.keys(d)) mine[f] = maxNum(mine[f], d[f]);
+    }
+    for (const [k, v] of Object.entries(remote.stats || {})) L.stats[k] = maxNum(L.stats[k], v);
+    for (const [id, r] of Object.entries(remote.srs || {})) {
+      const mine = L.srs[id];
+      if (!mine || (r.n || 0) > (mine.n || 0)) L.srs[id] = r;
+    }
+    for (const [id, t] of Object.entries(remote.seen || {})) L.seen[id] = maxNum(L.seen[id], t);
+    const rs = remote.streak || {}, ms = L.streak;
+    if ((rs.last || "") > (ms.last || "") || ((rs.last || "") === (ms.last || "") && (rs.count || 0) > (ms.count || 0))) {
+      ms.count = rs.count || 0; ms.last = rs.last || "";
+    }
+    ms.best = maxNum(ms.best, rs.best);
+    if (remoteNewer && rs.freezes != null) ms.freezes = rs.freezes;
+    // lists keyed by id: union, keeping the live objects and folding in the other side's progress
+    const unite = (mineList, theirs, fold) => {
+      const byId = new Map(mineList.map((x) => [x.id, x]));
+      for (const t of theirs || []) {
+        const m = byId.get(t.id);
+        if (!m) { mineList.push(t); byId.set(t.id, t); }
+        else fold(m, t);
+      }
+      mineList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    };
+    unite(L.vault, remote.vault, (m, t) => {
+      m.done = !!(m.done || t.done); m.archived = !!(m.archived || t.archived);
+      m.rewarded = !!(m.rewarded || t.rewarded);
+      m.r = maxNum(m.r, t.r); m.doneAt = m.doneAt || t.doneAt || null;
+      if (!m.step && t.step) m.step = t.step;
+    });
+    unite(L.journal, remote.journal, (m, t) => { m.back = maxNum(m.back, t.back); });
+    unite(L.holes, remote.holes, (m, t) => {
+      if ((t.count || 0) > (m.count || 0)) { m.count = t.count; m.headlines = t.headlines || m.headlines; }
+      const q = new Set(m.queue || []);
+      for (const id of t.queue || []) if (!q.has(id)) (m.queue = m.queue || []).push(id);
+      if (remoteNewer) m.active = t.active;
+    });
+    if (remoteNewer) {
+      for (const k of ["settings", "goals", "interests", "affinity", "kindAffinity"]) if (remote[k]) L[k] = k === "settings" ? Object.assign(L.settings, remote[k]) : remote[k];
+    }
+    if (remote.quests && (!L.quests || remote.quests.day > L.quests.day || (remote.quests.day === L.quests.day && remoteNewer))) L.quests = remote.quests;
+    if (remote.oneThing && (!L.oneThing || remote.oneThing.day > L.oneThing.day || (remote.oneThing.day === L.oneThing.day && remote.oneThing.done))) L.oneThing = remote.oneThing;
+    if ((remote.lastBrief || "") > (L.lastBrief || "")) L.lastBrief = remote.lastBrief;
+    return JSON.stringify(L) !== before;
   }
 
   function trimSeen() {
@@ -277,23 +340,80 @@
     } catch (e) { /* quota or blocked: the db copy still holds it */ }
   }
 
-  const pushRemote = debounce(async () => {
-    if (!db || !userId || !remoteReady) return;
-    try {
-      const col = db.collection("data/users/" + userId);
-      await col.doc("main").set(JSON.parse(JSON.stringify(state)));
-      await col.doc("ai").set({ updatedAt: state.updatedAt, cards: aiCards });
-      bus.emit("synced", {});
-    } catch (e) {
-      console.warn("Upscroll: sync failed", e && (e.code || e.message));
+  /* The cloud copy is split into documents well under the per-document size cap:
+     main (scalars), srs-N, vault-N, journal-N, ai-N. Only documents whose content changed are written. */
+  const CHUNK = { srs: 900, vault: 120, journal: 90, ai: 80 };
+  const lastWritten = {};
+  function chunk(list, size) {
+    const out = [];
+    for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+    return out.length ? out : [[]];
+  }
+  function snapshotDocs() {
+    const docs = {};
+    const { vault, journal, srs, ...rest } = state;
+    const parts = {
+      srs: chunk(Object.entries(srs), CHUNK.srs),
+      vault: chunk(vault, CHUNK.vault),
+      journal: chunk(journal, CHUNK.journal),
+      ai: chunk(Object.values(aiCards), CHUNK.ai),
+    };
+    const counts = {};
+    for (const [name, list] of Object.entries(parts)) {
+      counts[name] = list.length;
+      list.forEach((items, i) => { docs[name + "-" + i] = { items }; });
     }
-  }, 3500);
+    docs.main = { ...rest, chunks: counts };
+    return docs;
+  }
+  let pushing = null;
+  async function pushNow() {
+    if (!db || !userId || !remoteReady) return;
+    if (pushing) { await pushing; }
+    pushing = (async () => {
+      const col = db.collection("data/users/" + userId);
+      const docs = snapshotDocs();
+      try {
+        for (const [name, data] of Object.entries(docs)) {
+          const json = JSON.stringify(data);
+          if (lastWritten[name] === json) continue;
+          await col.doc(name).set(JSON.parse(json));
+          lastWritten[name] = json;
+        }
+        bus.emit("synced", {});
+      } catch (e) {
+        console.warn("Upscroll: sync failed", e && (e.code || e.message));
+      }
+    })();
+    try { await pushing; } finally { pushing = null; }
+  }
+  const pushRemote = debounce(pushNow, 3000);
 
   function save() {
     state.updatedAt = now();
     trimSeen();
     writeLocal();
     pushRemote();
+  }
+  function flush() {
+    state.updatedAt = state.updatedAt || now();
+    writeLocal();
+    return pushNow();
+  }
+
+  async function readRemote(col) {
+    const main = await col.doc("main").get();
+    if (!main || !main.exists) return null;
+    const m = main.data();
+    const counts = m.chunks || {};
+    const read = async (name) => {
+      const n = counts[name] || 0;
+      const snaps = await Promise.all(Array.from({ length: n }, (_, i) => col.doc(name + "-" + i).get()));
+      return snaps.flatMap((sn) => (sn && sn.exists && Array.isArray(sn.data().items) ? sn.data().items : []));
+    };
+    const [srs, vault, journal, ai] = await Promise.all([read("srs"), read("vault"), read("journal"), read("ai")]);
+    delete m.chunks;
+    return { ...m, srs: Object.fromEntries(srs), vault, journal, ai };
   }
 
   async function attachDb() {
@@ -305,30 +425,40 @@
       if (!id) return;
       db = dbNs;
       userId = id;
-      const col = db.collection("data/users/" + userId);
-      const [main, ai] = await Promise.all([col.doc("main").get(), col.doc("ai").get()]);
-      const remote = main && main.exists ? main.data() : null;
-      if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-        state = merge(fresh(), remote);
-        if (ai && ai.exists && ai.data().cards) aiCards = ai.data().cards;
-        writeLocal();
-        remoteReady = true;
-        bus.emit("remote", {});
-      } else {
-        remoteReady = true;
-        if (state.updatedAt) pushRemote();
+      const remote = await readRemote(db.collection("data/users/" + userId));
+      let changed = false;
+      if (remote) {
+        for (const c of remote.ai || []) if (c && c.id && !aiCards[c.id]) { aiCards[c.id] = c; changed = true; }
+        delete remote.ai;
+        changed = absorb(remote) || changed;
+        if (changed) writeLocal();
       }
+      remoteReady = true;
+      await pushNow();
+      if (changed) bus.emit("remote", {});
       bus.emit("synced", {});
     } catch (e) {
       console.warn("Upscroll: cloud save unavailable", e && (e.code || e.message));
     }
   }
 
-  function reset() {
-    state = fresh();
-    aiCards = {};
-    UP.state = state;
-    save();
+  // Erase in place (so live references stay valid), and wait for the cloud copy before returning.
+  async function reset() {
+    const f = fresh();
+    for (const k of Object.keys(state)) delete state[k];
+    Object.assign(state, f);
+    for (const k of Object.keys(aiCards)) delete aiCards[k];
+    state.updatedAt = now();
+    writeLocal();
+    if (db && userId && remoteReady) {
+      const col = db.collection("data/users/" + userId);
+      for (const k of Object.keys(lastWritten)) delete lastWritten[k];
+      try {
+        // overwrite every chunk the old state may have used
+        for (const name of ["srs", "vault", "journal", "ai"]) for (let i = 0; i < 12; i++) await col.doc(name + "-" + i).set({ items: [] });
+      } catch (e) { /* best effort */ }
+      await pushNow();
+    }
   }
 
   load();
@@ -338,7 +468,7 @@
   Object.defineProperty(UP, "state", { get: () => state, set: (v) => { state = v; }, configurable: true });
   Object.defineProperty(UP, "aiCards", { get: () => aiCards, configurable: true });
   UP.store = {
-    save, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
+    save, flush, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
     ensureQuests, questProgress, lean, addVault, addJournal, streakAlive, MASTERED, STREAK_MIN, TITLES,
     hasCloud: () => !!(db && userId),
   };

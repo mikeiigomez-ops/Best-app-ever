@@ -50,8 +50,8 @@
         setTimeout(() => $("#" + id) && $("#" + id).focus(), 0);
       });
       root.append(form);
-      if (UP.ai.available()) {
-        const unt = h("button", { class: "btn ghost small" }, icon("spark"), "Untangle a brain dump");
+      {
+        const unt = h("button", { class: "btn ghost small needs-ai" }, icon("spark"), "Untangle a brain dump");
         unt.addEventListener("click", untangle);
         root.append(h("div", { class: "vault-tools" }, unt));
       }
@@ -86,7 +86,8 @@
         const ot = UP.state.oneThing;
         if (ot && ot.vid === v.id) ot.done = v.done;
         v.doneAt = v.done ? now() : null;
-        if (v.done) {
+        if (v.done && !v.rewarded) {
+          v.rewarded = true;
           UP.state.stats.deeds++;
           store.today().deeds++;
           store.questProgress("deed");
@@ -104,8 +105,8 @@
     if (v.body) main.append(h("p", { class: "vstep" }, v.body));
     main.append(h("p", { class: "vmeta" }, timeAgo(v.createdAt)));
     row.append(main);
-    if (UP.ai.available() && (v.kind === "question" || v.kind === "idea")) {
-      const ask = h("button", { class: "icon-btn spark", "aria-label": v.kind === "question" ? "Ask Claude" : "Get next steps" }, icon("spark"));
+    if (v.kind === "question" || v.kind === "idea") {
+      const ask = h("button", { class: "icon-btn spark needs-ai", "aria-label": v.kind === "question" ? "Ask Claude" : "Get next steps" }, icon("spark"));
       ask.addEventListener("click", () => {
         if (v.kind === "question") UP.ui.claudeSheet("Answer", v.text, (onText, signal) => UP.ai.answer(v.text, onText, signal));
         else UP.ui.claudeSheet("Next steps", v.text, (onText, signal) => UP.ai.expandIdea(v.text, onText, signal));
@@ -121,7 +122,6 @@
     const ta = h("textarea", { id, class: "field", rows: "7", placeholder: "Type everything on your mind, messy is fine. Dentist, mom's birthday gift, why do cats knead, fix bike brakes, start running again...", "aria-label": "Brain dump" });
     const go = h("button", { class: "btn primary wide" }, icon("spark"), "Sort it for me");
     const out = h("div", { class: "untangle-out", "aria-live": "polite" });
-    ta.addEventListener("keydown", (e) => e.stopPropagation());
     go.addEventListener("click", async () => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }

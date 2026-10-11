@@ -128,7 +128,9 @@
     return r && { kind: "reflect", id: r.id, data: r };
   }
   function openTasks() {
-    return UP.state.vault.filter((v) => v.kind === "task" && !v.done && !v.archived && now() - v.createdAt > 20 * MIN && (!v.r || now() - v.r > 20 * 3600000) && !sessionUsed.has(v.id));
+    const ot = UP.state.oneThing;
+    const oneId = ot && ot.day === UP.dayKey() ? ot.vid : null;
+    return UP.state.vault.filter((v) => v.kind === "task" && v.id !== oneId && !v.done && !v.archived && now() - v.createdAt > 20 * MIN && (!v.r || now() - v.r > 20 * 3600000) && !sessionUsed.has(v.id));
   }
   function staleIdeas() {
     return UP.state.vault.filter((v) => v.kind === "idea" && !v.archived && now() - v.createdAt > 20 * 3600000 && (!v.r || now() - v.r > 5 * DAY) && !sessionUsed.has(v.id));
@@ -145,9 +147,10 @@
     return null;
   }
   const shownAt = new Map(); // id -> card index in this session
+  let histLen = 0;
   function recentlyShown(id) {
     const i = shownAt.get(id);
-    return i != null && session.cards - i < 6;
+    return i != null && histLen - i < 6;
   }
   function findItem(id) {
     const c = C();
@@ -175,6 +178,7 @@
 
   /* ---------- the mixer ---------- */
   function next(history, filter = "mix") {
+    histLen = history.length;
     const allow = FILTERS[filter];
     const ok = (k) => !allow || allow.has(k);
     const st = UP.state;
@@ -234,14 +238,18 @@
         if (!spec) W[kind] = 0;
       }
     }
-    if (!spec) spec = pickFact() || pickEstimate() || pickAction() || { kind: "chest", id: UP.uid("chest") };
+    if (!spec) {
+      // everything has been shown this session: let older items come back
+      sessionUsed.clear();
+      spec = build(allow && allow.has("fact") ? "fact" : filter === "calm" ? "breathe" : filter === "do" ? "action" : "fact") || pickFact() || pickAction() || { kind: "chest", id: UP.uid("chest") };
+    }
 
     // bookkeeping
     if (spec.kind === "chest") { sinceChest = 0; nextChestAt = 9 + Math.floor(rand() * 6); } else sinceChest++;
     if (spec.kind === "receipt") sinceReceipt = 0; else sinceReceipt++;
     if (spec.kind === "review") sinceReview = 0; else sinceReview++;
     if (spec.kind !== "one") sinceOne++;
-    if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, session.cards + history.length); }
+    if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, history.length); }
     spec.key = UP.uid("c");
     return spec;
   }

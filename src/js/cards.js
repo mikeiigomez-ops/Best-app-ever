@@ -81,7 +81,7 @@
       setTimeout(() => UP.ui.advance(), 450);
     });
     if (spec.kind !== "brief" && spec.kind !== "receipt" && spec.kind !== "chest") r.append(save);
-    if (learnable && UP.ai.available()) {
+    if (learnable) {
       const deep = h("button", { class: "rail-btn deep", "aria-label": "Go deeper with Claude", title: "Go deeper" }, icon("spark"), h("span", null, "Deeper"));
       deep.addEventListener("click", () => UP.ui.deeper(spec));
       r.append(deep);
@@ -118,7 +118,7 @@
 
   function verdict(ok, amt, extra) {
     const combo = UP.state.combo;
-    return h("div", { class: "verdict " + (ok ? "ok" : "no") },
+    return h("div", { class: "verdict " + (ok ? "ok" : "no"), role: "status" },
       h("strong", null, ok ? pickPraise(combo) : "Not quite."),
       amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null,
       ok && combo >= 3 ? h("span", { class: "combo-pill" }, combo + "x streak") : null,
@@ -285,9 +285,9 @@
     const toVal = (p) => { const x = lo + (hi - lo) * p; return d.log ? Math.pow(10, x) : x; };
     const toPos = (v) => clamp(((d.log ? Math.log10(v) : v) - lo) / (hi - lo), 0, 1);
     const nice = (v) => {
-      if (Math.abs(v) < 10) return Math.round(v * 10) / 10;
-      const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1);
-      return Math.round(v / p) * p;
+      if (v === 0) return 0;
+      const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1); // 2 significant figures
+      return Number((Math.round(v / p) * p).toPrecision(2));
     };
     // start somewhere random so the slider's midpoint never hints at the answer
     const startPos = 0.2 + Math.random() * 0.6;
@@ -450,7 +450,7 @@
     const start = h("button", { class: "btn primary" }, "Begin");
     const result = h("div", { class: "result" });
     inner.append(h("div", { class: "orb-zone" }, orb), start, result);
-    let running = false, cancel = false, t = null;
+    let running = false, cancel = false, t = null, wake = null;
     const label = orb.querySelector(".orb-label");
     const core = orb.querySelector(".orb-core");
     start.addEventListener("click", async () => {
@@ -471,7 +471,7 @@
           if (n.includes("inhale")) sfx.breath(true); else if (n.includes("exhale")) sfx.breath(false);
           for (let s = secs; s > 0 && !cancel; s--) {
             label.textContent = name + " " + s;
-            await new Promise((res) => (t = setTimeout(res, 1000)));
+            await new Promise((res) => { wake = res; t = setTimeout(res, 1000); });
           }
         }
       }
@@ -483,7 +483,7 @@
       const amt = completeDeed(el, spec, orb, d.xp || 25);
       result.append(h("div", { class: "verdict ok" }, h("strong", null, "Nervous system: reset."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
     });
-    el._leave = () => { if (running) { cancel = true; clearTimeout(t); } };
+    el._leave = () => { if (running) { cancel = true; clearTimeout(t); if (wake) wake(); } };
     return el;
   }
 
@@ -501,7 +501,7 @@
     inner.append(row, result);
     write.addEventListener("click", () => {
       UP.ui.compose({
-        title: d.text, placeholder: d.placeholder || "", multi: d.kind !== "task",
+        title: d.text, placeholder: d.placeholder || "", multi: true,
         hint: d.kind === "task" ? "One per line works too." : "",
         onSave(text) {
           const lines = d.kind === "task" ? text.split(/\n+/).map((s) => s.trim()).filter(Boolean) : [text];
@@ -571,15 +571,18 @@
     const row = h("div", { class: "row" }, done, later, drop);
     inner.append(row, result);
     done.addEventListener("click", () => {
-      v.done = true; v.doneAt = now();
+      const already = v.rewarded;
+      v.done = true; v.doneAt = now(); v.rewarded = true;
+      const ot = UP.state.oneThing;
+      if (ot && ot.vid === v.id) ot.done = true;
       row.remove();
-      const amt = completeDeed(el, spec, result, 35);
-      result.append(h("div", { class: "verdict ok" }, h("strong", null, "Crossed off. That's the feed working for you."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
+      const amt = already ? 0 : completeDeed(el, spec, result, 35);
+      result.append(h("div", { class: "verdict ok" }, h("strong", null, "Crossed off. That's the feed working for you."), amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null));
       store.save();
     });
     later.addEventListener("click", () => { v.r = now(); store.save(); UP.ui.toast("It'll come back tomorrow"); UP.ui.advance(); });
     drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Dropped. One less thing."); UP.ui.advance(); });
-    v.r = now();
+    el._enter = () => { v.r = now(); };
     return el;
   }
 
@@ -592,15 +595,16 @@
     const keep = h("button", { class: "btn primary" }, "Still good");
     const drop = h("button", { class: "btn ghost" }, "Archive");
     const row = h("div", { class: "row" }, keep, drop);
-    if (UP.ai.available()) {
+    {
       const grow = h("button", { class: "btn ghost" }, icon("spark"), "Next steps");
+      grow.classList.add("needs-ai");
       grow.addEventListener("click", () => UP.ui.claudeSheet("Next steps", v.text, (onText, signal) => UP.ai.expandIdea(v.text, onText, signal)));
       row.append(grow);
     }
     inner.append(row, result);
-    keep.addEventListener("click", () => { v.r = now(); store.save(); gain(5, keep, "Kept"); UP.ui.advance(); });
-    drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Archived"); UP.ui.advance(); });
-    v.r = now();
+    keep.addEventListener("click", () => { if (keep.disabled) return; keep.disabled = drop.disabled = true; v.r = now(); store.save(); gain(5, keep, "Kept"); UP.ui.advance(); });
+    drop.addEventListener("click", () => { if (drop.disabled) return; keep.disabled = drop.disabled = true; v.archived = true; store.save(); UP.ui.toast("Archived"); UP.ui.advance(); });
+    el._enter = () => { v.r = now(); };
     return el;
   }
 
@@ -628,9 +632,8 @@
         },
       });
     });
-    nod.addEventListener("click", () => { gain(5, nod, "Capsule"); UP.ui.advance(); });
-    j.back = now();
-    store.save();
+    nod.addEventListener("click", () => { if (nod.disabled) return; nod.disabled = true; gain(5, nod, "Capsule"); UP.ui.advance(); });
+    el._enter = () => { j.back = now(); store.save(); };
     return el;
   }
 
@@ -786,8 +789,7 @@
       h("ul", { class: "quests" }, ...qs.list.map((q) => h("li", { class: q.done ? "done" : "" }, h("span", { class: "q-dot" }), q.label, h("span", { class: "q-xp" }, "+30")))),
       h("p", { class: "swipe-cta" }, icon("arrowUp"), "Swipe up to start")
     );
-    st.lastBrief = UP.dayKey();
-    store.save();
+    el._enter = () => { st.lastBrief = UP.dayKey(); store.save(); };
     return el;
   }
   function oneThingBlock() {
@@ -833,9 +835,10 @@
     done.addEventListener("click", () => {
       ot.done = true;
       const v = st.vault.find((x) => x.id === ot.vid);
-      if (v) { v.done = true; v.doneAt = now(); }
+      const already = v && v.rewarded;
+      if (v) { v.done = true; v.doneAt = now(); v.rewarded = true; }
       row.remove();
-      const amt = completeDeed(el, spec, result, 60);
+      const amt = already ? 0 : completeDeed(el, spec, result, 60);
       UP.ui.banner("Today", "Won.", "Your one thing is done. Everything else is a bonus.");
       result.append(h("div", { class: "verdict ok" }, h("strong", null, "Day won."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
       store.save();

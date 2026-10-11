@@ -133,6 +133,7 @@ button:disabled { cursor: default; }
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
 }
 .feed::-webkit-scrollbar { display: none; }
@@ -622,6 +623,11 @@ h4 { margin: 10px 0 0; font-family: var(--f-mono); font-size: 0.7rem; letter-spa
 .one-text { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 1.25rem; line-height: 1.2; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(245, 201, 92, 0.4); background: rgba(245, 201, 92, 0.08); }
 .one-text.done { text-decoration: line-through; color: var(--mute); }
 .k-one .headline { color: var(--gold-2); }
+
+/* Claude-only controls appear once the page knows Claude is available */
+.rail-btn.deep, .needs-ai { display: none !important; }
+body.has-ai .rail-btn.deep { display: flex !important; }
+body.has-ai .needs-ai { display: inline-flex !important; }
 
 html,body{height:100%}body{padding-top:env(safe-area-inset-top,0px)}
 </style>
@@ -1523,6 +1529,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     if (s.last === t) return;
     if (today().xp < STREAK_MIN) return;
     const gap = s.last ? daysBetween(s.last, t) : 999;
+    if (gap <= 0) return; // clock or timezone moved backwards: keep the streak as is
     let usedFreeze = 0;
     if (gap === 1) s.count += 1;
     else if (gap > 1 && gap - 1 <= s.freezes && s.count > 0) {
@@ -1573,9 +1580,11 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
   /* ---------- spaced repetition (Leitner boxes with real intervals) ---------- */
   const BOX_MS = [10 * MIN, 1 * DAY, 3 * DAY, 7 * DAY, 16 * DAY, 35 * DAY, 80 * DAY, 180 * DAY];
-  const MASTERED = 4;
+  const MASTERED = 5; // survived a gap of a week or more
   function srsGrade(id, ok, kind) {
-    const r = state.srs[id] || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
+    const existing = state.srs[id];
+    if (existing && ok && existing.d > now()) return existing; // not due yet: a right answer doesn't skip ahead
+    const r = existing || { b: 0, d: 0, n: 0, ok: 0, l: 0, k: kind, f: now() };
     r.n += 1;
     if (ok) {
       r.ok += 1;
@@ -1675,7 +1684,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return e;
   }
 
-  /* ---------- persistence: local first, synced to the artifact db when present ---------- */
+  /* ---------- persistence: local first, synced to the artifact db when present ----------
+     The cloud copy is merged field by field (never last-writer-wins on the whole object),
+     and merged INTO the live state object so every reference the UI holds stays valid. */
   const ls = safeStorage();
   let db = null, userId = null, remoteReady = false;
 
@@ -1697,6 +1708,64 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       } else base[k] = saved[k];
     }
     return base;
+  }
+
+  // Combine a remote snapshot into the live state. Returns true when anything changed.
+  function absorb(remote) {
+    const L = state;
+    const before = JSON.stringify(L);
+    const remoteNewer = (remote.updatedAt || 0) > (L.updatedAt || 0);
+    const maxNum = (a, b) => Math.max(a || 0, b || 0);
+    L.xp = maxNum(L.xp, remote.xp);
+    L.bestCombo = maxNum(L.bestCombo, remote.bestCombo);
+    L.onboarded = !!(L.onboarded || remote.onboarded);
+    L.createdAt = Math.min(L.createdAt || now(), remote.createdAt || now());
+    for (const [k, d] of Object.entries(remote.days || {})) {
+      const mine = L.days[k] || (L.days[k] = { xp: 0, cards: 0, learned: 0, deeds: 0, secs: 0 });
+      for (const f of Object.keys(d)) mine[f] = maxNum(mine[f], d[f]);
+    }
+    for (const [k, v] of Object.entries(remote.stats || {})) L.stats[k] = maxNum(L.stats[k], v);
+    for (const [id, r] of Object.entries(remote.srs || {})) {
+      const mine = L.srs[id];
+      if (!mine || (r.n || 0) > (mine.n || 0)) L.srs[id] = r;
+    }
+    for (const [id, t] of Object.entries(remote.seen || {})) L.seen[id] = maxNum(L.seen[id], t);
+    const rs = remote.streak || {}, ms = L.streak;
+    if ((rs.last || "") > (ms.last || "") || ((rs.last || "") === (ms.last || "") && (rs.count || 0) > (ms.count || 0))) {
+      ms.count = rs.count || 0; ms.last = rs.last || "";
+    }
+    ms.best = maxNum(ms.best, rs.best);
+    if (remoteNewer && rs.freezes != null) ms.freezes = rs.freezes;
+    // lists keyed by id: union, keeping the live objects and folding in the other side's progress
+    const unite = (mineList, theirs, fold) => {
+      const byId = new Map(mineList.map((x) => [x.id, x]));
+      for (const t of theirs || []) {
+        const m = byId.get(t.id);
+        if (!m) { mineList.push(t); byId.set(t.id, t); }
+        else fold(m, t);
+      }
+      mineList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    };
+    unite(L.vault, remote.vault, (m, t) => {
+      m.done = !!(m.done || t.done); m.archived = !!(m.archived || t.archived);
+      m.rewarded = !!(m.rewarded || t.rewarded);
+      m.r = maxNum(m.r, t.r); m.doneAt = m.doneAt || t.doneAt || null;
+      if (!m.step && t.step) m.step = t.step;
+    });
+    unite(L.journal, remote.journal, (m, t) => { m.back = maxNum(m.back, t.back); });
+    unite(L.holes, remote.holes, (m, t) => {
+      if ((t.count || 0) > (m.count || 0)) { m.count = t.count; m.headlines = t.headlines || m.headlines; }
+      const q = new Set(m.queue || []);
+      for (const id of t.queue || []) if (!q.has(id)) (m.queue = m.queue || []).push(id);
+      if (remoteNewer) m.active = t.active;
+    });
+    if (remoteNewer) {
+      for (const k of ["settings", "goals", "interests", "affinity", "kindAffinity"]) if (remote[k]) L[k] = k === "settings" ? Object.assign(L.settings, remote[k]) : remote[k];
+    }
+    if (remote.quests && (!L.quests || remote.quests.day > L.quests.day || (remote.quests.day === L.quests.day && remoteNewer))) L.quests = remote.quests;
+    if (remote.oneThing && (!L.oneThing || remote.oneThing.day > L.oneThing.day || (remote.oneThing.day === L.oneThing.day && remote.oneThing.done))) L.oneThing = remote.oneThing;
+    if ((remote.lastBrief || "") > (L.lastBrief || "")) L.lastBrief = remote.lastBrief;
+    return JSON.stringify(L) !== before;
   }
 
   function trimSeen() {
@@ -1722,23 +1791,80 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     } catch (e) { /* quota or blocked: the db copy still holds it */ }
   }
 
-  const pushRemote = debounce(async () => {
-    if (!db || !userId || !remoteReady) return;
-    try {
-      const col = db.collection("data/users/" + userId);
-      await col.doc("main").set(JSON.parse(JSON.stringify(state)));
-      await col.doc("ai").set({ updatedAt: state.updatedAt, cards: aiCards });
-      bus.emit("synced", {});
-    } catch (e) {
-      console.warn("Upscroll: sync failed", e && (e.code || e.message));
+  /* The cloud copy is split into documents well under the per-document size cap:
+     main (scalars), srs-N, vault-N, journal-N, ai-N. Only documents whose content changed are written. */
+  const CHUNK = { srs: 900, vault: 120, journal: 90, ai: 80 };
+  const lastWritten = {};
+  function chunk(list, size) {
+    const out = [];
+    for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+    return out.length ? out : [[]];
+  }
+  function snapshotDocs() {
+    const docs = {};
+    const { vault, journal, srs, ...rest } = state;
+    const parts = {
+      srs: chunk(Object.entries(srs), CHUNK.srs),
+      vault: chunk(vault, CHUNK.vault),
+      journal: chunk(journal, CHUNK.journal),
+      ai: chunk(Object.values(aiCards), CHUNK.ai),
+    };
+    const counts = {};
+    for (const [name, list] of Object.entries(parts)) {
+      counts[name] = list.length;
+      list.forEach((items, i) => { docs[name + "-" + i] = { items }; });
     }
-  }, 3500);
+    docs.main = { ...rest, chunks: counts };
+    return docs;
+  }
+  let pushing = null;
+  async function pushNow() {
+    if (!db || !userId || !remoteReady) return;
+    if (pushing) { await pushing; }
+    pushing = (async () => {
+      const col = db.collection("data/users/" + userId);
+      const docs = snapshotDocs();
+      try {
+        for (const [name, data] of Object.entries(docs)) {
+          const json = JSON.stringify(data);
+          if (lastWritten[name] === json) continue;
+          await col.doc(name).set(JSON.parse(json));
+          lastWritten[name] = json;
+        }
+        bus.emit("synced", {});
+      } catch (e) {
+        console.warn("Upscroll: sync failed", e && (e.code || e.message));
+      }
+    })();
+    try { await pushing; } finally { pushing = null; }
+  }
+  const pushRemote = debounce(pushNow, 3000);
 
   function save() {
     state.updatedAt = now();
     trimSeen();
     writeLocal();
     pushRemote();
+  }
+  function flush() {
+    state.updatedAt = state.updatedAt || now();
+    writeLocal();
+    return pushNow();
+  }
+
+  async function readRemote(col) {
+    const main = await col.doc("main").get();
+    if (!main || !main.exists) return null;
+    const m = main.data();
+    const counts = m.chunks || {};
+    const read = async (name) => {
+      const n = counts[name] || 0;
+      const snaps = await Promise.all(Array.from({ length: n }, (_, i) => col.doc(name + "-" + i).get()));
+      return snaps.flatMap((sn) => (sn && sn.exists && Array.isArray(sn.data().items) ? sn.data().items : []));
+    };
+    const [srs, vault, journal, ai] = await Promise.all([read("srs"), read("vault"), read("journal"), read("ai")]);
+    delete m.chunks;
+    return { ...m, srs: Object.fromEntries(srs), vault, journal, ai };
   }
 
   async function attachDb() {
@@ -1750,30 +1876,40 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       if (!id) return;
       db = dbNs;
       userId = id;
-      const col = db.collection("data/users/" + userId);
-      const [main, ai] = await Promise.all([col.doc("main").get(), col.doc("ai").get()]);
-      const remote = main && main.exists ? main.data() : null;
-      if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-        state = merge(fresh(), remote);
-        if (ai && ai.exists && ai.data().cards) aiCards = ai.data().cards;
-        writeLocal();
-        remoteReady = true;
-        bus.emit("remote", {});
-      } else {
-        remoteReady = true;
-        if (state.updatedAt) pushRemote();
+      const remote = await readRemote(db.collection("data/users/" + userId));
+      let changed = false;
+      if (remote) {
+        for (const c of remote.ai || []) if (c && c.id && !aiCards[c.id]) { aiCards[c.id] = c; changed = true; }
+        delete remote.ai;
+        changed = absorb(remote) || changed;
+        if (changed) writeLocal();
       }
+      remoteReady = true;
+      await pushNow();
+      if (changed) bus.emit("remote", {});
       bus.emit("synced", {});
     } catch (e) {
       console.warn("Upscroll: cloud save unavailable", e && (e.code || e.message));
     }
   }
 
-  function reset() {
-    state = fresh();
-    aiCards = {};
-    UP.state = state;
-    save();
+  // Erase in place (so live references stay valid), and wait for the cloud copy before returning.
+  async function reset() {
+    const f = fresh();
+    for (const k of Object.keys(state)) delete state[k];
+    Object.assign(state, f);
+    for (const k of Object.keys(aiCards)) delete aiCards[k];
+    state.updatedAt = now();
+    writeLocal();
+    if (db && userId && remoteReady) {
+      const col = db.collection("data/users/" + userId);
+      for (const k of Object.keys(lastWritten)) delete lastWritten[k];
+      try {
+        // overwrite every chunk the old state may have used
+        for (const name of ["srs", "vault", "journal", "ai"]) for (let i = 0; i < 12; i++) await col.doc(name + "-" + i).set({ items: [] });
+      } catch (e) { /* best effort */ }
+      await pushNow();
+    }
   }
 
   load();
@@ -1783,7 +1919,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   Object.defineProperty(UP, "state", { get: () => state, set: (v) => { state = v; }, configurable: true });
   Object.defineProperty(UP, "aiCards", { get: () => aiCards, configurable: true });
   UP.store = {
-    save, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
+    save, flush, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
     ensureQuests, questProgress, lean, addVault, addJournal, streakAlive, MASTERED, STREAK_MIN, TITLES,
     hasCloud: () => !!(db && userId),
   };
@@ -1830,9 +1966,12 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
   /* ---------- rabbit holes: infinite, progressively deeper cards on any topic ---------- */
   function validCard(c) {
-    return c && typeof c.headline === "string" && typeof c.body === "string" && typeof c.q === "string" &&
+    if (!c || typeof c !== "object") return false;
+    c.a = Number(c.a);
+    const str = (x) => typeof x === "string" && x.trim().length > 0;
+    return str(c.headline) && str(c.body) && str(c.q) &&
       Array.isArray(c.options) && c.options.length >= 3 && c.options.length <= 4 &&
-      c.options.every((o) => typeof o === "string" && o.length) &&
+      c.options.every(str) && new Set(c.options.map((o) => o.trim().toLowerCase())).size === c.options.length &&
       Number.isInteger(c.a) && c.a >= 0 && c.a < c.options.length;
   }
 
@@ -2057,7 +2196,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return r && { kind: "reflect", id: r.id, data: r };
   }
   function openTasks() {
-    return UP.state.vault.filter((v) => v.kind === "task" && !v.done && !v.archived && now() - v.createdAt > 20 * MIN && (!v.r || now() - v.r > 20 * 3600000) && !sessionUsed.has(v.id));
+    const ot = UP.state.oneThing;
+    const oneId = ot && ot.day === UP.dayKey() ? ot.vid : null;
+    return UP.state.vault.filter((v) => v.kind === "task" && v.id !== oneId && !v.done && !v.archived && now() - v.createdAt > 20 * MIN && (!v.r || now() - v.r > 20 * 3600000) && !sessionUsed.has(v.id));
   }
   function staleIdeas() {
     return UP.state.vault.filter((v) => v.kind === "idea" && !v.archived && now() - v.createdAt > 20 * 3600000 && (!v.r || now() - v.r > 5 * DAY) && !sessionUsed.has(v.id));
@@ -2074,9 +2215,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     return null;
   }
   const shownAt = new Map(); // id -> card index in this session
+  let histLen = 0;
   function recentlyShown(id) {
     const i = shownAt.get(id);
-    return i != null && session.cards - i < 6;
+    return i != null && histLen - i < 6;
   }
   function findItem(id) {
     const c = C();
@@ -2104,6 +2246,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
   /* ---------- the mixer ---------- */
   function next(history, filter = "mix") {
+    histLen = history.length;
     const allow = FILTERS[filter];
     const ok = (k) => !allow || allow.has(k);
     const st = UP.state;
@@ -2163,14 +2306,18 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         if (!spec) W[kind] = 0;
       }
     }
-    if (!spec) spec = pickFact() || pickEstimate() || pickAction() || { kind: "chest", id: UP.uid("chest") };
+    if (!spec) {
+      // everything has been shown this session: let older items come back
+      sessionUsed.clear();
+      spec = build(allow && allow.has("fact") ? "fact" : filter === "calm" ? "breathe" : filter === "do" ? "action" : "fact") || pickFact() || pickAction() || { kind: "chest", id: UP.uid("chest") };
+    }
 
     // bookkeeping
     if (spec.kind === "chest") { sinceChest = 0; nextChestAt = 9 + Math.floor(rand() * 6); } else sinceChest++;
     if (spec.kind === "receipt") sinceReceipt = 0; else sinceReceipt++;
     if (spec.kind === "review") sinceReview = 0; else sinceReview++;
     if (spec.kind !== "one") sinceOne++;
-    if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, session.cards + history.length); }
+    if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, history.length); }
     spec.key = UP.uid("c");
     return spec;
   }
@@ -2292,7 +2439,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       setTimeout(() => UP.ui.advance(), 450);
     });
     if (spec.kind !== "brief" && spec.kind !== "receipt" && spec.kind !== "chest") r.append(save);
-    if (learnable && UP.ai.available()) {
+    if (learnable) {
       const deep = h("button", { class: "rail-btn deep", "aria-label": "Go deeper with Claude", title: "Go deeper" }, icon("spark"), h("span", null, "Deeper"));
       deep.addEventListener("click", () => UP.ui.deeper(spec));
       r.append(deep);
@@ -2329,7 +2476,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
   function verdict(ok, amt, extra) {
     const combo = UP.state.combo;
-    return h("div", { class: "verdict " + (ok ? "ok" : "no") },
+    return h("div", { class: "verdict " + (ok ? "ok" : "no"), role: "status" },
       h("strong", null, ok ? pickPraise(combo) : "Not quite."),
       amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null,
       ok && combo >= 3 ? h("span", { class: "combo-pill" }, combo + "x streak") : null,
@@ -2496,9 +2643,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const toVal = (p) => { const x = lo + (hi - lo) * p; return d.log ? Math.pow(10, x) : x; };
     const toPos = (v) => clamp(((d.log ? Math.log10(v) : v) - lo) / (hi - lo), 0, 1);
     const nice = (v) => {
-      if (Math.abs(v) < 10) return Math.round(v * 10) / 10;
-      const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1);
-      return Math.round(v / p) * p;
+      if (v === 0) return 0;
+      const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1); // 2 significant figures
+      return Number((Math.round(v / p) * p).toPrecision(2));
     };
     // start somewhere random so the slider's midpoint never hints at the answer
     const startPos = 0.2 + Math.random() * 0.6;
@@ -2661,7 +2808,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const start = h("button", { class: "btn primary" }, "Begin");
     const result = h("div", { class: "result" });
     inner.append(h("div", { class: "orb-zone" }, orb), start, result);
-    let running = false, cancel = false, t = null;
+    let running = false, cancel = false, t = null, wake = null;
     const label = orb.querySelector(".orb-label");
     const core = orb.querySelector(".orb-core");
     start.addEventListener("click", async () => {
@@ -2682,7 +2829,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
           if (n.includes("inhale")) sfx.breath(true); else if (n.includes("exhale")) sfx.breath(false);
           for (let s = secs; s > 0 && !cancel; s--) {
             label.textContent = name + " " + s;
-            await new Promise((res) => (t = setTimeout(res, 1000)));
+            await new Promise((res) => { wake = res; t = setTimeout(res, 1000); });
           }
         }
       }
@@ -2694,7 +2841,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       const amt = completeDeed(el, spec, orb, d.xp || 25);
       result.append(h("div", { class: "verdict ok" }, h("strong", null, "Nervous system: reset."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
     });
-    el._leave = () => { if (running) { cancel = true; clearTimeout(t); } };
+    el._leave = () => { if (running) { cancel = true; clearTimeout(t); if (wake) wake(); } };
     return el;
   }
 
@@ -2712,7 +2859,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     inner.append(row, result);
     write.addEventListener("click", () => {
       UP.ui.compose({
-        title: d.text, placeholder: d.placeholder || "", multi: d.kind !== "task",
+        title: d.text, placeholder: d.placeholder || "", multi: true,
         hint: d.kind === "task" ? "One per line works too." : "",
         onSave(text) {
           const lines = d.kind === "task" ? text.split(/\n+/).map((s) => s.trim()).filter(Boolean) : [text];
@@ -2782,15 +2929,18 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const row = h("div", { class: "row" }, done, later, drop);
     inner.append(row, result);
     done.addEventListener("click", () => {
-      v.done = true; v.doneAt = now();
+      const already = v.rewarded;
+      v.done = true; v.doneAt = now(); v.rewarded = true;
+      const ot = UP.state.oneThing;
+      if (ot && ot.vid === v.id) ot.done = true;
       row.remove();
-      const amt = completeDeed(el, spec, result, 35);
-      result.append(h("div", { class: "verdict ok" }, h("strong", null, "Crossed off. That's the feed working for you."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
+      const amt = already ? 0 : completeDeed(el, spec, result, 35);
+      result.append(h("div", { class: "verdict ok" }, h("strong", null, "Crossed off. That's the feed working for you."), amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null));
       store.save();
     });
     later.addEventListener("click", () => { v.r = now(); store.save(); UP.ui.toast("It'll come back tomorrow"); UP.ui.advance(); });
     drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Dropped. One less thing."); UP.ui.advance(); });
-    v.r = now();
+    el._enter = () => { v.r = now(); };
     return el;
   }
 
@@ -2803,15 +2953,16 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const keep = h("button", { class: "btn primary" }, "Still good");
     const drop = h("button", { class: "btn ghost" }, "Archive");
     const row = h("div", { class: "row" }, keep, drop);
-    if (UP.ai.available()) {
+    {
       const grow = h("button", { class: "btn ghost" }, icon("spark"), "Next steps");
+      grow.classList.add("needs-ai");
       grow.addEventListener("click", () => UP.ui.claudeSheet("Next steps", v.text, (onText, signal) => UP.ai.expandIdea(v.text, onText, signal)));
       row.append(grow);
     }
     inner.append(row, result);
-    keep.addEventListener("click", () => { v.r = now(); store.save(); gain(5, keep, "Kept"); UP.ui.advance(); });
-    drop.addEventListener("click", () => { v.archived = true; store.save(); UP.ui.toast("Archived"); UP.ui.advance(); });
-    v.r = now();
+    keep.addEventListener("click", () => { if (keep.disabled) return; keep.disabled = drop.disabled = true; v.r = now(); store.save(); gain(5, keep, "Kept"); UP.ui.advance(); });
+    drop.addEventListener("click", () => { if (drop.disabled) return; keep.disabled = drop.disabled = true; v.archived = true; store.save(); UP.ui.toast("Archived"); UP.ui.advance(); });
+    el._enter = () => { v.r = now(); };
     return el;
   }
 
@@ -2839,9 +2990,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         },
       });
     });
-    nod.addEventListener("click", () => { gain(5, nod, "Capsule"); UP.ui.advance(); });
-    j.back = now();
-    store.save();
+    nod.addEventListener("click", () => { if (nod.disabled) return; nod.disabled = true; gain(5, nod, "Capsule"); UP.ui.advance(); });
+    el._enter = () => { j.back = now(); store.save(); };
     return el;
   }
 
@@ -2997,8 +3147,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       h("ul", { class: "quests" }, ...qs.list.map((q) => h("li", { class: q.done ? "done" : "" }, h("span", { class: "q-dot" }), q.label, h("span", { class: "q-xp" }, "+30")))),
       h("p", { class: "swipe-cta" }, icon("arrowUp"), "Swipe up to start")
     );
-    st.lastBrief = UP.dayKey();
-    store.save();
+    el._enter = () => { st.lastBrief = UP.dayKey(); store.save(); };
     return el;
   }
   function oneThingBlock() {
@@ -3044,9 +3193,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     done.addEventListener("click", () => {
       ot.done = true;
       const v = st.vault.find((x) => x.id === ot.vid);
-      if (v) { v.done = true; v.doneAt = now(); }
+      const already = v && v.rewarded;
+      if (v) { v.done = true; v.doneAt = now(); v.rewarded = true; }
       row.remove();
-      const amt = completeDeed(el, spec, result, 60);
+      const amt = already ? 0 : completeDeed(el, spec, result, 60);
       UP.ui.banner("Today", "Won.", "Your one thing is done. Everything else is a bonus.");
       result.append(h("div", { class: "verdict ok" }, h("strong", null, "Day won."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
       store.save();
@@ -3281,7 +3431,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       resetZone.innerHTML = "";
       const yes = h("button", { class: "btn small danger-fill" }, "Yes, erase everything");
       const no = h("button", { class: "btn ghost small" }, "Keep it");
-      yes.addEventListener("click", () => { store.reset(); location.reload(); });
+      yes.addEventListener("click", async () => { yes.disabled = true; yes.textContent = "Erasing..."; await store.reset(); location.reload(); });
       no.addEventListener("click", () => { resetZone.innerHTML = ""; resetZone.append(resetBtn); });
       resetZone.append(h("p", { class: "hint" }, "This deletes your stars, vault and journal on this account. It can't be undone."), yes, no);
     });
@@ -3366,8 +3516,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         setTimeout(() => $("#" + id) && $("#" + id).focus(), 0);
       });
       root.append(form);
-      if (UP.ai.available()) {
-        const unt = h("button", { class: "btn ghost small" }, icon("spark"), "Untangle a brain dump");
+      {
+        const unt = h("button", { class: "btn ghost small needs-ai" }, icon("spark"), "Untangle a brain dump");
         unt.addEventListener("click", untangle);
         root.append(h("div", { class: "vault-tools" }, unt));
       }
@@ -3402,7 +3552,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         const ot = UP.state.oneThing;
         if (ot && ot.vid === v.id) ot.done = v.done;
         v.doneAt = v.done ? now() : null;
-        if (v.done) {
+        if (v.done && !v.rewarded) {
+          v.rewarded = true;
           UP.state.stats.deeds++;
           store.today().deeds++;
           store.questProgress("deed");
@@ -3420,8 +3571,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     if (v.body) main.append(h("p", { class: "vstep" }, v.body));
     main.append(h("p", { class: "vmeta" }, timeAgo(v.createdAt)));
     row.append(main);
-    if (UP.ai.available() && (v.kind === "question" || v.kind === "idea")) {
-      const ask = h("button", { class: "icon-btn spark", "aria-label": v.kind === "question" ? "Ask Claude" : "Get next steps" }, icon("spark"));
+    if (v.kind === "question" || v.kind === "idea") {
+      const ask = h("button", { class: "icon-btn spark needs-ai", "aria-label": v.kind === "question" ? "Ask Claude" : "Get next steps" }, icon("spark"));
       ask.addEventListener("click", () => {
         if (v.kind === "question") UP.ui.claudeSheet("Answer", v.text, (onText, signal) => UP.ai.answer(v.text, onText, signal));
         else UP.ui.claudeSheet("Next steps", v.text, (onText, signal) => UP.ai.expandIdea(v.text, onText, signal));
@@ -3437,7 +3588,6 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const ta = h("textarea", { id, class: "field", rows: "7", placeholder: "Type everything on your mind, messy is fine. Dentist, mom's birthday gift, why do cats knead, fix bike brakes, start running again...", "aria-label": "Brain dump" });
     const go = h("button", { class: "btn primary wide" }, icon("spark"), "Sort it for me");
     const out = h("div", { class: "untangle-out", "aria-live": "polite" });
-    ta.addEventListener("keydown", (e) => e.stopPropagation());
     go.addEventListener("click", async () => {
       const text = ta.value.trim();
       if (!text) { ta.focus(); return; }
@@ -3548,7 +3698,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       S.cards++;
       UP.state.stats.cards++;
       store.today().cards++;
-      if (spec.id && !String(spec.id).startsWith("v-") && !String(spec.id).startsWith("j-")) UP.state.seen[spec.id] = now();
+      if (spec.data && spec.data.id === spec.id && !/^[vj]-/.test(spec.id)) UP.state.seen[spec.id] = now();
     }
     if (el._enter) el._enter();
     fill(3);
@@ -3562,9 +3712,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     const idx = cards.indexOf(current);
     if (idx > 40) {
       const drop = cards.slice(0, idx - 30);
-      const hgt = drop.reduce((s, c) => s + c.offsetHeight, 0);
+      const offset = feed.scrollTop - current.offsetTop;
       drop.forEach((c) => { io.unobserve(c); c.remove(); });
-      feed.scrollTop -= hgt;
+      feed.scrollTop = current.offsetTop + offset;
     }
   }
   function resetFeed() {
@@ -3579,10 +3729,17 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   ui.resetFeed = resetFeed;
 
   /* rabbit holes refill as you scroll (each fetch rides on a swipe, never a timer) */
+  const holeFails = {}; // id -> {n, at}: back off after failures instead of retrying on every swipe
   function maybeDig() {
-    if (!UP.ai.available() || !UP.state.aiOk) return;
+    if (!UP.ai.available() || !UP.state.holes.length) return;
     for (const hole of engine.holesNeedingCards()) {
-      UP.ai.digHole(hole).catch((e) => {
+      const f = holeFails[hole.id];
+      if (f && now() - f.at < Math.min(30 * 60000, 20000 * Math.pow(2, f.n))) continue;
+      UP.ai.digHole(hole).then((cards) => {
+        if (cards.length) delete holeFails[hole.id];
+        else holeFails[hole.id] = { n: ((f && f.n) || 0) + 1, at: now() };
+      }).catch((e) => {
+        holeFails[hole.id] = { n: ((f && f.n) || 0) + 1, at: now() };
         const msg = UP.ai.handleError(e);
         if (msg && !maybeDig.warned) { maybeDig.warned = true; ui.toast(msg); }
       });
@@ -3700,8 +3857,10 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   };
 
   /* ================= sheets ================= */
+  let lastFocus = null;
   function sheet(title, body, opts = {}) {
     closeSheet();
+    lastFocus = document.activeElement;
     const close = h("button", { class: "icon-btn", "aria-label": "Close" }, icon("close"));
     const panel = h("div", { class: "sheet" + (opts.tall ? " tall" : ""), role: "dialog", "aria-modal": "true", "aria-label": title },
       h("div", { class: "sheet-head" }, h("h3", null, title), close),
@@ -3713,14 +3872,19 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     document.body.append(scrim);
     requestAnimationFrame(() => scrim.classList.add("show"));
     scrim._onClose = opts.onClose;
+    scrim.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeSheet(); } });
+    setTimeout(() => { if (!panel.contains(document.activeElement)) close.focus(); }, 60);
     return { panel, scrim };
   }
   function closeSheet() {
-    const s = $(".scrim");
+    const s = $(".scrim:not(.closing)");
     if (!s) return;
+    s.classList.add("closing");
     if (s._onClose) s._onClose();
     s.classList.remove("show");
     setTimeout(() => s.remove(), 250);
+    if (lastFocus && lastFocus.isConnected && lastFocus.focus) { try { lastFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    lastFocus = null;
   }
   ui.closeSheet = closeSheet;
   ui.sheetRaw = (title, body) => sheet(title, body, { tall: true });
@@ -3740,8 +3904,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     };
     save.addEventListener("click", go);
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (!multi || e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); }
-      e.stopPropagation();
+      if (e.key === "Enter" && !e.isComposing && (!multi || e.metaKey || e.ctrlKey)) { e.preventDefault(); go(); }
     });
   };
 
@@ -3784,8 +3947,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const q = input.value.trim();
-        if (!q) return;
+        if (!q || send.disabled) return;
         input.value = "";
+        send.disabled = input.disabled = true;
         thread.append(h("p", { class: "me" }, q));
         const ans = h("div", { class: "claude-out" }, h("p", { class: "thinking" }, "Thinking..."));
         thread.append(ans);
@@ -3795,8 +3959,9 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         const text = await ask(ans, (onText, signal) => chat(turns.slice(-8), onText, signal));
         if (text) turns.push({ role: "assistant", content: text });
         else turns.pop();
+        send.disabled = input.disabled = false;
+        input.focus();
       });
-      input.addEventListener("keydown", (e) => e.stopPropagation());
     })();
   };
 
@@ -3812,6 +3977,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
   /* ================= rabbit holes ================= */
   const HOLE_IDEAS = ["How the stock market actually works", "Ancient Rome", "Spanish for travel", "Black holes", "Negotiation", "The science of cooking", "Stoicism", "How AI models work", "Wine basics", "Human evolution", "Investing for beginners", "Photography basics"];
   ui.holes = () => {
+    let ownScrim = null;
     const avail = UP.ai.available();
     const list = h("div", { class: "hole-list" });
     const renderList = () => {
@@ -3857,7 +4023,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         cards2.slice(idx + 1).forEach((c) => { if (!c.classList.contains("done")) { io.unobserve(c); c.remove(); } });
         fill(3);
         renderList();
-        setTimeout(() => { closeSheet(); ui.goTab("feed"); ui.advance(); }, 900);
+        setTimeout(() => { if (ownScrim && ownScrim.isConnected && !ownScrim.classList.contains("closing")) { closeSheet(); ui.goTab("feed"); ui.advance(); } }, 900);
       } catch (err) {
         status.textContent = UP.ai.handleError(err) || "Stopped.";
         renderList();
@@ -3865,7 +4031,6 @@ window.UP_CONTENT = window.UP_CONTENT || {};
         go.disabled = false;
       }
     });
-    input.addEventListener("keydown", (e) => e.stopPropagation());
     const body = h("div", { class: "holes" },
       h("p", { class: "lede" }, "Name anything. Claude turns it into an endless course that gets deeper the further you scroll, mixed right into your feed, with memory checks so it sticks."),
       avail ? form : h("p", { class: "notice" }, "Rabbit holes are written by Claude, so they only work when Upscroll is opened inside Claude. Everything else works here."),
@@ -3874,7 +4039,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       h("h4", null, "Your rabbit holes"),
       list
     );
-    sheet("Rabbit holes", body, { tall: true });
+    const mine = sheet("Rabbit holes", body, { tall: true });
+    ownScrim = mine.scrim;
     if (avail) setTimeout(() => input.focus(), 120);
   };
 
@@ -3931,10 +4097,12 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
     // keyboard
     addEventListener("keydown", (e) => {
-      if ($(".scrim") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
+      if ($(".scrim:not(.closing)") || $("#onboard:not([hidden])")) { if (e.key === "Escape") closeSheet(); return; }
       if (document.body.dataset.tab !== "feed") return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
       const tag = (e.target.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (e.key === " " && tag === "button") return;
       if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown" || (e.key === " " && !e.shiftKey)) { e.preventDefault(); ui.advance(); }
       else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") { e.preventDefault(); back(); }
       else if (/^[1-4]$/.test(e.key) || /^[a-d]$/i.test(e.key)) {
@@ -3953,7 +4121,18 @@ window.UP_CONTENT = window.UP_CONTENT || {};
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));
     bus.on("allquests", () => { banner("All quests done", "Bonus unlocked", "A bonus is next in your feed."); ui.insertNext({ kind: "chest", id: UP.uid("chest") }); });
-    bus.on("remote", () => { renderHud(); ui.toast("Progress synced from your other device"); });
+    bus.on("remote", () => {
+      renderHud();
+      // rebuild what's ahead so it reflects the merged progress
+      const cards = $$(".card", feed);
+      const idx = cards.indexOf(current);
+      cards.slice(idx + 1).forEach((c) => { io.unobserve(c); c.remove(); });
+      if (current) fill(3);
+      const tab = document.body.dataset.tab;
+      if (tab === "vault") UP.vault.render();
+      if (tab === "sky") UP.sky.show();
+      ui.toast("Synced with your other devices");
+    });
     bus.on("ai", (s) => document.body.classList.toggle("has-ai", s === "ready"));
 
     renderHud();
@@ -4035,7 +4214,6 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       step.innerHTML = "";
       const avail = UP.ai.available();
       const input = h("input", { id: "ob-hole", class: "field", placeholder: "e.g. How the stock market works", maxlength: "80", "aria-label": "Topic to learn" });
-      input.addEventListener("keydown", (e) => e.stopPropagation());
       const status = h("p", { class: "ob-sub", "aria-live": "polite" });
       const go = h("button", { class: "btn primary wide" }, avail ? "Start scrolling" : "Start scrolling");
       const ideas = ["Ancient Rome", "Investing basics", "Spanish for travel", "Black holes", "Negotiation", "Cooking science"];
@@ -4094,7 +4272,8 @@ window.UP_CONTENT = window.UP_CONTENT || {};
       }
     });
     // save time-on-card when leaving
-    addEventListener("visibilitychange", () => { if (document.hidden) store.save(); });
+    addEventListener("visibilitychange", () => { if (document.hidden) store.flush(); });
+    addEventListener("pagehide", () => store.flush());
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

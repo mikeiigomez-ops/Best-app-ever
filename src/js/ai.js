@@ -38,9 +38,12 @@
 
   /* ---------- rabbit holes: infinite, progressively deeper cards on any topic ---------- */
   function validCard(c) {
-    return c && typeof c.headline === "string" && typeof c.body === "string" && typeof c.q === "string" &&
+    if (!c || typeof c !== "object") return false;
+    c.a = Number(c.a);
+    const str = (x) => typeof x === "string" && x.trim().length > 0;
+    return str(c.headline) && str(c.body) && str(c.q) &&
       Array.isArray(c.options) && c.options.length >= 3 && c.options.length <= 4 &&
-      c.options.every((o) => typeof o === "string" && o.length) &&
+      c.options.every(str) && new Set(c.options.map((o) => o.trim().toLowerCase())).size === c.options.length &&
       Number.isInteger(c.a) && c.a >= 0 && c.a < c.options.length;
   }
 

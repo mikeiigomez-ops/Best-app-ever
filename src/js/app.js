@@ -66,7 +66,6 @@
       step.innerHTML = "";
       const avail = UP.ai.available();
       const input = h("input", { id: "ob-hole", class: "field", placeholder: "e.g. How the stock market works", maxlength: "80", "aria-label": "Topic to learn" });
-      input.addEventListener("keydown", (e) => e.stopPropagation());
       const status = h("p", { class: "ob-sub", "aria-live": "polite" });
       const go = h("button", { class: "btn primary wide" }, avail ? "Start scrolling" : "Start scrolling");
       const ideas = ["Ancient Rome", "Investing basics", "Spanish for travel", "Black holes", "Negotiation", "Cooking science"];
@@ -125,7 +124,8 @@
       }
     });
     // save time-on-card when leaving
-    addEventListener("visibilitychange", () => { if (document.hidden) store.save(); });
+    addEventListener("visibilitychange", () => { if (document.hidden) store.flush(); });
+    addEventListener("pagehide", () => store.flush());
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

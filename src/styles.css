@@ -114,6 +114,7 @@ button:disabled { cursor: default; }
   overflow-y: auto;
   scroll-snap-type: y mandatory;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scrollbar-width: none;
 }
 .feed::-webkit-scrollbar { display: none; }
@@ -603,3 +604,8 @@ h4 { margin: 10px 0 0; font-family: var(--f-mono); font-size: 0.7rem; letter-spa
 .one-text { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 1.25rem; line-height: 1.2; padding: 12px 14px; border-radius: 14px; border: 1px solid rgba(245, 201, 92, 0.4); background: rgba(245, 201, 92, 0.08); }
 .one-text.done { text-decoration: line-through; color: var(--mute); }
 .k-one .headline { color: var(--gold-2); }
+
+/* Claude-only controls appear once the page knows Claude is available */
+.rail-btn.deep, .needs-ai { display: none !important; }
+body.has-ai .rail-btn.deep { display: flex !important; }
+body.has-ai .needs-ai { display: inline-flex !important; }

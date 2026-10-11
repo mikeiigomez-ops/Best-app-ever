@@ -179,7 +179,7 @@
       resetZone.innerHTML = "";
       const yes = h("button", { class: "btn small danger-fill" }, "Yes, erase everything");
       const no = h("button", { class: "btn ghost small" }, "Keep it");
-      yes.addEventListener("click", () => { store.reset(); location.reload(); });
+      yes.addEventListener("click", async () => { yes.disabled = true; yes.textContent = "Erasing..."; await store.reset(); location.reload(); });
       no.addEventListener("click", () => { resetZone.innerHTML = ""; resetZone.append(resetBtn); });
       resetZone.append(h("p", { class: "hint" }, "This deletes your stars, vault and journal on this account. It can't be undone."), yes, no);
     });
