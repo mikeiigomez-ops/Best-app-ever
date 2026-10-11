@@ -515,6 +515,9 @@
     }
     emit("instrument:saved", { instrument: next, isNew });
     if (isNew) bump("forged", next, "f:" + next.id);
+    /* the first work instrument on a bench that never clocked out puts you on the clock,
+       so what you just made is on the bench instead of behind "Clock in" */
+    if (isNew && !next.demo && !demo && side() === "home" && !sideAt() && sideOfInst(next) === "work") setSide("work");
     return Promise.resolve(next);
   }
 

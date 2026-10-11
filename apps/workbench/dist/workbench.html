@@ -3033,6 +3033,7 @@ if (isNew && !real.bench.profile.firstRunDone) { real.bench.profile.firstRunDone
 }
 emit("instrument:saved", { instrument: next, isNew });
 if (isNew) bump("forged", next, "f:" + next.id);
+if (isNew && !next.demo && !demo && side() === "home" && !sideAt() && sideOfInst(next) === "work") setSide("work");
 return Promise.resolve(next);
 }
 function update(id, fn, source) {
