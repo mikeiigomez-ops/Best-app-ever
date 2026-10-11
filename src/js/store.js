@@ -109,7 +109,7 @@
     amount = Math.max(0, Math.round(amount));
     if (!amount) return 0;
     const before = levelInfo(state.xp).level;
-    const goalBefore = today().xp >= state.settings.dailyGoal;
+    const goalBefore = today().xp >= goalToday();
     state.xp += amount;
     // bonus XP fills the level bar but not the daily ring, so the ring measures real use
     if (!meta.bonus) today().xp += amount;
@@ -117,7 +117,7 @@
     const after = levelInfo(state.xp);
     bus.emit("xp", { amount, ...meta });
     if (after.level > before) bus.emit("level", after);
-    if (!goalBefore && today().xp >= state.settings.dailyGoal && !today().goalHit) {
+    if (!goalBefore && today().xp >= goalToday() && !today().goalHit) {
       today().goalHit = true;
       let freeze = false;
       if ((state.streak.freezes || 0) < 2 && state.streak.count >= 2) { state.streak.freezes = (state.streak.freezes || 0) + 1; freeze = true; }
@@ -127,6 +127,11 @@
     return amount;
   }
 
+  // the first day's ring is smaller, so a first session can close it
+  function goalToday() {
+    const g = state.settings.dailyGoal || 200;
+    return dayKey(state.createdAt) === dayKey() ? Math.min(g, 100) : g;
+  }
   function comboHit(ok) {
     if (ok) {
       state.combo += 1;
@@ -163,6 +168,14 @@
     const wait = r.n === 1 ? BOX_MS[0] : BOX_MS[Math.max(0, r.b - (ok ? 1 : 0))];
     r.d = now() + wait * (0.9 + Math.random() * 0.2);
     r.k = kind || r.k;
+    state.srs[id] = r;
+    save();
+    return r;
+  }
+  // a "just read" card still becomes a star: it enters the memory schedule ungraded
+  function srsSeen(id, kind) {
+    if (state.srs[id]) return null;
+    const r = { b: 0, d: now() + BOX_MS[0], n: 1, ok: 0, l: 0, k: kind, f: now(), seenAt: now(), read: 1 };
     state.srs[id] = r;
     save();
     return r;
@@ -230,7 +243,7 @@
   /* ---------- affinity (the feed learns what you lean into) ---------- */
   function lean(topic, kind, amt) {
     if (topic) state.affinity[topic] = Math.max(-3, Math.min(5, (state.affinity[topic] || 0) + amt));
-    if (kind) state.kindAffinity[kind] = Math.max(-3, Math.min(5, (state.kindAffinity[kind] || 0) + amt));
+    if (kind) state.kindAffinity[kind] = Math.max(-4, Math.min(5, (state.kindAffinity[kind] || 0) + amt));
     save();
   }
 
@@ -548,7 +561,7 @@
   Object.defineProperty(UP, "state", { get: () => state, set: (v) => { state = v; }, configurable: true });
   Object.defineProperty(UP, "aiCards", { get: () => aiCards, configurable: true });
   UP.store = {
-    save, flush, markAi, attachDb, captureXp, storageOk: () => !!ls, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
+    save, flush, markAi, goalToday, srsSeen, attachDb, captureXp, storageOk: () => !!ls, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
     ensureQuests, questProgress, lean, STRONG, addVault, addJournal, streakAlive, MASTERED, STREAK_MIN, TITLES,
     hasCloud: () => !!(db && userId),
   };

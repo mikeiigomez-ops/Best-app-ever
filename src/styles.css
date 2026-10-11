@@ -714,3 +714,7 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .end-inner { position: relative; width: 100%; max-width: 480px; padding: 48px 20px; display: flex; flex-direction: column; gap: 16px; animation: rise 0.5s var(--ease); }
 .end-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .calib { display: flex; flex-direction: column; gap: 4px; }
+/* after answering, the options that weren't chosen fold away so the reveal fits */
+.quiz.answered .opt.dim { display: none; }
+.ob-sub.contrast { color: var(--gold-2); font-weight: 600; }
+.swipe-hint { left: 20px; transform: none; align-items: flex-start; }

@@ -63,7 +63,9 @@
     if (!pool.length) pool = facts.filter((f) => !sessionUsed.has(f.id) && !f.legendary);
     if (!pool.length) return null;
     const f = weighted(pool.map((f) => [f, topicWeight(f.topic)]));
-    return f && { kind: "fact", id: f.id, data: f };
+    if (!f) return null;
+    const read = (st.stats.answered || 0) > 5 && rand() < 0.35;
+    return { kind: "fact", id: f.id, data: f, read };
   }
   function pickLegendary() {
     const facts = (C().facts || []).filter((f) => f.legendary);
@@ -194,7 +196,7 @@
     while (h.queue.length) {
       const id = h.queue.shift();
       const card = UP.aiCards[id];
-      if (card) { UP.store.save(); return { kind: "ai", id, data: card }; }
+      if (card) { UP.store.save(); return { kind: "ai", id, data: card, read: (h.count || 0) > 3 && rand() < 0.3 }; }
     }
     return null;
   }
@@ -217,7 +219,7 @@
     }
     // a brand-new user's first three cards are scripted: a jaw-dropper, an estimate, a guaranteed bonus
     if (!spec && firstEver && history.length < 3 && filter === "mix") {
-      spec = [pickLegendary, () => pickHoleCard() || pickEstimate(), () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
+      spec = [() => pickHoleCard() || pickLegendary(), () => pickHoleCard() || pickEstimate(), () => ({ kind: "chest", id: UP.uid("chest") })][history.length]();
     }
     // your own list gets a guaranteed slot in the first few cards of every session
     if (!spec && !firstEver && !session.taskShown && filter !== "learn" && filter !== "calm" && history.length <= 3 && !histK.includes("task") && (history.length >= 1 || st.lastBrief === UP.dayKey())) {
@@ -233,7 +235,8 @@
     if (!spec && sinceChest >= nextChestAt && filter !== "calm") {
       spec = { kind: "chest", id: UP.uid("chest") };
     }
-    if (!spec && sinceReceipt >= 24 && session.cards >= 24 && filter !== "calm") {
+    if (!spec && !session.receiptShown && session.cards >= 25 && now() - session.start > 12 * 60000 && filter !== "calm") {
+      session.receiptShown = true;
       spec = { kind: "receipt", id: UP.uid("receipt") };
     }
     // memory checks: never two in a row, at most about one in four cards
@@ -247,7 +250,7 @@
     if (!spec && filter === "calm" && !lastKinds(history, 3).includes("breathe")) spec = pickBreathe();
     if (!spec) {
       const g = goals();
-      const ka = (k) => Math.max(0.3, 1 + 0.15 * (st.kindAffinity[k] || 0));
+      const ka = (k) => Math.max(0.12, 1 + 0.22 * (st.kindAffinity[k] || 0)) * Math.pow(0.5, Math.min(3, (session.skips && session.skips[k]) || 0));
       const holesReady = st.holes.filter((h) => h.active && h.queue && h.queue.length).length;
       const W = {
         fact: 30 * (g.has("mind") ? 1.3 : 1) * (UP.store.dueReviews().length > 20 ? 0.6 : 1),
@@ -278,7 +281,7 @@
       const hr = new Date().getHours();
       if (filter === "mix" && (hr >= 23 || hr < 6)) W.reflect = 0;
       // caps that keep the mix fresh: one sprint a session, estimates at most 1 in 7
-      if (session.sprints >= 1 && !openQuest("sprint")) W.sprint = 0;
+      if (session.sprints >= (openQuest("sprint") ? 2 : 1)) W.sprint = 0;
       if (lastKinds(history, 6).includes("estimate")) W.estimate = 0;
       if (newUser) W.action *= 0.4;
       // no kind twice within the last three cards (facts may come back after one other card)

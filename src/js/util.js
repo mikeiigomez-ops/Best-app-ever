@@ -147,7 +147,7 @@
     if (d < 2 * MIN) return "just now";
     if (d < 60 * MIN) return Math.round(d / MIN) + " min ago";
     if (d < DAY) return Math.round(d / 3600000) + " h ago";
-    const days = Math.round(d / DAY);
+    const days = Math.max(1, daysBetween(dayKey(ts), dayKey()));
     if (days === 1) return "yesterday";
     if (days < 30) return days + " days ago";
     const m = Math.round(days / 30);

@@ -10,13 +10,15 @@
     ob.setAttribute("aria-modal", "true");
     ob.setAttribute("aria-label", "Set up Upscroll");
     $("#app").inert = true;
-    // after each step renders, move focus to its heading so keyboard and screen-reader users follow along
-    const focusStep = () => setTimeout(() => { const t = step.querySelector(".ob-title"); if (t) { t.tabIndex = -1; t.focus({ preventScroll: true }); } }, 30);
     const st = UP.state;
     const step = h("div", { class: "ob-step" });
     ob.innerHTML = "";
     ob.append(h("div", { class: "ob-sky", "aria-hidden": "true" }), step);
-    const dots = (i) => h("div", { class: "ob-dots" }, ...[0, 1, 2, 3].map((j) => h("i", { class: j === i ? "on" : "" })));
+    // after each step renders, move focus to its heading so keyboard and screen-reader users follow along
+    const focusStep = () => setTimeout(() => { const t = step.querySelector(".ob-title"); if (t) { t.tabIndex = -1; t.focus({ preventScroll: true }); } }, 30);
+    const steps = () => (UP.ai.available() ? 3 : 2);
+    const dots = (i) => h("div", { class: "ob-dots", "aria-hidden": "true" }, ...Array.from({ length: steps() }, (_, j) => h("i", { class: j === i ? "on" : "" })));
+    let finished = false;
 
     function s0() {
       step.innerHTML = "";
@@ -24,18 +26,19 @@
       step.append(
         h("p", { class: "ob-kicker" }, "A feed that gives back"),
         h("h1", { class: "ob-title" }, "Every swipe leaves you a little better off."),
+        h("p", { class: "ob-sub contrast" }, "Same swipe as TikTok. Except after five minutes you know ten new things and did two real ones."),
         h("ul", { class: "ob-list" },
-          h("li", null, h("b", null, "Learn things that stick. "), "Bite-size cards, then memory checks timed so you actually remember."),
-          h("li", null, h("b", null, "Do small real things. "), "Ten-second quests that move your body, your inbox, your relationships."),
-          h("li", null, h("b", null, "Empty your head. "), "Capture to-dos and ideas. The feed brings them back until they're done.")
+          h("li", null, h("b", null, "Learn things that stick. "), "Guess first, then the reveal. It comes back right before you'd forget it."),
+          h("li", null, h("b", null, "Do small real things. "), "Ten-second quests for your body, your inbox, your people."),
+          h("li", null, h("b", null, "Empty your head. "), "Jot down to-dos and ideas. The feed brings them back until they're done.")
         ),
-        h("button", { class: "btn primary wide", onclick: s1 }, "Set up my feed"),
+        h("button", { class: "btn primary wide", onclick: s1 }, "Show me a card"),
         dots(0)
       );
     }
-    function chipGroup(entries, selected) {
-      return h("div", { class: "chips big" }, ...entries.map(([k, label, sub]) => {
-        const b = h("button", { class: "chip-btn" + (selected.includes(k) ? " on" : ""), "aria-pressed": String(selected.includes(k)) }, h("b", null, label), sub ? h("span", null, sub) : null);
+    function chipGroup(entries, selected, big) {
+      return h("div", { class: "chips" + (big ? " big" : "") }, ...entries.map(([k, label, sub]) => {
+        const b = h("button", { class: "chip-btn" + (selected.includes(k) ? " on" : ""), "aria-pressed": String(selected.includes(k)) }, big ? h("b", null, label) : label, sub ? h("span", null, sub) : null);
         b.addEventListener("click", () => {
           const i = selected.indexOf(k);
           i >= 0 ? selected.splice(i, 1) : selected.push(k);
@@ -45,72 +48,68 @@
         return b;
       }));
     }
+    // one screen of choices: what you want out of it, and (optionally) what you're curious about
     function s1() {
       step.innerHTML = "";
       focusStep();
-      st.goals = st.goals.length ? st.goals : ["mind"];
+      if (!st.goals.length) st.goals = ["mind"];
+      const topics = Object.entries(engine.TOPICS).filter(([k]) => k !== "holes" && k !== "words").map(([k, t]) => [k, t.label]);
+      const next = h("button", { class: "btn primary wide" }, UP.ai.available() ? "Next" : "Start scrolling");
+      next.addEventListener("click", () => (UP.ai.available() ? s2() : finish()));
       step.append(
-        h("p", { class: "ob-kicker" }, "Step 1 of 3"),
-        h("h2", { class: "ob-title sm" }, "What should your scrolling do for you?"),
-        h("p", { class: "ob-sub" }, "Pick any. The mix adapts to what you lean into."),
-        chipGroup(Object.entries(engine.GOALS).map(([k, g]) => [k, g.label, g.sub]), st.goals),
-        h("button", { class: "btn primary wide", onclick: s2 }, "Next"),
+        h("p", { class: "ob-kicker" }, "Step 1 of " + steps()),
+        h("h2", { class: "ob-title sm" }, "Pick what you want more of."),
+        chipGroup(Object.entries(engine.GOALS).map(([k, g]) => [k, g.label, g.sub]), st.goals, true),
+        h("p", { class: "ob-sub" }, "Curious about any of these? Optional. The feed learns as you go."),
+        chipGroup(topics, st.interests, false),
+        next,
         dots(1)
       );
     }
+    // inside Claude: name a topic; never wait on it
     function s2() {
       step.innerHTML = "";
       focusStep();
-      const topics = Object.entries(engine.TOPICS).filter(([k]) => k !== "holes" && k !== "words").map(([k, t]) => [k, t.label]);
-      step.append(
-        h("p", { class: "ob-kicker" }, "Step 2 of 3"),
-        h("h2", { class: "ob-title sm" }, "What are you curious about?"),
-        h("p", { class: "ob-sub" }, "You'll see a bit of everything, and more of these."),
-        chipGroup(topics, st.interests),
-        h("button", { class: "btn primary wide", onclick: s3 }, "Next"),
-        dots(2)
-      );
-    }
-    function s3() {
-      step.innerHTML = "";
-      focusStep();
-      const avail = UP.ai.available();
       const input = h("input", { id: "ob-hole", class: "field", placeholder: "e.g. How the stock market works", maxlength: "80", "aria-label": "Topic to learn" });
-      const status = h("p", { class: "ob-sub", "aria-live": "polite" });
-      const go = h("button", { class: "btn primary wide" }, avail ? "Start scrolling" : "Start scrolling");
       const ideas = ["Ancient Rome", "Investing basics", "Spanish for travel", "Black holes", "Negotiation", "Cooking science"];
-      go.addEventListener("click", async () => {
+      const chips = h("div", { class: "chips" }, ...ideas.map((t) => {
+        const c = h("button", { class: "chip-btn", "aria-pressed": "false" }, t);
+        c.addEventListener("click", () => {
+          input.value = t;
+          chips.querySelectorAll(".chip-btn").forEach((x) => { const on = x === c; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
+        });
+        return c;
+      }));
+      input.addEventListener("input", () => chips.querySelectorAll(".chip-btn").forEach((x) => { const on = x.textContent === input.value; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); }));
+      const go = h("button", { class: "btn primary wide" }, "Start scrolling");
+      go.addEventListener("click", () => {
         const topic = input.value.trim();
-        if (avail && topic) {
-          go.disabled = true;
-          status.textContent = "Claude is writing your first " + topic + " cards...";
-          const hole = { id: UP.uid("h"), topic, active: true, createdAt: Date.now(), count: 0, headlines: [], queue: [] };
-          st.holes.unshift(hole);
-          try {
-            await UP.ai.digHole(hole);
-            st.aiOk = true;
-          } catch (e) {
-            const msg = UP.ai.handleError(e);
-            if (msg) UP.ui.toast(msg);
-          }
-        }
+        if (topic) startHole(topic);
         finish();
       });
-      step.append(...[
-        h("p", { class: "ob-kicker" }, "Step 3 of 3"),
+      const skip = h("button", { class: "btn ghost wide" }, "No topic, just start");
+      skip.addEventListener("click", () => finish());
+      step.append(
+        h("p", { class: "ob-kicker" }, "Step 2 of 3"),
         h("h2", { class: "ob-title sm" }, "Anything you've been meaning to learn?"),
-        avail
-          ? h("p", { class: "ob-sub" }, "Name any topic and Claude turns it into an endless course woven into your feed. It gets deeper the further you go.")
-          : h("p", { class: "ob-sub" }, "Open Upscroll inside Claude to turn any topic into an endless course. For now you get the built-in library of 400+ cards, and it's plenty to start."),
-        avail ? input : null,
-        avail ? h("div", { class: "chips" }, ...ideas.map((t) => h("button", { class: "chip-btn", onclick: () => { input.value = t; } }, t))) : null,
-        go,
-        avail ? h("button", { class: "btn ghost wide", onclick: () => { input.value = ""; finish(); } }, "Skip for now") : null,
-        status,
-        dots(3)
-      ].filter(Boolean));
+        h("p", { class: "ob-sub" }, "Name any topic and Claude writes you an endless course, woven into the feed. It gets deeper the further you go."),
+        input, chips, go, skip, dots(2)
+      );
+    }
+    function startHole(topic) {
+      const hole = { id: UP.uid("h"), topic, active: true, createdAt: Date.now(), count: 0, headlines: [], queue: [] };
+      st.holes.unshift(hole);
+      store.save();
+      UP.ui.toast("Claude is writing your " + topic + " course. It'll slot in shortly.");
+      UP.ai.digHole(hole).then((cards) => {
+        if (!cards.length) return;
+        const id = hole.queue.shift();
+        if (id) { UP.ui.insertNext({ kind: "ai", id, data: UP.aiCards[id] }); UP.ui.toast("Your " + topic + " course is ready. It's next."); }
+      }).catch((e) => { const msg = UP.ai.handleError(e); if (msg) UP.ui.toast(msg); });
     }
     function finish() {
+      if (finished) return;
+      finished = true;
       st.onboarded = true;
       store.save();
       $("#app").inert = false;

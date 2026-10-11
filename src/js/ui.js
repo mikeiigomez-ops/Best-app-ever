@@ -62,7 +62,11 @@
       const ps = current._spec;
       if (ps && !["brief", "chest", "receipt", "one", "review"].includes(ps.kind)) {
         const engaged = current.classList.contains("done");
-        if (!engaged && secs < 1.5) store.lean(current._topicKey, ps.kind, -0.15);
+        if (!engaged && secs < 1.5) {
+          store.lean(current._topicKey, ps.kind, -0.15);
+          S.skips = S.skips || {};
+          S.skips[ps.kind] = (S.skips[ps.kind] || 0) + 1;
+        }
         else if (engaged || secs > 8) store.lean(current._topicKey, ps.kind, 0.06);
       }
       UP.state.stats.secs += secs;
@@ -144,13 +148,14 @@
     const st = UP.state;
     const L = store.levelInfo(st.xp);
     const t = store.today();
-    const goal = st.settings.dailyGoal;
+    const goal = store.goalToday();
     const pct = clamp(t.xp / goal, 0, 1);
     const ringC = 2 * Math.PI * 15;
     $("#goal-ring .fg").style.strokeDashoffset = String(ringC * (1 - pct));
     $("#goal-ring").classList.toggle("full", pct >= 1);
     $("#goal-num").textContent = String(t.xp);
     $("#goal-ring").setAttribute("aria-label", t.xp + " of " + goal + " XP today");
+    $("#goal-ring").title = t.xp + " / " + goal + " XP today";
     $("#lvl-num").textContent = String(L.level);
     $("#lvl-title").textContent = L.title;
     $("#lvl-bar i").style.transform = "scaleX(" + L.pct + ")";
@@ -242,6 +247,14 @@
   }
 
   ui.banner = banner;
+  // after an answer, bring the explanation up into view instead of leaving it below the fold
+  ui.revealIntoView = (el) => {
+    requestAnimationFrame(() => {
+      const r = el.getBoundingClientRect(), f = feed.getBoundingClientRect();
+      const over = r.bottom - f.bottom + 16;
+      if (over > 0) feed.scrollBy({ top: Math.min(over, r.top - f.top - 60), behavior: UP.reducedMotion() ? "auto" : "smooth" });
+    });
+  };
   ui.countUp = (el, from, to, unit, fmt) => {
     const show = fmt || ((v) => UP.fmtNum(v, unit));
     if (UP.reducedMotion()) { el.textContent = show(to); return; }
@@ -686,7 +699,7 @@
       banner("Daily goal", "Ring closed", freeze ? "You earned a streak freeze." : "A good place to stop, or keep going.");
       spawn(innerWidth - 40, 40, 50, 6);
       // offer a natural stopping point right after the ring closes
-      setTimeout(() => ui.insertNext({ kind: "receipt", id: UP.uid("receipt") }), 400);
+      if (!S.receiptShown && S.cards >= 8) { S.receiptShown = true; setTimeout(() => ui.insertNext({ kind: "receipt", id: UP.uid("receipt") }), 400); }
     });
     bus.on("streak", ({ count, usedFreeze }) => { if (count > 1) banner("Streak", count + " days", usedFreeze ? "A streak freeze saved you." : "Kept alive for today."); renderHud(); });
     bus.on("quest", (q) => ui.toast("Quest done: " + q.label + " (+30 XP)"));

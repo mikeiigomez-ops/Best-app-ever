@@ -81,7 +81,7 @@
     less.addEventListener("click", () => {
       if (less.classList.contains("on")) return;
       less.classList.add("on");
-      store.lean(opts.topicKey, spec.kind, -1);
+      store.lean(opts.topicKey, spec.kind, -1.5);
       UP.ui.toast("Got it. Less of this.");
       setTimeout(() => UP.ui.advance(), 450);
     });
@@ -138,7 +138,7 @@
     return h("div", { class: "verdict " + (ok ? "ok" : "no") },
       h("strong", null, ok ? pickPraise(combo) : "Not quite."),
       amt ? h("span", { class: "xp-pill" }, "+" + amt + " XP") : null,
-      ok && combo >= 3 ? h("span", { class: "combo-pill" }, combo + "x streak") : null,
+      ok && combo >= 3 ? h("span", { class: "combo-pill" }, combo + " in a row") : null,
       extra ? h("span", { class: "verdict-sub" }, extra) : null
     );
   }
@@ -158,7 +158,7 @@
   function afterBlock(d) {
     const box = h("div", { class: "after" });
     if (d.explain) box.append(h("p", { class: "explain" }, d.explain));
-    if (d.tip) box.append(h("p", { class: "tip" }, h("b", null, "Try this "), d.tip));
+    if (d.tip) box.append(h("p", { class: "tip" }, h("b", null, "Try this "), String(d.tip).replace(/^\s*try this\s*[:\-\u2013\u2014]?\s*/i, "")));
     return box;
   }
 
@@ -186,6 +186,26 @@
       meta: isAi ? h("span", { class: "by" }, lessonLabel(d)) : null,
     });
     const inner = el._inner;
+    if (spec.read) {
+      // just read it: headline, payoff, swipe. It still becomes a star after a few seconds of reading.
+      inner.append(
+        h("p", { class: "kicker" }, UP.pick(["Did you know", "Here's one", "Worth knowing", "File this away"])),
+        h("h2", { class: "headline" }, d.headline),
+        h("p", { class: "body" }, d.body),
+        afterBlock(d)
+      );
+      let t0 = 0;
+      el._enter = () => { t0 = now(); };
+      el._leave = () => {
+        if (t0 && now() - t0 > 2500 && store.srsSeen(spec.id, isAi ? "ai" : "fact")) {
+          S.learned++; S.stars++; store.today().learned++; store.questProgress("learn"); engine.noteLearned(spec.id);
+          store.award(4, { reason: "Read" });
+          el.classList.add("done");
+        }
+        t0 = 0;
+      };
+      return el;
+    }
     // Ask first, reveal second: guessing before reading makes the answer stick (and makes it a real game)
     inner.append(
       h("p", { class: "kicker" }, spec.legendary ? "Legendary. Take a guess." : UP.pick(["Take a guess.", "Guess first.", "What's your instinct?", "Quick one."])),
@@ -201,7 +221,8 @@
         store.comboHit(ok);
         const r = store.srsGrade(spec.id, ok, isAi ? "ai" : "fact");
         if (newItem) { S.learned++; store.today().learned++; store.questProgress("learn"); S.stars++; engine.noteLearned(spec.id); }
-        const amt = gain(ok ? (spec.legendary ? 25 : 12) : 4, btn, ok ? "Correct" : "Learned");
+        const early = (st.stats.answered || 0) <= 3;
+        const amt = gain(ok ? (spec.legendary ? 25 : 12) : early ? 10 : 4, btn, ok ? "Correct" : "Learned");
         ok ? sfx.good(st.combo) : sfx.bad();
         buzz(ok ? 12 : [20, 40, 20]);
         if (ok) UP.ui.burst(btn, 10 + Math.min(20, st.combo * 2));
@@ -210,7 +231,10 @@
         const reveal = h("div", { class: "reveal" },
           h("h3", { class: "reveal-head" }, d.headline),
           h("p", { class: "body" }, d.body));
-        qz.append(verdict(ok, amt, ok ? nextCheckText(r) : "Now you know. " + nextCheckText(r)), reveal, afterBlock(d));
+        const v = verdict(ok, amt, ok ? nextCheckText(r) : "Now you know. " + nextCheckText(r));
+        if (!ok && early) v.querySelector("strong").textContent = "Almost nobody gets this one.";
+        qz.append(v, reveal, afterBlock(d));
+        UP.ui.revealIntoView(reveal);
         el.classList.add("done");
         store.save();
       },
@@ -392,15 +416,17 @@
     const slider = h("input", { type: "range", min: "0", max: "1000", value: String(Math.round(startPos * 1000)), class: "est-slider", "aria-label": "Your estimate", id: "est-" + spec.key });
     const scale = h("div", { class: "est-scale" }, h("span", null, fmt(d.min)), h("span", null, fmt(d.max)));
     const track = h("div", { class: "est-track" }, slider, h("i", { class: "est-answer", hidden: true }));
+    slider.addEventListener("change", () => { if (lock.disabled) { lock.disabled = false; lock.textContent = "Lock in my guess"; } });
     slider.addEventListener("input", () => {
       guess = pickVal(slider.value / 1000);
       readout.textContent = fmt(guess);
       slider.setAttribute("aria-valuetext", fmt(guess));
+      if (lock.disabled) { lock.disabled = false; lock.textContent = "Lock in my guess"; }
       if (Math.random() < 0.3) sfx.tick();
     });
     // keep vertical swipes from being eaten by the slider on touch screens
 
-    const lock = h("button", { class: "btn primary" }, "Lock in my guess");
+    const lock = h("button", { class: "btn primary", disabled: true }, "Drag to guess");
     const box = h("div", { class: "est" }, readout, track, scale, lock);
     inner.append(box);
     lock.addEventListener("click", () => {
@@ -415,23 +441,33 @@
         const err = Math.abs(guess - ans) / (d.max - d.min);
         acc = clamp(1 - err * 3, 0, 1);
       }
-      const pctOff = ans !== 0 ? Math.abs(guess - ans) / Math.abs(ans) : 0;
+      // linear scales (years, temperatures, percentages) are judged against the slider's range, not the answer's size
+      const span = d.max - d.min;
+      const rel = Math.abs(guess - ans) / span;
+      const pctOff = d.log ? (ans !== 0 ? Math.abs(guess - ans) / Math.abs(ans) : 0) : rel * 2.5;
       const st = UP.state;
       st.stats.estimates++;
       st.stats.estErr += pctOff > 5 ? 5 : pctOff;
-      if (ans > 0 && guess > 0) {
+      if (d.log && ans > 0 && guess > 0) {
         st.calib = Array.isArray(st.calib) ? st.calib : [];
-        st.calib.push({ r: Math.round(Math.log10(guess / ans) * 100) / 100, t: d.topic, hit: pctOff <= 0.25 ? 1 : 0 });
+        st.calib.push({ r: Math.round(Math.log10(guess / ans) * 100) / 100, t: d.topic, hit: (d.log ? pctOff <= 0.25 : rel <= 0.1) ? 1 : 0 });
         if (st.calib.length > 120) st.calib.splice(0, st.calib.length - 120);
       }
       let label;
-      if (pctOff <= 0.1) label = "Bullseye.";
+      if (!d.log) {
+        if (rel <= 0.03) label = "Bullseye.";
+        else if (rel <= 0.1) label = "Sharp.";
+        else if (rel <= 0.2) label = "Ballpark.";
+        else if (rel <= 0.35) label = "Not far off.";
+        else label = "Way off. Now you know.";
+      }
+      else if (pctOff <= 0.1) label = "Bullseye.";
       else if (pctOff <= 0.25) label = "Sharp.";
       else if (ratio ? ratio <= 2 : pctOff <= 0.5) label = "Ballpark.";
       else if (ratio ? ratio <= 10 : pctOff <= 1) label = "Right order of magnitude.";
       else label = "Way off. Now you know.";
-      const ok = pctOff <= 0.25;
-      const tier = ok ? "ok" : (ratio ? ratio <= 10 : pctOff <= 1) ? "mid" : "no";
+      const ok = d.log ? pctOff <= 0.25 : rel <= 0.1;
+      const tier = ok ? "ok" : (d.log ? (ratio ? ratio <= 10 : pctOff <= 1) : rel <= 0.35) ? "mid" : "no";
       if (ok) { st.stats.bullseyes++; store.questProgress("bullseye"); }
       S.answered++; if (ok) S.correct++;
       const amt = gain(4 + Math.round(acc * 22), readout, "Estimate");
@@ -442,7 +478,8 @@
       mark.style.left = toPos(ans) * 100 + "%";
       readout.classList.add("revealed");
       UP.ui.countUp(readout, guess, ans, d.unit, isYear ? fmt : null);
-      const offText = ratio && ratio >= 2 ? "Off by " + (Math.round(ratio * 10) / 10) + "x" : "Off by " + Math.round(pctOff * 100) + "%";
+      const mag = ratio ? Math.round(Math.log10(ratio)) : 0;
+      const offText = isYear ? "Off by " + Math.abs(Math.round(guess - ans)) + " years" : !d.log ? "Off by " + fmt(Math.abs(guess - ans)) : ratio && ratio >= 1000 ? "About " + mag + " orders of magnitude off" : ratio && ratio >= 2 ? "Off by " + (Math.round(ratio * 10) / 10) + "x" : "Off by " + Math.round(pctOff * 100) + "%";
       box.append(
         h("div", { class: "verdict " + tier, tabindex: "-1" }, h("strong", null, label), h("span", { class: "xp-pill" }, "+" + amt + " XP"), h("span", { class: "verdict-sub" }, "You said " + fmt(guess) + ". " + offText + ".")),
         h("div", { class: "after" }, h("p", { class: "explain" }, d.explain), d.src ? h("p", { class: "src" }, "Source: " + d.src) : null)
@@ -880,7 +917,15 @@
       sfx.chest(); buzz([10, 30, 10, 30, 40]);
       UP.ui.confetti(gem);
       UP.state.stats.chests++;
-      const roll = Math.random();
+      // never the same reward twice running, and double XP at most one chest in four
+      const recent = S.rewards || (S.rewards = []);
+      let roll, kind;
+      const kindOf = (r) => (r < 0.14 ? "xp" : r < 0.34 ? "pick" : r < 0.52 ? "gold" : r < 0.8 ? "legend" : "double");
+      for (let i = 0; i < 6; i++) {
+        roll = Math.random(); kind = kindOf(roll);
+        if (kind !== recent[recent.length - 1] && !(kind === "double" && recent.slice(-3).includes("double"))) break;
+      }
+      recent.push(kind);
       let headline, body;
       if (roll < 0.14) {
         const x = 30 + Math.floor(Math.random() * 4) * 10;
