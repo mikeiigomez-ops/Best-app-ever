@@ -6,12 +6,13 @@
 
 | Card | What it does for you |
 | --- | --- |
-| **Mind snack** | A short, surprising, fact-checked idea followed by a one-tap question. 180 cards across space, science, earth, nature, body, history, money, mind, tech and culture. |
-| **Memory check** | Spaced repetition (Leitner boxes: 10 min → 1 d → 3 d → 7 d → 16 d → 35 d …). What you learn comes back right before you'd forget it. |
-| **Calibrate** | Guess a number on a log slider (how far is the Moon? how many people did X?). Trains numeracy and calibration, and is scored by how close you got. |
-| **Word** | Useful vocabulary with examples and etymology, also reviewed later. |
+| **Mind snack** | Guess first, then the reveal (or just read it). 340 fact-checked cards across space, science, earth, nature, body, history, money, mind, tech, culture and practical life skills. |
+| **Memory check** | Spaced repetition (10 min → 1 d → 3 d → 7 d → 16 d → 35 d …), with credit for real gaps and gentle lapses. Strong cards switch to think-then-reveal recall. |
+| **Calibrate** | Guess a number on a log slider (how far is the Moon? how many people did X?). 120 questions. Trains numeracy; your calibration profile (do you under- or overestimate?) builds up in the Sky. |
+| **Word** | 120 useful words with examples and etymology; reviewed in both directions. |
 | **Real-world quest** | 10-second to 3-minute things you can do right now: move, tidy, reach out to someone (with a message you can copy), focus. |
 | **Breathe** | Guided box breathing, physiological sigh, 4-7-8. |
+| **Your list** | Open to-dos get a slot early in every session, most urgent first. Due dates are read from the wording ("by friday"), with snoozes for an hour, tonight, tomorrow or the weekend. |
 | **Capture / Journal** | Gets to-dos, ideas, questions and reflections out of your head. They live in the **Vault** and come back in the feed: to-dos until they're done, ideas a few days later, journal lines as **time capsules**. |
 | **Today's one thing** | Set it in the morning brief and the feed keeps checking in until it's done. |
 | **Math sprint** | 30 seconds of mental arithmetic that gets harder as you go. |
@@ -65,3 +66,13 @@ src/
 public/            PWA manifest, service worker, icons
 build.mjs          inlines everything into dist/
 ```
+
+## How it was judged
+
+Upscroll went through three rounds of review by a panel of independent agents, each with a different lens, and every round's findings were implemented before the next:
+
+- **Round 1:** code reviewer, UX playtester, habit psychologist, learning scientist, visual designer, accessibility auditor (WCAG 2.2), mobile performance engineer, and a skeptical heavy TikTok user persona.
+- **Round 2:** integrated product lead, adversarial QA bug hunter, a fact-checker for new content, and a busy-parent persona.
+- **Round 3:** product lead re-score, the skeptical user re-test, and a first-60-seconds onboarding specialist.
+
+Every card was fact-checked by a separate agent after it was written, and answer options were rebalanced so the longest option is no longer a giveaway.

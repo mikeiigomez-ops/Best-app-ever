@@ -803,6 +803,90 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 <noscript><p style="padding:24px;color:#eef1fa;background:#0b0f1c">Upscroll needs JavaScript to run.</p></noscript>
 
 <script>
+/* ---- src/content/estimates-b.js ---- */
+window.UP_CONTENT = window.UP_CONTENT || {};
+(window.UP_CONTENT.estimates = window.UP_CONTENT.estimates || []).push(
+  // ---------- space (6) ----------
+  { id: "es61", topic: "space", q: "How far does light travel in one year, in trillions of km?", answer: 9.46, unit: "trillion km", min: 0.1, max: 1000, log: true, explain: "One light-year. A jet airliner would need over a million years to fly it.", src: "NASA" },
+  { id: "es62", topic: "space", q: "How far away is Proxima Centauri, the nearest star after the Sun?", answer: 4.24, unit: "light-yrs", min: 0.1, max: 1000, log: true, explain: "About 40 trillion km. Voyager 1 would need over 70,000 years to get there.", src: "NASA" },
+  { id: "es63", topic: "space", q: "The Moon's surface gravity is what % of Earth's?", answer: 16.5, unit: "%", min: 0, max: 60, log: false, explain: "About one-sixth. A 60 kg person would feel like they weigh 10 kg.", src: "NASA" },
+  { id: "es64", topic: "space", q: "About how hot is the visible surface of the Sun, in °C?", answer: 5500, unit: "°C", min: 100, max: 1000000, log: true, explain: "Hot enough to vaporize any metal, yet its outer corona is over 1 million °C.", src: "NASA" },
+  { id: "es65", topic: "space", q: "How many Earth years does Neptune take to orbit the Sun once?", answer: 165, unit: "years", min: 1, max: 10000, log: true, explain: "It finished its first orbit since its 1846 discovery only in 2011.", src: "NASA" },
+  { id: "es66", topic: "space", q: "What speed must a rocket reach to escape Earth's gravity, in km per second?", answer: 11.2, unit: "km/s", min: 0.1, max: 1000, log: true, explain: "Over 40,000 km/h: fast enough to cross the Atlantic in about 8 minutes.", src: "NASA" },
+
+  // ---------- science (6) ----------
+  { id: "es67", topic: "science", q: "How fast does light travel in a vacuum, in km per second?", answer: 299792, unit: "km/s", min: 1000, max: 100000000, log: true, explain: "Fast enough to circle Earth about 7.5 times in one second.", src: "NIST" },
+  { id: "es68", topic: "science", q: "What is absolute zero, the coldest possible temperature, in °C?", answer: -273.15, unit: "°C", min: -1000, max: 0, log: false, explain: "Deep space is only about 3 degrees warmer than this.", src: "NIST" },
+  { id: "es69", topic: "science", q: "How many chemical elements are on the periodic table today?", answer: 118, unit: "elements", min: 10, max: 1000, log: true, explain: "Only about 90 occur naturally; the rest were made in labs, some lasting under a second.", src: "IUPAC" },
+  { id: "es70", topic: "science", q: "How many grams does one cubic centimeter of gold weigh?", answer: 19.3, unit: "g", min: 0.5, max: 100, log: true, explain: "Over 19 times denser than water. A 1-liter gold brick weighs as much as two full buckets of water.", src: "Britannica" },
+  { id: "es71", topic: "science", q: "What is the half-life of carbon-14, used in radiocarbon dating?", answer: 5730, unit: "years", min: 10, max: 1000000, log: true, explain: "After about 50,000 years too little is left to measure, so dinosaurs can't be carbon-dated.", src: "Britannica" },
+  { id: "es72", topic: "science", q: "Air pressure at sea level equals about how many kg resting on each square cm?", answer: 1.03, unit: "kg", min: 0.01, max: 100, log: true, explain: "Roughly a bag of sugar on every fingernail-sized patch. You don't feel it because it pushes from all sides.", src: "NOAA" },
+
+  // ---------- earth (6) ----------
+  { id: "es73", topic: "earth", q: "How tall is Mount Everest above sea level?", answer: 8849, unit: "m", min: 100, max: 100000, log: true, explain: "Airliners cruise only about 2 km higher. The summit has a third of sea-level oxygen.", src: "Nepal-China survey 2020" },
+  { id: "es74", topic: "earth", q: "How long is Earth's circumference at the equator?", answer: 40075, unit: "km", min: 1000, max: 1000000, log: true, explain: "A non-stop car at 100 km/h would need about 17 days to drive it.", src: "NASA" },
+  { id: "es75", topic: "earth", q: "What is the coldest air temperature ever recorded on Earth, in °C?", answer: -89.2, unit: "°C", min: -150, max: 0, log: false, explain: "Vostok Station, Antarctica, 1983. Cold enough that exhaled breath can freeze and crackle.", src: "WMO" },
+  { id: "es76", topic: "earth", q: "How deep is Lake Baikal, the world's deepest lake, at its deepest point?", answer: 1642, unit: "m", min: 10, max: 100000, log: true, explain: "Deeper than 3 Empire State Buildings stacked up. It holds about 20% of Earth's surface fresh water.", src: "UNESCO" },
+  { id: "es77", topic: "earth", q: "How deep is the Kola Superdeep Borehole, the deepest hole ever drilled?", answer: 12262, unit: "m", min: 100, max: 1000000, log: true, explain: "About 12 km, which is only 0.2% of the way to Earth's center.", src: "Britannica" },
+  { id: "es78", topic: "earth", q: "If all of Antarctica's ice melted, sea level would rise by about how much?", answer: 58, unit: "m", min: 1, max: 1000, log: true, explain: "About the height of a 19-story building. Many of the world's coastal cities would vanish.", src: "NSIDC" },
+
+  // ---------- nature (6) ----------
+  { id: "es79", topic: "nature", q: "How tall is Hyperion, the world's tallest known living tree?", answer: 115.9, unit: "m", min: 1, max: 1000, log: true, explain: "A coast redwood taller than the Statue of Liberty with its pedestal. Its location is kept secret.", src: "US National Park Service" },
+  { id: "es80", topic: "nature", q: "How far does an Arctic tern fly on its yearly migration, on average?", answer: 70900, unit: "km", min: 1000, max: 1000000, log: true, explain: "Pole to pole and back. Over its life, that's roughly three round trips to the Moon.", src: "PNAS (Egevang 2010)" },
+  { id: "es81", topic: "nature", q: "The fastest-growing bamboo can grow about how many cm in a single day?", answer: 91, unit: "cm", min: 1, max: 1000, log: true, explain: "Nearly 4 cm an hour: fast enough that you could almost watch it grow.", src: "Guinness World Records" },
+  { id: "es82", topic: "nature", q: "About how old is Methuselah, the oldest known non-clonal living tree?", answer: 4850, unit: "years", min: 100, max: 100000, log: true, explain: "This bristlecone pine sprouted before the first Egyptian pyramids were built.", src: "US Forest Service" },
+  { id: "es83", topic: "nature", q: "About how many ants are estimated to be alive on Earth at any time?", answer: 2e16, unit: "ants", min: 1e9, max: 1e24, log: true, explain: "20 quadrillion: about 2.5 million ants for every person alive.", src: "PNAS (Schultheiss 2022)" },
+  { id: "es84", topic: "nature", q: "What is the fastest speed recorded for a diving peregrine falcon?", answer: 389, unit: "km/h", min: 10, max: 10000, log: true, explain: "Faster than a bullet train at full speed, making it the fastest animal on Earth.", src: "National Geographic" },
+
+  // ---------- body (6) ----------
+  { id: "es85", topic: "body", q: "How many teeth does a full adult set have, including wisdom teeth?", answer: 32, unit: "teeth", min: 5, max: 300, log: true, explain: "Kids have just 20 baby teeth. Many adults never get all four wisdom teeth.", src: "American Dental Association" },
+  { id: "es86", topic: "body", q: "About how many days does a red blood cell live?", answer: 120, unit: "days", min: 1, max: 10000, log: true, explain: "Your body makes about 2 million new ones every second to keep up.", src: "NIH" },
+  { id: "es87", topic: "body", q: "About what percentage of an adult's body weight is water?", answer: 60, unit: "%", min: 0, max: 100, log: false, explain: "A 70 kg adult carries about 42 liters: roughly a full car fuel tank.", src: "USGS" },
+  { id: "es88", topic: "body", q: "About how many millimeters do fingernails grow per month?", answer: 3.5, unit: "mm", min: 0.1, max: 100, log: true, explain: "A lost fingernail takes about 6 months to fully grow back. Toenails are slower.", src: "J. Am. Acad. Dermatology" },
+  { id: "es89", topic: "body", q: "Using the 220-minus-age rule, what's the max heart rate for a 40-year-old?", answer: 180, unit: "bpm", min: 60, max: 300, log: false, explain: "A rough guide: moderate exercise is about 50-70% of this, around 90-125 bpm.", src: "American Heart Association" },
+  { id: "es90", topic: "body", q: "About how much does an adult human brain weigh?", answer: 1.4, unit: "kg", min: 0.1, max: 20, log: true, explain: "About the weight of a bag of sugar and a half, yet it uses a fifth of your energy.", src: "NIH" },
+
+  // ---------- history (6) ----------
+  { id: "es91", topic: "history", q: "In what year did the Berlin Wall fall?", answer: 1989, unit: "", min: 1900, max: 2020, log: false, explain: "It had split the city for 28 years. Many people chipped off pieces as souvenirs.", src: "Britannica" },
+  { id: "es92", topic: "history", q: "In what year did Columbus first reach the Americas?", answer: 1492, unit: "", min: 1000, max: 1800, log: false, explain: "Norse explorers led by Leif Erikson had landed in North America about 500 years earlier.", src: "Britannica" },
+  { id: "es93", topic: "history", q: "In what year was the Magna Carta sealed by King John of England?", answer: 1215, unit: "", min: 900, max: 1600, log: false, explain: "The Pope annulled it within months, but its ideas shaped constitutions for centuries.", src: "British Library" },
+  { id: "es94", topic: "history", q: "About how many years ago did Homo sapiens first appear?", answer: 300000, unit: "years", min: 1000, max: 100000000, log: true, explain: "Writing is only about 5,000 years old: under 2% of our time as a species.", src: "Smithsonian" },
+  { id: "es95", topic: "history", q: "In what year were the first modern Olympic Games held?", answer: 1896, unit: "", min: 1800, max: 2000, log: false, explain: "Athens hosted about 240 athletes, all men, from 14 nations.", src: "IOC" },
+  { id: "es96", topic: "history", q: "For how many years did Queen Elizabeth II reign?", answer: 70, unit: "years", min: 1, max: 1000, log: true, explain: "1952 to 2022. Among monarchs of sovereign states, only France's Louis XIV (72 years) reigned longer.", src: "Royal Household" },
+
+  // ---------- money (6) ----------
+  { id: "es97", topic: "money", q: "Invest $1,200 at the end of each year at 7%. How much after 40 years?", answer: 239562, unit: "$", min: 10000, max: 5000000, log: true, explain: "You put in $48,000; compounding adds the other $190,000 or so. Starting early is the trick.", src: "Compound interest math" },
+  { id: "es98", topic: "money", q: "Unpaid credit card debt at 24% a year doubles in about how many years?", answer: 3.2, unit: "years", min: 0.1, max: 50, log: true, explain: "Rule of 72: 72 / 24 = 3. Compounding works just as hard against you as for you.", src: "Compound interest math" },
+  { id: "es99", topic: "money", q: "Under the 4% rule, how much savings lets you withdraw $40,000 a year?", answer: 1000000, unit: "$", min: 100000, max: 10000000, log: true, explain: "Multiply yearly spending by 25. Historically this lasted 30 years in most market periods.", src: "Trinity Study" },
+  { id: "es100", topic: "money", q: "Over 30 years, a 1% yearly fee (7% vs 6% returns) shrinks your final balance by what %?", answer: 24.5, unit: "%", min: 0, max: 100, log: false, explain: "A small-sounding fee eats about a quarter of your money. Low-cost funds matter.", src: "Compound interest math" },
+  { id: "es101", topic: "money", q: "How much does $1 million in US $100 bills weigh?", answer: 10, unit: "kg", min: 0.1, max: 1000, log: true, explain: "Each bill weighs about 1 gram, so a million fits in a backpack. In $1 bills it's a tonne.", src: "US Bureau of Engraving and Printing" },
+  { id: "es102", topic: "money", q: "Your odds of winning the Powerball jackpot with one ticket are 1 in how many?", answer: 292201338, unit: "", min: 100000, max: 1000000000000, log: true, explain: "You're far likelier to be struck by lightning in your lifetime (about 1 in 15,000).", src: "Powerball" },
+
+  // ---------- mind (6) ----------
+  { id: "es103", topic: "mind", q: "Roll a die 4 times. What's the chance of getting at least one six?", answer: 51.8, unit: "%", min: 0, max: 100, log: false, explain: "Not 4/6 = 67%. It's 1 minus (5/6)^4. Gamblers in 1600s France bet on exactly this.", src: "Probability theory" },
+  { id: "es104", topic: "mind", q: "In how many different orders can you arrange 10 books on a shelf?", answer: 3628800, unit: "orders", min: 100, max: 10000000000, log: true, explain: "10 factorial. Trying one order per second would take about 42 days non-stop.", src: "Combinatorics" },
+  { id: "es105", topic: "mind", q: "The chance of flipping 10 heads in a row is 1 in how many?", answer: 1024, unit: "", min: 2, max: 1000000, log: true, explain: "2 to the 10th. Yet in 1,000 flips, a run of 10 heads or 10 tails shows up more often than not.", src: "Probability theory" },
+  { id: "es106", topic: "mind", q: "How many people for a 50% chance one of them shares YOUR birthday?", answer: 253, unit: "people", min: 2, max: 10000, log: true, explain: "Over 10 times more than for any two people to match (23), because only pairs with you count.", src: "Probability theory" },
+  { id: "es107", topic: "mind", q: "How many different positions can a standard 3x3 Rubik's Cube be in?", answer: 4.33e19, unit: "positions", min: 1000000, max: 1e30, log: true, explain: "43 quintillion, yet every one can be solved in 20 moves or fewer.", src: "Rokicki et al. 2010" },
+  { id: "es108", topic: "mind", q: "Benford's law: what % of numbers in real-world data start with the digit 1?", answer: 30.1, unit: "%", min: 0, max: 100, log: false, explain: "Not 11%. Auditors use this pattern to catch made-up numbers in accounts.", src: "Mathematics (Benford 1938)" },
+
+  // ---------- tech (6) ----------
+  { id: "es109", topic: "tech", q: "In what year did the first iPhone go on sale?", answer: 2007, unit: "", min: 1980, max: 2020, log: false, explain: "It had no app store yet; that arrived a year later with 500 apps.", src: "Apple" },
+  { id: "es110", topic: "tech", q: "About how many unique IPv4 internet addresses exist?", answer: 4294967296, unit: "addresses", min: 100000, max: 1e15, log: true, explain: "2 to the 32nd: under one per person alive, which is why IPv6 had to be invented.", src: "IANA" },
+  { id: "es111", topic: "tech", q: "How many megabytes did the first commercial hard drive (IBM 350, 1956) store?", answer: 3.75, unit: "MB", min: 0.01, max: 1000, log: true, explain: "About one MP3 song, on fifty 61 cm disks in a cabinet the size of two fridges.", src: "IBM" },
+  { id: "es112", topic: "tech", q: "How many transistors were in the Intel 4004, the first commercial microprocessor (1971)?", answer: 2300, unit: "", min: 10, max: 10000000, log: true, explain: "Modern chips pack tens of billions, millions of times more, in a similar-sized package.", src: "Intel" },
+  { id: "es113", topic: "tech", q: "How many characters was a tweet originally limited to?", answer: 140, unit: "chars", min: 10, max: 2000, log: true, explain: "SMS allowed 160 characters, leaving 20 for the username. It doubled to 280 in 2017.", src: "Twitter" },
+  { id: "es114", topic: "tech", q: "Unix time counts seconds since January 1 of what year?", answer: 1970, unit: "", min: 1900, max: 2020, log: false, explain: "Old 32-bit systems run out of seconds in January 2038, a Y2K-style bug.", src: "POSIX standard" },
+
+  // ---------- culture (6) ----------
+  { id: "es115", topic: "culture", q: "In what year was the Eiffel Tower completed?", answer: 1889, unit: "", min: 1700, max: 2000, log: false, explain: "Built for a world's fair and meant to stand 20 years; radio antennas saved it.", src: "Eiffel Tower official site" },
+  { id: "es116", topic: "culture", q: "How many lines are in a traditional sonnet?", answer: 14, unit: "lines", min: 2, max: 200, log: true, explain: "Shakespeare wrote 154 of them, most ending in a rhyming couplet.", src: "Poetry Foundation" },
+  { id: "es117", topic: "culture", q: "How many tiles come in a standard English-language Scrabble set?", answer: 100, unit: "tiles", min: 10, max: 1000, log: true, explain: "12 are E's, but only one each of J, K, Q, X and Z.", src: "Hasbro" },
+  { id: "es118", topic: "culture", q: "About how long is the Bayeux Tapestry, which depicts the Norman conquest?", answer: 68, unit: "m", min: 1, max: 1000, log: true, explain: "Longer than an Olympic swimming pool, yet only about 50 cm tall. It's actually embroidery.", src: "Bayeux Museum" },
+  { id: "es119", topic: "culture", q: "How many raised dots make up one full braille cell?", answer: 6, unit: "dots", min: 1, max: 20, log: false, explain: "Two columns of three give 64 patterns, enough for letters, numbers and punctuation.", src: "Royal National Institute of Blind People" },
+  { id: "es120", topic: "culture", q: "How tall was the Great Pyramid of Giza when it was first built?", answer: 146.6, unit: "m", min: 10, max: 2000, log: true, explain: "The tallest human-made structure for about 3,800 years, until Lincoln Cathedral's spire.", src: "Britannica" }
+);
+
 /* ---- src/content/estimates.js ---- */
 window.UP_CONTENT = window.UP_CONTENT || {};
 (window.UP_CONTENT.estimates = window.UP_CONTENT.estimates || []).push(
@@ -1298,7 +1382,7 @@ window.UP_CONTENT = window.UP_CONTENT || {};
 
 /* ---- src/content/life.js ---- */
 window.UP_CONTENT = window.UP_CONTENT || {};
-window.UP_CONTENT.actions = [
+window.UP_CONTENT.actions = (window.UP_CONTENT.actions || []).concat([
   // ---------- body (15) ----------
   { id: "ac01", cat: "body", title: "Rescue your eyes", body: "Look at something at least 20 feet away for 20 seconds. Your focusing muscles have been locked at phone distance; this lets them relax.", xp: 15, timer: 20, steps: ["Find the farthest thing you can see", "Keep your eyes on it until the timer ends"] },
   { id: "ac02", cat: "body", title: "Do 10 squats", body: "Stand up, feet shoulder-width, sit back like there's a chair, stand. Ten of them. Your legs are your biggest muscles, and they wake the rest of you up.", xp: 25, timer: 0, steps: ["Feet shoulder-width apart", "Sit back, chest up", "Stand tall, repeat 10 times", "Skip it if your knees complain"] },
@@ -1370,7 +1454,7 @@ window.UP_CONTENT.actions = [
   { id: "ac58", cat: "focus", title: "Process 5 emails", body: "Open your inbox and handle five: reply, archive, or delete. No leaving them for later. Five is small enough to start and big enough to feel.", xp: 30, timer: 180, steps: ["Reply if it takes under 2 minutes", "Archive if it needs nothing", "Delete if it never mattered"] },
   { id: "ac59", cat: "focus", title: "Start the task you're dreading", body: "Work on it for two minutes. That's all. Starting is usually the worst part; once you're in, stopping is optional.", xp: 35, timer: 120, steps: [] },
   { id: "ac60", cat: "focus", title: "Finish one tiny open loop", body: "Something that takes under a minute: fill in the form, confirm the booking, return the item to the right drawer. Do it now and cross it off for good.", xp: 25, timer: 60, steps: [] }
-];
+]);
 
 window.UP_CONTENT.reflects = [
   { id: "rf01", text: "What would make today a 10?", sub: "One or two specific things. Small counts." },

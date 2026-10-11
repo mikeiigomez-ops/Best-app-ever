@@ -1,5 +1,5 @@
 window.UP_CONTENT = window.UP_CONTENT || {};
-window.UP_CONTENT.actions = [
+window.UP_CONTENT.actions = (window.UP_CONTENT.actions || []).concat([
   // ---------- body (15) ----------
   { id: "ac01", cat: "body", title: "Rescue your eyes", body: "Look at something at least 20 feet away for 20 seconds. Your focusing muscles have been locked at phone distance; this lets them relax.", xp: 15, timer: 20, steps: ["Find the farthest thing you can see", "Keep your eyes on it until the timer ends"] },
   { id: "ac02", cat: "body", title: "Do 10 squats", body: "Stand up, feet shoulder-width, sit back like there's a chair, stand. Ten of them. Your legs are your biggest muscles, and they wake the rest of you up.", xp: 25, timer: 0, steps: ["Feet shoulder-width apart", "Sit back, chest up", "Stand tall, repeat 10 times", "Skip it if your knees complain"] },
@@ -71,7 +71,7 @@ window.UP_CONTENT.actions = [
   { id: "ac58", cat: "focus", title: "Process 5 emails", body: "Open your inbox and handle five: reply, archive, or delete. No leaving them for later. Five is small enough to start and big enough to feel.", xp: 30, timer: 180, steps: ["Reply if it takes under 2 minutes", "Archive if it needs nothing", "Delete if it never mattered"] },
   { id: "ac59", cat: "focus", title: "Start the task you're dreading", body: "Work on it for two minutes. That's all. Starting is usually the worst part; once you're in, stopping is optional.", xp: 35, timer: 120, steps: [] },
   { id: "ac60", cat: "focus", title: "Finish one tiny open loop", body: "Something that takes under a minute: fill in the form, confirm the booking, return the item to the right drawer. Do it now and cross it off for good.", xp: 25, timer: 60, steps: [] }
-];
+]);
 
 window.UP_CONTENT.reflects = [
   { id: "rf01", text: "What would make today a 10?", sub: "One or two specific things. Small counts." },
