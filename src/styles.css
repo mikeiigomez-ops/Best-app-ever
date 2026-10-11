@@ -708,3 +708,4 @@ body.has-ai .needs-ai { display: inline-flex !important; }
 .review-item .chip-btn { flex: none; font-size: 0.75rem; padding: 4px 9px; }
 .vdue { margin: 0; font-family: var(--f-mono); font-size: 0.7rem; color: var(--gold); }
 .vdue.late { color: var(--bad); }
+.sprint-opts.locked .opt { opacity: 0.4; }

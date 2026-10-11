@@ -65,7 +65,8 @@
     const p = (async () => {
       try {
         const arr = await sample.json(prompt, { cache: false });
-        const list = (Array.isArray(arr) ? arr : (arr && arr.cards) || []).filter(validCard).slice(0, n);
+        const raw = Array.isArray(arr) ? arr : arr && Array.isArray(arr.cards) ? arr.cards : [];
+        const list = raw.filter(validCard).slice(0, n);
         const cards = list.map((c, i) => ({
           id: "ai-" + slug(hole.topic) + "-" + (done + i) + "-" + now().toString(36),
           kind: "ai",

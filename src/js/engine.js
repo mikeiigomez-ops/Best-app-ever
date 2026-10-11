@@ -277,8 +277,11 @@
       if (session.sprints >= 1 && !openQuest("sprint")) W.sprint = 0;
       if (lastKinds(history, 6).includes("estimate")) W.estimate = 0;
       if (newUser) W.action *= 0.4;
-      // no kind twice within the last three cards
-      for (const k of histK) if (k in W) W[k] = 0;
+      // no kind twice within the last three cards (facts may come back after one other card)
+      for (const k of histK) if (k in W && k !== "fact" && k !== "ai") W[k] = 0;
+      if (histK[histK.length - 1] === "fact") W.fact = 0;
+      if (histK[histK.length - 1] === "ai") W.ai *= 0.5;
+      if (histK.includes("action")) W.calmaction = 0;
       const lastDo = DO_KINDS.has(histK[histK.length - 1]);
       for (const k of Object.keys(W)) {
         if (!ok(k)) W[k] = 0;
@@ -297,7 +300,9 @@
     if (!spec) {
       // everything has been shown this session: let older items come back
       sessionUsed.clear();
-      spec = build(allow && allow.has("fact") ? "fact" : filter === "calm" ? "breathe" : filter === "do" ? "action" : "fact") || pickFact() || pickAction() || { kind: "chest", id: UP.uid("chest") };
+      const pool = UP.shuffle(allow ? [...allow].filter((k) => !histK.includes(k)) : ["fact", "action", "estimate", "word"]);
+      for (const k of pool) { spec = build(k); if (spec) break; }
+      if (!spec) spec = pickFact() || pickAction() || { kind: "chest", id: UP.uid("chest") };
     }
 
     // bookkeeping

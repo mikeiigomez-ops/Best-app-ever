@@ -430,6 +430,7 @@
       start.addEventListener("click", () => {
         if (timer) return;
         start.hidden = true;
+        startedAt = now();
         skip.textContent = "Stop";
         skip.focus({ preventScroll: true });
         const t0 = performance.now();
@@ -450,7 +451,9 @@
         };
         timer = requestAnimationFrame(tick);
       });
+      let startedAt = 0;
       skip.addEventListener("click", () => {
+        if (timer && now() - startedAt < 500) return;
         if (timer) { cancelAnimationFrame(timer); timer = null; rg._set(d.timer, d.timer); start.hidden = false; skip.textContent = "Not now"; start.focus({ preventScroll: true }); return; }
         UP.ui.advance();
       });
@@ -566,7 +569,7 @@
           UP.state.stats.captures += lines.length; S.captures += lines.length;
           store.questProgress("capture");
           row.remove();
-          const amt = gain(15, result, "Captured");
+          const amt = gain(Math.max(5, store.captureXp(lines.length)), result, "Captured");
           sfx.done(); UP.ui.burst(result, 12);
           result.append(
             h("div", { class: "verdict ok" }, h("strong", null, "Out of your head, into the vault."), h("span", { class: "xp-pill" }, "+" + amt + " XP"),
@@ -734,7 +737,7 @@
     start.addEventListener("click", () => {
       if (running) return;
       running = true;
-      let score = 0, level = 0;
+      let score = 0, level = 0, lockUntil = 0;
       const total = 30;
       const t0 = performance.now();
       zone.innerHTML = "";
@@ -751,9 +754,9 @@
         cur.opts.forEach((o) => {
           const b = h("button", { class: "opt sprint-opt" }, String(o));
           b.addEventListener("click", () => {
-            if (!running) return;
+            if (!running || now() < lockUntil) return;
             if (o === cur.ans) { score++; level++; sfx.good(Math.min(score, 12)); buzz(6); scoreEl.textContent = String(score); scoreEl.classList.remove("pop"); void scoreEl.offsetWidth; scoreEl.classList.add("pop"); }
-            else { sfx.bad(); buzz([10, 20, 10]); level = Math.max(0, level - 2); qEl.classList.remove("shake"); void qEl.offsetWidth; qEl.classList.add("shake"); }
+            else { sfx.bad(); buzz([10, 20, 10]); level = Math.max(0, level - 1); lockUntil = now() + 900; opts.classList.add("locked"); setTimeout(() => opts.classList.remove("locked"), 900); qEl.classList.remove("shake"); void qEl.offsetWidth; qEl.classList.add("shake"); }
             show();
           });
           opts.append(b);

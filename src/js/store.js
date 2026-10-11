@@ -42,6 +42,8 @@
       journal: [],
       holes: [],
       quests: null,
+      questLog: {},
+      wipedAt: 0,
       lastBrief: "",
       oneThing: null,
     };
@@ -113,7 +115,8 @@
     const after = levelInfo(state.xp);
     bus.emit("xp", { amount, ...meta });
     if (after.level > before) bus.emit("level", after);
-    if (!goalBefore && today().xp >= state.settings.dailyGoal) {
+    if (!goalBefore && today().xp >= state.settings.dailyGoal && !today().goalHit) {
+      today().goalHit = true;
       let freeze = false;
       if ((state.streak.freezes || 0) < 2 && state.streak.count >= 2) { state.streak.freezes = (state.streak.freezes || 0) + 1; freeze = true; }
       bus.emit("goal", { freeze });
@@ -187,6 +190,10 @@
   function ensureQuests() {
     const k = dayKey();
     if (state.quests && state.quests.day === k) return state.quests;
+    state.questLog = state.questLog && typeof state.questLog === "object" ? state.questLog : {};
+    if (state.quests && state.quests.day) state.questLog[state.quests.day] = state.quests;
+    if (state.questLog[k]) { state.quests = state.questLog[k]; return state.quests; }
+    for (const d of Object.keys(state.questLog).sort().slice(0, -10)) delete state.questLog[d];
     const rng = mulberry(hash(k + state.createdAt));
     const pool = QUEST_POOL.slice();
     const hasDue = dueReviews().length >= 3;
@@ -231,10 +238,26 @@
     if (kind === "task" && item.due == null) { const due = UP.parseDue(item.text); if (due) item.due = due; }
     if (!item.text) return null;
     state.vault.unshift(item);
-    if (state.vault.length > 800) state.vault.length = 800;
+    capVault();
     save();
     bus.emit("vault", item);
     return item;
+  }
+  // over the cap, drop finished and archived items first (oldest first), never open ones
+  function capVault() {
+    const CAP = 1500;
+    if (state.vault.length <= CAP) return;
+    const removable = state.vault.filter((v) => v.done || v.archived).sort((a, b) => (a.doneAt || a.createdAt) - (b.doneAt || b.createdAt));
+    const drop = new Set(removable.slice(0, state.vault.length - CAP).map((v) => v.id));
+    state.vault = state.vault.filter((v) => !drop.has(v.id));
+  }
+  // capture XP is capped per day so pasting a hundred lines doesn't print points
+  function captureXp(lines) {
+    const t = today();
+    const room = Math.max(0, 40 - (t.capXp || 0));
+    const amt = Math.min(room, 5 * Math.min(lines, 4));
+    t.capXp = (t.capXp || 0) + amt;
+    return amt;
   }
   function addJournal(prompt, text) {
     const e = { id: UP.uid("j"), prompt, text: String(text).trim().slice(0, 1200), createdAt: now(), back: 0 };
@@ -252,16 +275,44 @@
   const ls = safeStorage();
   let db = null, userId = null, remoteReady = false;
 
+  // Every saved field is checked against the shape of a fresh state; a bad field falls back on its own.
+  function sanitize(saved) {
+    const base = fresh();
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return base;
+    const out = merge(fresh(), {});
+    for (const [k, def] of Object.entries(base)) {
+      const v = saved[k];
+      if (v === undefined) continue;
+      if (Array.isArray(def)) { if (Array.isArray(v)) out[k] = v.filter((x) => x && typeof x === "object" && typeof x.id === "string"); }
+      else if (def && typeof def === "object") { if (v && typeof v === "object" && !Array.isArray(v)) out[k] = (k === "srs" || k === "days" || k === "seen" || k === "affinity" || k === "kindAffinity" || k === "snooze") ? v : Object.assign(def, v); }
+      else if (def === null) { if (v === null || typeof v === "object") out[k] = v; }
+      else if (typeof v === typeof def) out[k] = v;
+    }
+    for (const [id, r] of Object.entries(out.srs)) if (!r || typeof r !== "object" || typeof r.d !== "number") delete out.srs[id];
+    for (const [k, d] of Object.entries(out.days)) if (!d || typeof d !== "object") delete out.days[k];
+    if (out.quests && (!Array.isArray(out.quests.list) || typeof out.quests.day !== "string")) out.quests = null;
+    if (out.oneThing && typeof out.oneThing.day !== "string") out.oneThing = null;
+    for (const k of Object.keys(base.stats)) if (typeof out.stats[k] !== "number") out.stats[k] = 0;
+    for (const k of Object.keys(base.streak)) if (typeof out.streak[k] !== typeof base.streak[k]) out.streak[k] = base.streak[k];
+    return out;
+  }
   function load() {
     if (!ls) return;
-    try {
-      const raw = ls.getItem(LS_KEY);
-      if (raw) state = merge(fresh(), JSON.parse(raw));
-      const rawAi = ls.getItem(LS_AI);
-      if (rawAi) aiCards = JSON.parse(rawAi) || {};
-    } catch (e) {
-      console.warn("Upscroll: could not read saved progress", e);
+    let raw = null;
+    try { raw = ls.getItem(LS_KEY); } catch (e) { return; }
+    if (raw) {
+      try { state = sanitize(JSON.parse(raw)); }
+      catch (e) {
+        // keep the unreadable copy instead of overwriting it
+        try { ls.setItem(LS_KEY + ".broken-" + Date.now(), raw); } catch (e2) { /* nothing more to do */ }
+        console.warn("Upscroll: saved progress was unreadable; starting fresh", e);
+      }
     }
+    try {
+      const rawAi = ls.getItem(LS_AI);
+      const parsed = rawAi ? JSON.parse(rawAi) : null;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) aiCards = parsed;
+    } catch (e) { aiCards = {}; }
   }
   function merge(base, saved) {
     for (const k of Object.keys(saved || {})) {
@@ -275,6 +326,7 @@
   // Combine a remote snapshot into the live state. Returns true when anything changed.
   function absorb(remote) {
     const L = state;
+    if (L.wipedAt && (remote.updatedAt || 0) <= L.wipedAt) return false; // erased after that copy was made
     const before = JSON.stringify(L);
     const remoteNewer = (remote.updatedAt || 0) > (L.updatedAt || 0);
     const maxNum = (a, b) => Math.max(a || 0, b || 0);
@@ -327,6 +379,8 @@
     if (remote.quests && (!L.quests || remote.quests.day > L.quests.day || (remote.quests.day === L.quests.day && remoteNewer))) L.quests = remote.quests;
     if (remote.oneThing && (!L.oneThing || remote.oneThing.day > L.oneThing.day || (remote.oneThing.day === L.oneThing.day && remote.oneThing.done))) L.oneThing = remote.oneThing;
     if ((remote.lastBrief || "") > (L.lastBrief || "")) L.lastBrief = remote.lastBrief;
+    capVault();
+    if (L.journal.length > 500) L.journal.length = 500;
     return JSON.stringify(L) !== before;
   }
 
@@ -355,9 +409,8 @@
       // storage full: drop the cheapest history and try once more, then tell the person
       const keys = Object.keys(state.seen);
       keys.sort((a, b) => state.seen[a] - state.seen[b]).slice(0, Math.floor(keys.length / 2)).forEach((k) => delete state.seen[k]);
-      try { ls.setItem(LS_KEY, JSON.stringify(state)); } catch (e2) {
-        if (!warnedFull) { warnedFull = true; bus.emit("storagefull", {}); }
-      }
+      try { ls.setItem(LS_KEY, JSON.stringify(state)); if (!warnedFull) { warnedFull = true; bus.emit("storagefull", { trimmed: true }); } }
+      catch (e2) { if (!warnedFull) { warnedFull = true; bus.emit("storagefull", { trimmed: false }); } }
     }
   }
   const writeLocalSoon = debounce(writeLocal, 400);
@@ -470,6 +523,7 @@
     const f = fresh();
     for (const k of Object.keys(state)) delete state[k];
     Object.assign(state, f);
+    state.wipedAt = now();
     for (const k of Object.keys(aiCards)) delete aiCards[k];
     aiDirty = true;
     state.updatedAt = now();
@@ -492,7 +546,7 @@
   Object.defineProperty(UP, "state", { get: () => state, set: (v) => { state = v; }, configurable: true });
   Object.defineProperty(UP, "aiCards", { get: () => aiCards, configurable: true });
   UP.store = {
-    save, flush, markAi, attachDb, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
+    save, flush, markAi, attachDb, captureXp, storageOk: () => !!ls, reset, award, comboHit, comboMult, levelInfo, today, srsGrade, dueReviews, mastered,
     ensureQuests, questProgress, lean, STRONG, addVault, addJournal, streakAlive, MASTERED, STREAK_MIN, TITLES,
     hasCloud: () => !!(db && userId),
   };

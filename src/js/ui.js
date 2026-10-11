@@ -300,9 +300,13 @@
     const body = h("div", { class: "compose" }, prompt ? h("p", { class: "compose-prompt" }, prompt) : null, input, hint ? h("p", { class: "hint" }, hint) : null, save);
     sheet(title, body);
     setTimeout(() => input.focus(), 80);
+    let saved = false;
     const go = () => {
       const v = input.value.trim();
       if (!v) { input.focus(); return; }
+      if (saved) return;
+      saved = true;
+      save.disabled = true;
       closeSheet();
       onSave(v);
     };
@@ -480,13 +484,17 @@
     }));
     const input = h("textarea", { id: "quick-capture", class: "field", rows: "3", maxlength: "600", placeholder: "Whatever's on your mind. One per line.", "aria-label": "Capture" });
     const save = h("button", { class: "btn primary wide" }, "Save to vault");
+    let saved = false;
     const go = () => {
-      const lines = input.value.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+      const lines = input.value.split(/\n+/).map((x) => x.trim()).filter(Boolean).slice(0, 40);
       if (!lines.length) { input.focus(); return; }
+      if (saved) return;
+      saved = true;
+      save.disabled = true;
       lines.forEach((l) => store.addVault(kind, l));
       UP.state.stats.captures += lines.length; S.captures += lines.length;
       store.questProgress("capture");
-      store.award(5 * lines.length, { reason: "Captured", anchor: $("#capture-btn") });
+      store.award(store.captureXp(lines.length), { reason: "Captured", anchor: $("#capture-btn") });
       closeSheet();
       ui.toast(lines.length === 1 ? "Saved to your vault" : lines.length + " things saved to your vault");
       if (document.body.dataset.tab === "vault") UP.vault.render();
@@ -537,9 +545,10 @@
       status.textContent = "Claude is writing your first cards on " + topic + "...";
       try {
         const cards = await UP.ai.digHole(hole);
+        if (!cards.length) { status.textContent = "Claude's cards for that didn't come through cleanly. Try again, or word the topic a little differently."; renderList(); return; }
         UP.state.aiOk = true;
         store.save();
-        status.textContent = cards.length + " cards ready. They're next in your feed.";
+        status.textContent = cards.length + (cards.length === 1 ? " card" : " cards") + " ready. They're next in your feed.";
         const id = hole.queue.shift();
         if (id) pending.unshift({ kind: "ai", id, data: UP.aiCards[id] });
         // drop the pre-rendered lookahead so the hole shows up right away
@@ -663,7 +672,8 @@
       if (tab === "sky") UP.sky.show();
       ui.toast("Synced with your other devices");
     });
-    bus.on("storagefull", () => ui.toast("This browser's storage is full. Older history was trimmed to keep saving."));
+    bus.on("storagefull", ({ trimmed }) => ui.toast(trimmed ? "This browser's storage is full. Older history was trimmed to keep saving." : "This browser won't let Upscroll save right now. Free up space or progress may be lost."));
+    if (!store.storageOk()) setTimeout(() => { if (!store.hasCloud()) ui.toast("This browser is blocking storage, so progress won't be kept after you close it."); }, 4000);
     bus.on("ai", (s) => document.body.classList.toggle("has-ai", s === "ready"));
 
     // on-screen keyboard: lift bottom sheets by its height
