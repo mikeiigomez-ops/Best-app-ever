@@ -16,6 +16,7 @@
     mind: { label: "Mind", hue: 280 },
     tech: { label: "Tech", hue: 205 },
     culture: { label: "Culture", hue: 330 },
+    skills: { label: "Life skills", hue: 140 },
     words: { label: "Words", hue: 345 },
     holes: { label: "Rabbit holes", hue: 265 },
   };
@@ -38,7 +39,7 @@
   const DO_KINDS = new Set(["action", "breathe", "capture", "reflect", "task", "idea", "capsule", "sprint"]);
 
   let sinceChest = 0, nextChestAt = 9 + Math.floor(rand() * 5);
-  let sinceReceipt = 0, sinceReview = 0;
+  let sinceReceipt = 0, sinceReview = 0, sinceOne = 8;
   const sessionUsed = new Set();
   const session = { start: now(), cards: 0, learned: 0, correct: 0, answered: 0, deeds: 0, captures: 0, xp: 0, words: 0, stars: 0 };
 
@@ -182,6 +183,11 @@
     if (st.lastBrief !== UP.dayKey() && !history.length) {
       spec = { kind: "brief", id: "brief-" + UP.dayKey() };
     }
+    const ot = st.oneThing;
+    if (!spec && ot && ot.day === UP.dayKey() && !ot.done && sinceOne >= 16 && filter !== "learn") {
+      spec = { kind: "one", id: "one-" + sinceOne + "-" + session.cards };
+      sinceOne = 0;
+    }
     if (!spec && sinceChest >= nextChestAt) {
       spec = { kind: "chest", id: UP.uid("chest") };
     }
@@ -234,6 +240,7 @@
     if (spec.kind === "chest") { sinceChest = 0; nextChestAt = 9 + Math.floor(rand() * 6); } else sinceChest++;
     if (spec.kind === "receipt") sinceReceipt = 0; else sinceReceipt++;
     if (spec.kind === "review") sinceReview = 0; else sinceReview++;
+    if (spec.kind !== "one") sinceOne++;
     if (spec.id) { sessionUsed.add(spec.id); shownAt.set(spec.id, session.cards + history.length); }
     spec.key = UP.uid("c");
     return spec;

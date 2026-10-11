@@ -92,7 +92,7 @@
         h("h2", { class: "ob-title sm" }, "Anything you've been meaning to learn?"),
         avail
           ? h("p", { class: "ob-sub" }, "Name any topic and Claude turns it into an endless course woven into your feed. It gets deeper the further you go.")
-          : h("p", { class: "ob-sub" }, "Open Upscroll inside Claude to turn any topic into an endless course. For now you get the built-in library of 180+ cards, and it's plenty to start."),
+          : h("p", { class: "ob-sub" }, "Open Upscroll inside Claude to turn any topic into an endless course. For now you get the built-in library of 400+ cards, and it's plenty to start."),
         avail ? input : null,
         avail ? h("div", { class: "chips" }, ...ideas.map((t) => h("button", { class: "chip-btn", onclick: () => { input.value = t; } }, t))) : null,
         go,

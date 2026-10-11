@@ -111,7 +111,7 @@
     const legend = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([t, n]) =>
       h("span", { class: "leg", style: { "--hue": TOPIC_HUES[t] || 200 } }, h("i"), (engine.TOPICS[t] || { label: t }).label + " " + n));
     const big = (n, l) => h("div", { class: "stat" }, h("b", null, n), h("span", null, l));
-    panel.append(
+    panel.append(...[
       h("div", { class: "sky-head" },
         h("p", { class: "kicker" }, "Level " + L.level),
         h("h2", { class: "sky-title" }, L.title),
@@ -136,7 +136,7 @@
       h("h4", null, "Last 12 weeks"),
       heatmap(),
       settings()
-    );
+    ].filter(Boolean));
   }
 
   function settings() {

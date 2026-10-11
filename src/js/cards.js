@@ -21,6 +21,7 @@
     chest: { label: "Bonus", hue: 44 },
     receipt: { label: "Session receipt", hue: 44 },
     brief: { label: "Today", hue: 44 },
+    one: { label: "Today's one thing", hue: 44 },
   };
 
   function gain(base, anchor, reason) {
@@ -288,10 +289,12 @@
       const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1);
       return Math.round(v / p) * p;
     };
-    let guess = nice(toVal(0.5));
+    // start somewhere random so the slider's midpoint never hints at the answer
+    const startPos = 0.2 + Math.random() * 0.6;
+    let guess = nice(toVal(startPos));
     inner.append(h("h2", { class: "headline est-q" }, d.q));
     const readout = h("div", { class: "est-readout", "aria-live": "polite" }, fmtNum(guess, d.unit));
-    const slider = h("input", { type: "range", min: "0", max: "1000", value: "500", class: "est-slider", "aria-label": "Your estimate", id: "est-" + spec.key });
+    const slider = h("input", { type: "range", min: "0", max: "1000", value: String(Math.round(startPos * 1000)), class: "est-slider", "aria-label": "Your estimate", id: "est-" + spec.key });
     const scale = h("div", { class: "est-scale" }, h("span", null, fmtNum(d.min, d.unit)), h("span", null, fmtNum(d.max, d.unit)));
     const track = h("div", { class: "est-track" }, slider, h("i", { class: "est-answer", hidden: true }));
     slider.addEventListener("input", () => {
@@ -778,6 +781,7 @@
         stat(String(st.vault.filter((v) => v.kind === "task" && !v.done && !v.archived).length), "open to-dos"),
         stat(String(store.mastered()), "cards mastered")
       ),
+      oneThingBlock(),
       h("p", { class: "kicker" }, "Today's quests"),
       h("ul", { class: "quests" }, ...qs.list.map((q) => h("li", { class: q.done ? "done" : "" }, h("span", { class: "q-dot" }), q.label, h("span", { class: "q-xp" }, "+30")))),
       h("p", { class: "swipe-cta" }, icon("arrowUp"), "Swipe up to start")
@@ -786,6 +790,60 @@
     store.save();
     return el;
   }
+  function oneThingBlock() {
+    const st = UP.state;
+    const box = h("div", { class: "one-thing" });
+    const draw = () => {
+      box.innerHTML = "";
+      const ot = st.oneThing && st.oneThing.day === UP.dayKey() ? st.oneThing : null;
+      if (ot) {
+        box.append(h("p", { class: "kicker" }, "Today's one thing"), h("p", { class: "one-text" + (ot.done ? " done" : "") }, ot.text));
+        return;
+      }
+      const b = h("button", { class: "btn primary wide" }, "Set today's one thing");
+      b.addEventListener("click", () => UP.ui.compose({
+        title: "What one thing would make today a win?",
+        placeholder: "Finish the proposal draft",
+        hint: "The feed will keep nudging you until it's done.",
+        onSave(text) { setOneThing(text); gain(15, box, "One thing"); draw(); },
+      }));
+      box.append(b);
+    };
+    draw();
+    return box;
+  }
+  function setOneThing(text) {
+    const v = store.addVault("task", text, { one: true });
+    UP.state.oneThing = { day: UP.dayKey(), text: v.text, vid: v.id, done: false };
+    store.save();
+  }
+
+  /* ---------- today's one thing, resurfaced ---------- */
+  function one(spec) {
+    const st = UP.state;
+    const ot = st.oneThing;
+    const el = frame(spec, { rail: false, label: "Today's one thing", topic: "Set this morning" });
+    const inner = el._inner;
+    inner.append(h("h2", { class: "headline" }, ot.text), h("p", { class: "body" }, "You said this would make today a win. Is it done?"));
+    const result = h("div", { class: "result" });
+    const done = h("button", { class: "btn primary" }, icon("check"), "Done");
+    const later = h("button", { class: "btn ghost" }, "Working on it");
+    const row = h("div", { class: "row" }, done, later);
+    inner.append(row, result);
+    done.addEventListener("click", () => {
+      ot.done = true;
+      const v = st.vault.find((x) => x.id === ot.vid);
+      if (v) { v.done = true; v.doneAt = now(); }
+      row.remove();
+      const amt = completeDeed(el, spec, result, 60);
+      UP.ui.banner("Today", "Won.", "Your one thing is done. Everything else is a bonus.");
+      result.append(h("div", { class: "verdict ok" }, h("strong", null, "Day won."), h("span", { class: "xp-pill" }, "+" + amt + " XP")));
+      store.save();
+    });
+    later.addEventListener("click", () => { UP.ui.toast("Go get it. I'll check back."); UP.ui.advance(); });
+    return el;
+  }
+
   function stat(n, label) {
     return h("div", { class: "stat" }, h("b", null, n), h("span", null, label));
   }
@@ -820,7 +878,7 @@
     return el;
   }
 
-  const R = { fact, ai: fact, review, word, estimate, action, breathe, capture, reflect, task, idea, capsule, sprint, chest, brief, receipt };
+  const R = { one, fact, ai: fact, review, word, estimate, action, breathe, capture, reflect, task, idea, capsule, sprint, chest, brief, receipt };
   UP.cards = {
     render(spec) {
       const fn = R[spec.kind] || fact;

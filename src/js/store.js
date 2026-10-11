@@ -41,6 +41,7 @@
       holes: [],
       quests: null,
       lastBrief: "",
+      oneThing: null,
     };
   }
 

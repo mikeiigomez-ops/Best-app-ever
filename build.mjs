@@ -6,6 +6,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
+const OUT = process.env.OUT || join(root, "dist");
 const src = (p) => join(root, "src", p);
 const read = (p) => readFileSync(p, "utf8");
 
@@ -38,10 +39,10 @@ ${js}
 </script>
 `;
 
-mkdirSync(join(root, "dist"), { recursive: true });
+mkdirSync(OUT, { recursive: true });
 
 // Artifact page: content only, no document skeleton.
-writeFileSync(join(root, "dist/upscroll.html"), page);
+writeFileSync(join(OUT, "upscroll.html"), page);
 
 // Standalone: full document + PWA bits.
 const standalone = `<!doctype html>
@@ -70,8 +71,8 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
 </body>
 </html>
 `;
-writeFileSync(join(root, "dist/index.html"), standalone);
+writeFileSync(join(OUT, "index.html"), standalone);
 for (const f of ["manifest.webmanifest", "sw.js", "icon.svg", "icon-512.png"]) {
-  try { copyFileSync(join(root, "public", f), join(root, "dist", f)); } catch { /* optional asset */ }
+  try { copyFileSync(join(root, "public", f), join(OUT, f)); } catch { /* optional asset */ }
 }
 console.log("built dist/index.html (" + (standalone.length / 1024).toFixed(0) + " KB) and dist/upscroll.html");

@@ -205,6 +205,7 @@
     setTimeout(() => { b.classList.remove("show"); setTimeout(() => b.remove(), 500); }, 2600);
   }
 
+  ui.banner = banner;
   ui.countUp = (el, from, to, unit) => {
     if (UP.reducedMotion()) { el.textContent = UP.fmtNum(to, unit); return; }
     const t0 = performance.now(), dur = 900;

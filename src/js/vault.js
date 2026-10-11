@@ -83,6 +83,8 @@
       const cb = h("button", { class: "check" + (v.done ? " on" : ""), "aria-label": v.done ? "Mark not done" : "Mark done", "aria-pressed": String(!!v.done) }, icon("check"));
       cb.addEventListener("click", () => {
         v.done = !v.done;
+        const ot = UP.state.oneThing;
+        if (ot && ot.vid === v.id) ot.done = v.done;
         v.doneAt = v.done ? now() : null;
         if (v.done) {
           UP.state.stats.deeds++;
