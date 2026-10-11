@@ -27,8 +27,7 @@ const head = `<title>Upscroll</title>
 <meta name="description" content="${DESC}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style" href="${FONTS}">
-<link rel="stylesheet" href="${FONTS}" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="${FONTS}">
 <style>
 ${css}
 </style>`;
@@ -59,7 +58,7 @@ const standalone = `<!doctype html>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-512.png">
-${head.replace("</style>", "html,body{height:100%}body{padding-top:env(safe-area-inset-top,0px)}\n</style>")}
+${head.replace('<link rel="stylesheet" href="' + FONTS + '">', '<link rel="preload" as="style" href="' + FONTS + '">\n<link rel="stylesheet" href="' + FONTS + '" media="print" onload="this.media=\'all\'">').replace("</style>", "html,body{height:100%}body{padding-top:env(safe-area-inset-top,0px)}\n</style>")}
 </head>
 <body>
 ${body}
