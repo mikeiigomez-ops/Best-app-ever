@@ -82,6 +82,14 @@
     return { src, assetId: null, thumb: src, w: isNum(ref.w) ? ref.w : 4, h: isNum(ref.h) ? ref.h : 3, at: isNum(ref.at) ? ref.at : 0, role: "hero" };
   }
   /* snapshotOf(inst) -> a shareable copy: photos reduced to thumbs, observations ≤10, nothing from mail or drafts */
+  /* the side an instrument lives on, and whether this tab is clocked out right now */
+  function sideOfInst(x) {
+    if (!x) return "home";
+    if (has("molds", "sideOf")) return safe("molds.sideOf", () => WB.molds.sideOf(x), "home");
+    return x.side === "work" || x.side === "both" ? x.side : "home";
+  }
+  const clockedOut = () => (has("store", "side") ? safe("store.side", () => WB.store.side(), "work") === "home" : false);
+  const hiddenInst = (x) => !!x && has("store", "isHidden") && safe("store.isHidden", () => WB.store.isHidden(x), false);
   function snapshotOf(inst) {
     if (!isObj(inst)) return null;
     const s = JSON.parse(JSON.stringify(inst));
@@ -101,7 +109,7 @@
   function sanitize(x) {
     if (!isObj(x) || typeof x.mold !== "string" || !isObj(x.vars)) return null;
     if (has("molds", "get") && !WB.molds.get(x.mold)) return null;
-    const s = { id: clip(String(x.id || "shared"), 40), v: 1, demo: !!x.demo, mold: x.mold, kind: clip(x.kind, 60), system: clip(x.system, 12),
+    const s = { id: clip(String(x.id || "shared"), 40), v: 1, side: x.side === "work" || x.side === "both" || x.side === "home" ? x.side : "home", demo: !!x.demo, mold: x.mold, kind: clip(x.kind, 60), system: clip(x.system, 12),
       title: clip(x.title || "Shared instrument", 60), createdAt: Number(x.createdAt) || 0, updatedAt: Number(x.updatedAt) || 0,
       photo: photoOk(x.photo), photos: [], words: {}, vars: {}, items: [], steps: [], evidence: [], fieldNote: x.fieldNote ? clip(x.fieldNote, 200) : null,
       nextPhotos: [], mailQuery: null, act: null, contact: null, intention: null, observations: [], actions: [], mission: null, enriched: null };
@@ -187,7 +195,11 @@
     if (!R.room || typeof R.room.presence !== "function") return;
     const cur = WB.router && WB.router.current ? WB.router.current() : { name: null, params: {} };
     const view = cur.name || null;
-    const instrumentId = (view === "instrument" || view === "mission") && cur.params && cur.params.id ? String(cur.params.id) : null;
+    let instrumentId = (view === "instrument" || view === "mission") && cur.params && cur.params.id ? String(cur.params.id) : null;
+    if (instrumentId && clockedOut()) {
+      const shown = has("store", "get") ? safe("store.get", () => WB.store.get(instrumentId), null) : null;
+      if (hiddenInst(shown)) instrumentId = null;
+    }
     // a mission is shown to people here only when you said so on its brief
     const p = { v: 1, name: R.name || "", view, instrumentId, mission: R.missionVisible ? myMission() : null };
     const key = JSON.stringify(p);
@@ -256,7 +268,7 @@
             el("span", { class: "rm-row__name", text: p.name ? clip(p.name, 40) : "Someone" }),
             el("span", { class: "rm-row__what wb-mono", text: activity(p) + (p.mission && p.mission.endsAt > nowMs() && p.mission.title ? " · " + p.mission.title : "") })),
           share ? el("button", { type: "button", class: "wb-btn wb-btn--quiet rm-row__open", text: "Watch",
-            "aria-label": "Watch " + (share.snapshot.title || "their instrument"), on: { click: () => { close(); WB.router.go("mirror", { peerKey: p.key }); } } }) : null);
+            "aria-label": "Watch " + (share.snapshot.side === "work" && clockedOut() ? "a work instrument" : (share.snapshot.title || "their instrument")), on: { click: () => { close(); WB.router.go("mirror", { peerKey: p.key }); } } }) : null);
         list.appendChild(row);
       });
     };
@@ -277,6 +289,7 @@
     if (!R.ready) { if (has("ui", "toast")) WB.ui.toast("Nobody else has this page open right now."); return false; }
     const inst = has("store", "get") ? safe("store.get", () => WB.store.get(id), null) : null;
     if (!inst) return false;
+    if (clockedOut() && sideOfInst(inst) === "work") { if (has("ui", "toast")) WB.ui.toast("Clocked out. Work stays off the room."); return false; }
     const snap = snapshotOf(inst);
     if (!emit("wb.share", { snapshot: snap })) { if (has("ui", "toast")) WB.ui.toast("That didn't reach anyone. Try again."); return false; }
     R.sharing = { id, at: nowMs() };
@@ -292,11 +305,12 @@
     reshareT = setTimeout(() => {
       if (!R.sharing) return;
       const inst = has("store", "get") ? safe("store.get", () => WB.store.get(R.sharing.id), null) : null;
-      if (inst) emit("wb.share", { snapshot: snapshotOf(inst) });
+      if (inst && !(clockedOut() && sideOfInst(inst) === "work")) emit("wb.share", { snapshot: snapshotOf(inst) });
     }, 800);
   }
   function sendScrub(p) {
     if (!R.sharing || !p || p.id !== R.sharing.id || !isNum(p.value)) return;
+    if (clockedOut()) { const inst = has("store", "get") ? safe("store.get", () => WB.store.get(p.id), null) : null; if (inst && sideOfInst(inst) === "work") return; }
     lastScrub.pending = { id: p.id, varId: String(p.varId), value: p.value };
     const t = nowMs();
     const gap = 66;   // ≤15 messages a second
@@ -320,8 +334,9 @@
     const isNew = !R.shared[key] || R.shared[key].snapshot.id !== snap.id;
     R.shared[key] = { snapshot: snap, at: nowMs() };
     if (mirror.el && mirror.peerKey === key) { mirror.update(snap, null); return; }
+    const hideTitle = snap.side === "work" && clockedOut();
     if (isNew && has("ui", "toast")) {
-      WB.ui.toast(nameFor(key, msg) + " is showing you " + snap.title + ".", { action: { label: "Watch", onTap: () => WB.router.go("mirror", { peerKey: key }) }, ms: 6000 });
+      WB.ui.toast(nameFor(key, msg) + " is showing you " + (hideTitle ? "a work instrument" : snap.title) + ".", { action: { label: "Watch", onTap: () => WB.router.go("mirror", { peerKey: key }) }, ms: 6000 });
     }
     if (peerSheet) peerSheet.refresh();
   }
@@ -404,6 +419,10 @@
     mount(snap) {
       this.destroyHandle();
       this.body.textContent = "";
+      if (snap && snap.side === "work" && clockedOut()) {
+        this.body.appendChild(el("p", { class: "rm-locked wb-serif", text: "A work instrument. You are clocked out." }));
+        return;
+      }
       if (has("instrument", "mount")) {
         this.handle = safe("instrument.mount", () => WB.instrument.mount(this.body, null, { snapshot: snap, readOnly: true }), null);
         if (this.body.childNodes.length) return;
@@ -516,6 +535,7 @@
     const bus = WB.bus;
     bus.on("view:enter", () => { sendPresence(); R.version++; renderSlots(); });
     bus.on("view:leave", (p) => { if (R.sharing && p && p.view === "instrument" && p.params && p.params.id === R.sharing.id) stopSharing(); });
+    bus.on("side:changed", () => { lastPresence = ""; sendPresence(); if (R.sharing) { const i = has("store", "get") ? safe("store.get", () => WB.store.get(R.sharing.id), null) : null; if (i && clockedOut() && sideOfInst(i) === "work") stopSharing(); } if (mirror.el && mirror.peerKey && R.shared[mirror.peerKey]) mirror.mount(R.shared[mirror.peerKey].snapshot); });
     bus.on("instrument:scrub", sendScrub);
     bus.on("instrument:set", sendScrub);
     bus.on("instrument:updated", (p) => {

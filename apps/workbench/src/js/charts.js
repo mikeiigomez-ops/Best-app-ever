@@ -1,5 +1,5 @@
 /* ---- Workbench charts (Victor) ----
-   Four hand-drawn chart types (costOverTime, timeline with a draggable cursor, stackedBar, gauge),
+   Six hand-drawn chart types (costOverTime, timeline with a draggable cursor, stackedBar, gauge, progress, week),
    the ghost "promise" band (dashed intention line + solid observation dots + the gap), and the 60x18 spark.
    Pure SVG strings rebuilt per frame: cheap enough to run on every pointermove during a scrub.
    Pointer handling lives on the persistent container, so rebuilding the SVG never drops a drag.
@@ -352,6 +352,127 @@
     st.summary = "Reading " + read + lbl + (th != null ? "; the alternative is " + f(th) : "") + ".";
   }
 
+
+  /* ---------------------------------------------------------------- progress (project, zones) */
+  function drawProgress(st, W, H, P) {
+    const s = st.series, o = st.opts, inst = o.inst;
+    const total = Math.max(1, isNum(s.total) ? s.total : 1);
+    const done = clamp(isNum(s.done) ? s.done : 0, 0, total);
+    const today = isNum(s.today) ? s.today : Date.now();
+    const start = isNum(s.start) ? Math.min(s.start, today) : today - 7 * DAY;
+    const gh = s.ghost && isNum(s.ghost.end) && s.ghost.from && isNum(s.ghost.from.t) ? s.ghost : null;
+    const finish = isNum(s.finish) ? s.finish : today;
+    // the time axis only grows during a live drag, so the dashed line visibly turns instead of the axis rescaling under it
+    let tEnd = Math.max(finish, gh ? gh.end : 0, today) + 3 * DAY;
+    if (o.live) {
+      st.sticky = st.sticky || {};
+      st.sticky.tEnd = Math.max(st.sticky.tEnd || 0, tEnd);
+      tEnd = st.sticky.tEnd;
+    }
+    const unit = String(s.unit || "");
+    const topLbl = fmt(total, "int", inst) + (unit ? " " + unit : "");
+    const x0 = 30, x1 = W - 14, y0 = 26, y1 = H - 24;
+    const t0 = Math.min(start, today - DAY);
+    const x = (t) => x0 + ((clamp(t, t0, tEnd) - t0) / (tEnd - t0)) * (x1 - x0);
+    const y = (v) => y1 - (clamp(v, 0, total) / total) * (y1 - y0);
+
+    // y ticks: whole numbers, at most 5 labels
+    const stepV = Math.max(1, Math.ceil(total / 4));
+    for (let v = 0; v <= total; v += stepV) {
+      P.push('<line class="ch-pg__grid" x1="' + x0 + '" x2="' + x1 + '" y1="' + r1(y(v)) + '" y2="' + r1(y(v)) + '"/>');
+      P.push('<text class="ch-lbl" x="' + (x0 - 6) + '" y="' + r1(y(v) + 3) + '" text-anchor="end">' + v + "</text>");
+    }
+    // total: a top rule and its label
+    P.push('<line class="ch-pg__total" x1="' + x0 + '" x2="' + x1 + '" y1="' + r1(y(total)) + '" y2="' + r1(y(total)) + '"/>');
+    P.push('<text class="ch-lbl ch-lbl--ink" x="' + x1 + '" y="' + r1(y(total) - 6) + '" text-anchor="end">' + esc(topLbl) + "</text>");
+    P.push('<line class="ch-axis" x1="' + x0 + '" x2="' + x1 + '" y1="' + y1 + '" y2="' + y1 + '"/>');
+    P.push('<text class="ch-lbl" x="' + x0 + '" y="' + (H - 6) + '">' + esc(upper(fmtDayMs(t0))) + "</text>");
+
+    // today
+    const tx = r1(x(today));
+    P.push('<line class="ch-today" x1="' + tx + '" x2="' + tx + '" y1="' + (y0 - 4) + '" y2="' + (y1 + 4) + '"/>');
+    P.push('<text class="ch-lbl" x="' + tx + '" y="' + (H - 6) + '" text-anchor="' + (x(today) > x1 - 30 ? "end" : "middle") + '">TODAY</text>');
+
+    // the committed line: a thin hairline from where you committed, at your pace
+    if (gh && isNum(gh.perWeek)) {
+      const gv = gh.from && isNum(gh.from.v) ? gh.from.v : 0;
+      const gEnd = gh.end;
+      const ev = Math.min(total, gv + gh.perWeek * Math.max(0, gEnd - gh.from.t) / (7 * DAY));
+      const ink = o.ink && !reduced() ? " ch-ghost--ink" : "";
+      P.push('<path class="ch-pg__mine' + ink + '" d="M' + r1(x(gh.from.t)) + " " + r1(y(gv)) + "L" + r1(x(gEnd)) + " " + r1(y(ev)) + '"/>');
+      const lbl = "YOUR PACE";
+      const lx = x(gEnd), right = lx + 4 + monoW(lbl, 9.5) > W - 4;
+      P.push('<text class="ch-lbl ch-lbl--mine' + ink + '" x="' + r1(right ? lx - 4 : lx + 4) + '" y="' + r1(clamp(y(ev) + 14, y0 + 8, y1 - 4)) + '" text-anchor="' + (right ? "end" : "start") + '">' + lbl + "</text>");
+    }
+
+    // done: a step line, ink, ending at today
+    const pts = (Array.isArray(s.points) ? s.points : []).filter((p) => isNum(p.t) && isNum(p.v)).slice().sort((a, b) => a.t - b.t);
+    let d = "";
+    if (pts.length) {
+      d = "M" + r1(x(pts[0].t)) + " " + r1(y(pts[0].v));
+      for (let i = 1; i < pts.length; i++) d += "H" + r1(x(pts[i].t)) + "V" + r1(y(pts[i].v));
+      d += "H" + tx;
+    } else d = "M" + r1(x(start)) + " " + r1(y(done)) + "H" + tx;
+    P.push('<path class="ch-pg__done" d="' + d + '"/>');
+    P.push('<circle class="ch-pg__now" cx="' + tx + '" cy="' + r1(y(done)) + '" r="3.5"/>');
+
+    // the live pace line: from today's count to the finish, moves while you scrub
+    const left = total - done;
+    if (left > 0.0001 && s.pace && s.pace.from) {
+      const fx = x(finish), fy = y(total);
+      P.push('<path class="ch-pg__pace" d="M' + tx + " " + r1(y(done)) + "L" + r1(fx) + " " + r1(fy) + '"/>');
+      P.push('<circle class="ch-pg__end" cx="' + r1(fx) + '" cy="' + r1(fy) + '" r="3"/>');
+      const lbl = fmtDayMs(finish);
+      const w = monoW(lbl, 12);
+      const lx = clamp(fx - w / 2, x0, W - w - 4);
+      P.push('<text class="ch-end ch-end--target" x="' + r1(lx) + '" y="' + r1(fy + 17) + '">' + esc(lbl) + "</text>");
+    } else if (left <= 0.0001) {
+      P.push('<text class="ch-end ch-end--good" x="' + (x1) + '" y="' + r1(y(total) + 18) + '" text-anchor="end">ALL DONE</text>');
+    }
+    st.summary = done + " of " + total + (unit ? " " + unit : "") + " done" + (left > 0.0001 ? "; at this pace the last one is done " + fmtDayMs(finish) + "." : ".");
+  }
+
+  /* ---------------------------------------------------------------- week */
+  const WK_BANDS = [["morning", "Morning"], ["day", "Day"], ["evening", "Evening"]];
+  const WK_DOW = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+  function drawWeek(st, W, H, P) {
+    const s = st.series, inst = st.opts.inst;
+    const days = Array.isArray(s.days) ? s.days.slice(0, 7) : [];
+    const gap = 4, x0 = 8, x1 = W - 8;
+    const cw = (x1 - x0 - gap * 6) / 7;
+    const rowH = 28, top = 24;
+    const prev = st.weekPrev || null;
+    const next = {};
+    const fade = !reduced() && prev && st.opts.live !== false;
+    const counts = { focus: 0, family: 0, spill: 0 };
+    days.forEach((dy, i) => {
+      const cx = x0 + i * (cw + gap);
+      P.push('<text class="ch-lbl ch-lbl--ink" x="' + r1(cx + cw / 2) + '" y="14" text-anchor="middle">' + esc(upper(dy.label || WK_DOW[i]).slice(0, 3)) + "</text>");
+      WK_BANDS.forEach((b, j) => {
+        const state = dy[b[0]] || "free";
+        const key = i + ":" + b[0];
+        next[key] = state;
+        if (counts[state] != null) counts[state]++;
+        const chg = fade && prev[key] != null && prev[key] !== state ? " ch-wk--chg" : "";
+        P.push('<rect class="ch-wk ch-wk--' + esc(state) + chg + '" x="' + r1(cx) + '" y="' + (top + j * (rowH + gap)) + '" width="' + r1(cw) + '" height="' + rowH + '" rx="4"/>');
+      });
+    });
+    st.weekPrev = next;
+    // legend
+    const ly = top + 3 * rowH + 2 * gap + 22;
+    const items = [["focus", counts.focus + " focus"], ["family", counts.family + " family"], ["spill", counts.spill + " spill"]];
+    let lx = x0;
+    items.forEach((it) => {
+      P.push('<rect class="ch-wk ch-wk--' + it[0] + '" x="' + lx + '" y="' + (ly - 9) + '" width="10" height="10" rx="2"/>');
+      P.push('<text class="ch-lbl ch-lbl--ink" x="' + (lx + 15) + '" y="' + ly + '">' + esc(upper(it[1])) + "</text>");
+      lx += 15 + monoW(it[1], 9.5) + 16;
+    });
+    const slack = isNum(s.slack) ? s.slack : 0;
+    const sp = "SPARE IN THE WEEK " + fmt(slack, "hours", inst);
+    P.push('<text class="ch-wk__spare' + (slack < 0 ? " is-short" : "") + '" x="' + x0 + '" y="' + (ly + 22) + '">' + esc(sp) + "</text>");
+    st.summary = counts.focus + " focus blocks, " + counts.family + " family times, " + counts.spill + " evenings that spill; " + fmt(slack, "hours", inst) + " spare in the work week.";
+  }
+
   /* ---------------------------------------------------------------- ghost band */
   function ghostOf(st) {
     const o = st.opts;
@@ -466,8 +587,9 @@
   function draw(st) {
     const o = st.opts, s = st.series;
     const W = width(st);
-    const mainH = o.height || 140;
-    const g = o.compact ? null : ghostOf(st);
+    const mainH = o.height || (s && s.type === "week" ? 188 : s && s.type === "progress" ? 176 : 140);
+    const own = s && (s.type === "progress" || s.type === "week");
+    const g = o.compact || own ? null : ghostOf(st);
     // the ghost line is the one score in the app: it gets real room once there is a promise
     const bandH = g ? (g.status && g.status !== "none" ? 124 : 84) : 0;
     const H = mainH + bandH;
@@ -480,6 +602,8 @@
     else if (s.type === "timeline") drawTimeline(st, W, mainH, P);
     else if (s.type === "stackedBar") drawBars(st, W, mainH, P);
     else if (s.type === "gauge") drawGauge(st, W, mainH, P);
+    else if (s.type === "progress") drawProgress(st, W, mainH, P);
+    else if (s.type === "week") drawWeek(st, W, mainH, P);
     if (g) drawGhost(st, g, W, mainH + 4, bandH - 4, P);
     const svg = st.svg;
     svg.setAttribute("viewBox", "0 0 " + W + " " + H);
@@ -617,6 +741,7 @@
     const ts = pts.map((p) => p.t);
     const vs = pts.map((p) => p.v);
     if (has) { ts.push(g.start, g.end); vs.push(g.baseline, g.target); }
+    if (isNum(g.total)) vs.push(g.total);
     ts.push(now);
     let t0 = Math.min(...ts), t1 = Math.max(...ts);
     if (!(t1 > t0)) { t0 -= DAY; t1 += DAY; }

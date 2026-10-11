@@ -103,10 +103,106 @@
     ];
     if (o.description) lines.push("DESCRIPTION:" + icsText(o.description));
     if (o.rrule) lines.push("RRULE:" + String(o.rrule).replace(/[\r\n]/g, ""));
-    lines.push("TRANSP:TRANSPARENT",
+    lines.push("TRANSP:" + (o.busy ? "OPAQUE" : "TRANSPARENT"),
       "BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsText(o.title || "Workbench check-in"), "TRIGGER:-PT0M", "END:VALARM",
       "END:VEVENT", "END:VCALENDAR");
     return lines.map(icsFold).join("\r\n") + "\r\n";
+  }
+  /* buildICSMulti([{uid, title, description, start:ms, minutes, rrule?, busy?}], stamp?) -> one VCALENDAR with several VEVENTs */
+  function buildICSMulti(events, stamp) {
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Workbench//Week//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+    (events || []).forEach((o, i) => {
+      const start = isNum(o.start) ? o.start : Date.now();
+      const minutes = Math.max(5, Math.round(o.minutes || 30));
+      lines.push("BEGIN:VEVENT",
+        "UID:" + icsText(o.uid || ("wb-" + start + "-" + i)) + "@workbench",
+        "DTSTAMP:" + icsUTC(isNum(stamp) ? stamp : Date.now()),
+        "DTSTART:" + icsLocal(start),
+        "DTEND:" + icsLocal(start + minutes * 60000),
+        "SUMMARY:" + icsText(o.title || "Workbench"));
+      if (o.description) lines.push("DESCRIPTION:" + icsText(o.description));
+      if (o.rrule) lines.push("RRULE:" + String(o.rrule).replace(/[\r\n]/g, ""));
+      lines.push("TRANSP:" + (o.busy ? "OPAQUE" : "TRANSPARENT"), "END:VEVENT");
+    });
+    lines.push("END:VCALENDAR");
+    return lines.map(icsFold).join("\r\n") + "\r\n";
+  }
+  /* ---- start times for the work & home molds (local time) */
+  function atTime(d, h, m) { const x = new Date(d.getTime()); x.setHours(h, m || 0, 0, 0); return x; }
+  function addDays(d, n) { const x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+  /* focusStart(workSide, now) -> ms : work → next weekday 09:00 (today if before 08:30); home → next Saturday 10:00 (tomorrow if today is Fri/Sat) */
+  function focusStart(workSide, now) {
+    const t = isNum(now) ? now : Date.now();
+    const d = new Date(t);
+    const day = d.getDay();
+    if (workSide) {
+      if (day >= 1 && day <= 5 && d.getHours() * 60 + d.getMinutes() < 8 * 60 + 30) return atTime(d, 9, 0).getTime();
+      let x = addDays(d, 1);
+      while (x.getDay() === 0 || x.getDay() === 6) x = addDays(x, 1);
+      return atTime(x, 9, 0).getTime();
+    }
+    if (day === 5 || day === 6) return atTime(addDays(d, 1), 10, 0).getTime();
+    return atTime(addDays(d, (6 - day + 7) % 7 || 7), 10, 0).getTime();
+  }
+  function saturdayStart(now) {
+    const t = isNum(now) ? now : Date.now();
+    const d = new Date(t);
+    if (d.getDay() === 6 && d.getHours() < 10) return atTime(d, 10, 0).getTime();
+    return atTime(addDays(d, (6 - d.getDay() + 7) % 7 || 7), 10, 0).getTime();
+  }
+  /* nextDow(now, dow 0=Mon..6=Sun) -> the next date with that weekday, starting tomorrow */
+  function nextDow(now, dow) {
+    const d = addDays(new Date(now), 1);
+    const want = (dow + 1) % 7;
+    while (d.getDay() !== want) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  const DOW3 = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const BYDAY = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+  function hm(str) { const m = /^(\d{1,2}):(\d{2})$/.exec(String(str || "")); return m ? [+m[1], +m[2]] : [9, 0]; }
+  /* clockRange("18:00", 180) -> "6–9 PM" ; ("08:00", 240) -> "8 AM–12" */
+  function clockRange(start, minutes) {
+    const a = hm(start);
+    const endMin = a[0] * 60 + a[1] + minutes;
+    const eh = Math.floor(endMin / 60) % 24, em = endMin % 60;
+    const ap = (h) => (h >= 12 ? "PM" : "AM");
+    const h12 = (h) => h % 12 || 12;
+    const one = (h, m) => h12(h) + (m ? ":" + pad(m) : "");
+    if (ap(a[0]) === ap(eh)) return one(a[0], a[1]) + "–" + one(eh, em) + " " + ap(eh);
+    return one(a[0], a[1]) + " " + ap(a[0]) + "–" + (eh === 12 && !em ? "12" : one(eh, em) + " " + ap(eh));
+  }
+  /* weekEvents(inst, now) -> [{uid,title,description,start,minutes,rrule,busy,kind,dow,time}] from WB.molds.weekPlan */
+  function weekEvents(inst, now) {
+    if (!has("molds", "weekPlan")) return [];
+    const plan = safe("weekPlan", () => M().weekPlan(inst), null);
+    if (!plan) return [];
+    const t = isNum(now) ? now : nowMs();
+    const out = [];
+    const add = (kind, list, title, desc, busy) => (list || []).forEach((b, i) => {
+      const hh = hm(b.start);
+      const start = atTime(nextDow(t, b.dow), hh[0], hh[1]).getTime();
+      out.push({ uid: "wb-" + inst.id + "-" + kind + "-" + i, title, description: desc, start, minutes: b.minutes, busy,
+        rrule: "FREQ=WEEKLY;COUNT=4", kind, dow: b.dow, time: b.start });
+    });
+    add("focus", plan.focus, "Deep focus", "Protected by Workbench. Two hours, no meetings.", true);
+    add("family", plan.family, "Family evening", "Protected by Workbench. Work waits.", false);
+    add("morning", plan.mornings, "Protected morning", "Protected by Workbench. Nothing from work.", false);
+    return out;
+  }
+  const WEEK_KIND = { focus: ["focus block", "focus blocks"], family: ["family evening", "family evenings"], morning: ["protected morning", "protected mornings"] };
+  /* weekGroups(events) -> [{kind, text}] e.g. "3 focus blocks · Mon Tue Wed 9–11 AM" */
+  function weekGroups(events) {
+    const groups = [];
+    (events || []).forEach((e) => {
+      let g = groups.find((x) => x.kind === e.kind && x.time === e.time);
+      if (!g) { g = { kind: e.kind, time: e.time, minutes: e.minutes, days: [] }; groups.push(g); }
+      g.days.push(DOW3[e.dow]);
+    });
+    return groups.map((g) => ({ kind: g.kind, text: g.days.length + " " + WEEK_KIND[g.kind][g.days.length === 1 ? 0 : 1] + " · " + g.days.join(" ") + " " + clockRange(g.time, g.minutes) }));
+  }
+  function nextStepOf(inst) {
+    const st = (inst && inst.steps || []).slice().sort((a, b) => (a.n || 0) - (b.n || 0)).find((x) => x && !x.done && x.text);
+    return st ? String(st.text) : "";
   }
   /* The reminder time: 9:00 local on the check day; if that has passed, the next half hour from now. */
   function reminderStart(checkAt, now) {
@@ -126,6 +222,9 @@
     dial: "Photograph your next bill and it lands here.",
     countdown: "Once it's done, photograph the slip and it lands here.",
     reset: "Photograph the corner after and it lands here.",
+    project: "Mark them done as you go and the line fills in.",
+    zones: "An after photo of each zone fills the map.",
+    week: "Tell me how many evenings you really got.",
   };
   function num(v) { return fmt(v, "num"); }
   function plural(n, one, many) { return Math.abs(n - 1) < 1e-9 ? one : many; }
@@ -160,6 +259,14 @@
         const n = Math.round(value);
         return n + plural(n, " move", " moves") + (isNum(out.minutesNeeded) ? ", about " + fmt(out.minutesNeeded, "min", inst) : "") + ".";
       }
+      case "project":
+        return num(value) + " a week, done by " + (isNum(out.finish) ? fmt(out.finish, "day", inst) : "…") + ".";
+      case "zones":
+        return num(value) + plural(value, " zone", " zones") + " a week, done by " + (isNum(out.finish) ? fmt(out.finish, "day", inst) : "…") + ".";
+      case "week": {
+        const n = Math.round(value);
+        return n + plural(n, " family evening", " family evenings") + ", " + (isNum(out.displaced) ? fmt(out.displaced, "hours", inst) : "0 h") + " moves into the day.";
+      }
       default: {
         const vv = v[varId];
         return (vv ? vv.label + ": " : "") + fmt(value, vv ? vv.format : "num", inst) + ".";
@@ -186,7 +293,8 @@
       it = { varId, value, baseline: base ? base.primary : 0, target: tgt ? (isNum(tgt.outcome) ? tgt.outcome : tgt.primary) : 0,
         outputId: (d && d.primary) || "", committedAt: t, checkAt: isNum(checkAt) ? checkAt : t + 7 * 86400000, status: "open", actionId: null };
     }
-    if (payload && isNum(payload.baseline)) it.baseline = payload.baseline;
+    const dm = moldDef(inst);
+    if (payload && isNum(payload.baseline) && !(dm && dm.tracks === "done")) it.baseline = payload.baseline;
     if (!isNum(it.baseline)) it.baseline = 0;
     if (!isNum(it.target)) it.target = it.baseline;
     it.status = "open";
@@ -195,6 +303,12 @@
   }
 
   /* ------------------------------------------------------------ act choice */
+  const ACT_LABEL_BY = {
+    project: { ics: "A 25-minute focus block", drive: "A brief in Google Drive", draft: "A note to my collaborator" },
+    zones: { ics: "A weekly zone on my calendar", mission: "Start the next zone now" },
+    week: { ics: "The week on my calendar" },
+  };
+  const actLabel = (inst, x) => ((ACT_LABEL_BY[inst.mold] || {})[x]) || ACT_LABEL[x] || x;
   const ACT_LABEL = {
     ics: "A check-in on my calendar",
     draft: "A Gmail draft",
@@ -207,6 +321,14 @@
     const acts = (d && Array.isArray(d.acts) && d.acts.length) ? d.acts : ["ics"];
     const c = caps();
     const out = [];
+    if (inst.mold === "week") return ["ics"];
+    if (inst.mold === "zones") return ["mission", "ics"];
+    if (inst.mold === "project") {
+      out.push("ics");
+      if (!inst.demo && usable(c.drive)) out.push("drive");
+      if (inst.contact && inst.contact.to && emailsOf(inst).length) out.push("draft");
+      return out;
+    }
     acts.forEach((a) => {
       if (a === "draft") { if (emailsOf(inst).length) out.push("draft"); }
       else if ((a === "mission" || a === "ics") && out.indexOf(a) < 0) out.push(a);
@@ -218,6 +340,7 @@
   /* chooseAct(inst): exactly one prepared act. Claude's suggestion wins when it is allowed. */
   function chooseAct(inst) {
     const opts = actOptions(inst);
+    if (inst && (inst.mold === "project" || inst.mold === "zones" || inst.mold === "week")) return opts[0];
     const hint = inst && inst.act && inst.act.type;
     if (hint && opts.indexOf(hint) >= 0) return hint;
     if (opts.indexOf("draft") >= 0) return "draft";
@@ -230,10 +353,12 @@
     if (inst.mold === "leak") return tgt === 0 ? ["cancel", "pause", "ask"] : ["pause", "cancel", "ask"];
     if (inst.mold === "perUse") return tgt === 0 ? ["cancel", "ask", "pause"] : ["ask", "pause", "cancel"];
     if (inst.mold === "countdown") return /return|refund|exchange/.test(k) ? ["return", "ask"] : ["renew", "ask", "cancel"];
+    if (inst.mold === "project") return ["update"];
     return ["ask"];
   }
-  const PURPOSE_LABEL = { cancel: "Cancel", pause: "Pause", return: "Return", ask: "Ask", renew: "Before it renews" };
+  const PURPOSE_LABEL = { cancel: "Cancel", pause: "Pause", return: "Return", ask: "Ask", renew: "Before it renews", update: "Update" };
   const PURPOSE_CARD = {
+    update: "Draft an update to ",
     cancel: "Draft a cancellation to ", pause: "Draft a pause request to ", return: "Draft a return request to ",
     ask: "Draft a question to ", renew: "Draft a renewal question to ",
   };
@@ -331,9 +456,11 @@
     let act = o.act && options.indexOf(o.act) >= 0 ? o.act : chooseAct(inst);
 
     const st = { pending: null, closed: false, ctrl: null, writing: false, disposers: [] };
-    const pf = primaryFormat(inst);
     const d = moldDef(inst);
-    const outLabel = d && d.outputs && d.outputs[d.primary] ? d.outputs[d.primary].label : "";
+    const counts = !!(d && d.tracks === "done");   // project / zones: the promise is a done count, not a day
+    const pf = counts ? "num" : primaryFormat(inst);
+    const outLabel = counts ? (inst.mold === "zones" ? "zones clear" : String((inst.words && inst.words.unit) || "pieces") + " done")
+      : d && d.outputs && d.outputs[d.primary] ? d.outputs[d.primary].label : "";
 
     // a deadline is not a "from → to" number: say how much room is left and when you act
     const cd = inst.mold === "countdown" ? compute(inst, { [intention.varId]: intention.value }) : null;
@@ -378,7 +505,7 @@
       const others = options.filter((x) => x !== act);
       if (!others.length || st.done) return;
       switchRow.appendChild(el("span", { class: "wb-micro act-switch__lead", text: "Or instead" }));
-      others.forEach((x) => switchRow.appendChild(el("button", { type: "button", class: "act-switch__btn", text: ACT_LABEL[x] || x,
+      others.forEach((x) => switchRow.appendChild(el("button", { type: "button", class: "act-switch__btn", text: actLabel(inst, x),
         on: { click: () => { if (st.writing) return; act = x; renderCard(); } } })));
     }
 
@@ -386,48 +513,124 @@
       disposeHolds();
       if (st.ctrl) { try { st.ctrl.abort(); } catch (e) { /* ignore */ } st.ctrl = null; }
       cardSlot.textContent = "";
-      const card = act === "draft" ? draftCard() : act === "mission" ? missionCard() : act === "drive" ? driveCard() : icsCard();
+      const card = act === "draft" ? draftCard() : act === "mission" ? missionCard() : act === "drive" ? driveCard() : inst.mold === "week" ? weekCard() : icsCard();
       cardSlot.appendChild(card);
       renderSwitch();
     }
 
     /* ---- .ics */
-    function icsCard() {
-      const start = reminderStart(intention.checkAt, nowMs());
+    function icsSpec() {
+      const t = nowMs();
+      if (inst.mold === "project") {
+        const next = nextStepOf(inst);
+        const start = focusStart((WB.molds && WB.molds.sideOf ? safe("sideOf", () => WB.molds.sideOf(inst), "home") : "home") === "work", t);
+        const w = inst.words || {};
+        const dn = inst.vars && inst.vars.done ? inst.vars.done.value : 0, tt = inst.vars && inst.vars.total ? inst.vars.total.value : 0;
+        const title = "Focus: " + (next || "next step on " + (inst.title || "the project"));
+        const desc = (inst.title || "Project") + ": " + num(dn) + " of " + num(tt) + " " + (w.unit || "pieces") + " done. Next: " +
+          (next || "the next piece") + ". Open Workbench and mark it done.";
+        return { start, minutes: 25, text: buildICS({ uid: "wb-" + inst.id + "-" + intention.committedAt, title, description: desc, start, minutes: 25, stamp: t, busy: true }),
+          filename: "workbench-" + slug(inst.title) + "-focus.ics", head: "Add a 25-minute focus block", step: next || "Next step on " + (inst.title || "the project"),
+          meta: fmtDay(start).toUpperCase() + " · " + timeLabel(start) + " · 25 MIN · .ICS FILE", toast: "Focus block saved for " + fmtDay(start) + ". Open the file to add it.", recurring: false };
+      }
+      if (inst.mold === "zones") {
+        const start = saturdayStart(t);
+        const st = M() && M().zoneStats ? safe("zoneStats", () => M().zoneStats(inst), null) : null;
+        const left = st ? st.left : 1;
+        const n = Math.max(1, Math.min(7, Math.round(isNum(intention.value) ? intention.value : 1)));
+        const days = ["SA", "WE", "SU", "TH", "TU", "MO", "FR"].slice(0, n).join(",");
+        const rrule = "FREQ=WEEKLY;BYDAY=" + days + ";COUNT=" + Math.max(1, Math.min(12, left));
+        const title = (inst.title || "Zones") + ": one zone";
+        const desc = (inst.title || "Zones") + ": clear one zone. Open Workbench, start the next zone, and take the after photo.";
+        return { start, minutes: 30, text: buildICS({ uid: "wb-" + inst.id + "-" + intention.committedAt, title, description: desc, start, minutes: 30, rrule, stamp: t }),
+          filename: "workbench-" + slug(inst.title) + "-zones.ics", head: "Add a weekly zone to my calendar",
+          meta: fmtDay(start).toUpperCase() + " · " + timeLabel(start) + " · 30 MIN · " + n + " A WEEK · .ICS FILE", toast: "Weekly zone saved. Open the file to add it.", recurring: true };
+      }
+      const start = reminderStart(intention.checkAt, t);
       const recurring = inst.mold === "perUse";
+      return { start, text: icsFor(inst, intention, start), recurring,
+        filename: "workbench-" + slug(inst.title) + (inst.mold === "countdown" ? "-act-by" : "-check-in") + ".ics",
+        head: inst.mold === "countdown" ? "Add an act-by reminder to my calendar" : "Add a check-in to my calendar",
+        meta: fmtDay(start).toUpperCase() + " · " + timeLabel(start) + (recurring ? " · EVERY 2 WEEKS" : "") + " · .ICS FILE",
+        toast: "Check-in saved for " + fmtDay(start) + ". Open the file to add it." };
+    }
+    function icsCard() {
+      const spec = icsSpec();
+      const start = spec.start;
       const status = el("p", { class: "act-status", role: "status" });
-      const btn = tapButton("Add the check-in", () => run(), "primary");
+      const btn = tapButton(inst.mold === "project" ? "Add the focus block" : "Add the check-in", () => run(), "primary");
       const card = el("section", { class: "act-card", "aria-label": "Calendar check-in" },
         el("div", { class: "act-card__head" }, iconSpan("calendar"),
           el("div", { class: "act-card__text" },
-            el("h3", { class: "act-card__title", text: inst.mold === "countdown" ? "Add an act-by reminder to my calendar" : "Add a check-in to my calendar" }),
-            el("p", { class: "act-card__meta wb-micro", text: fmtDay(start).toUpperCase() + " · " + timeLabel(start) + (recurring ? " · EVERY 2 WEEKS" : "") + " · .ICS FILE" }))),
+            el("h3", { class: "act-card__title", text: spec.head }),
+            el("p", { class: "act-card__meta wb-micro", text: spec.meta }))),
+        spec.step ? el("div", { class: "act-step" },
+          el("p", { class: "act-step__text", text: spec.step }),
+          el("p", { class: "act-step__when wb-mono", text: fmtDay(start) + " · " + timeLabel(start) + " · 25 min" })) : null,
         status, btn);
       let busy = false;
       async function run() {
         if (busy) return;
         busy = true; btn.disabled = true; status.textContent = "SAVING THE FILE…";
-        const text = icsFor(inst, intention, start);
-        const filename = "workbench-" + slug(inst.title) + (inst.mold === "countdown" ? "-act-by" : "-check-in") + ".ics";
-        let r = "declined";
-        try { r = has("ai", "download") ? await WB.ai.download(filename, text, "text/calendar") : (blobDownload(filename, text) ? "fallback" : "declined"); }
-        catch (e) { r = blobDownload(filename, text) ? "fallback" : "declined"; }
+        const text = spec.text, filename = spec.filename;
+        const r = await saveCalendar(filename, text);
         busy = false; btn.disabled = false;
         if (st.closed) return;
         if (r === "declined") { status.textContent = "Not saved. Tap again when you want it."; return; }
-        finish("ics", { filename, start, recurring }, { saved: r }, "Check-in saved for " + fmtDay(start) + ". Open the file to add it.", true);
+        finish("ics", { filename, start, recurring: spec.recurring }, { saved: r }, spec.toast, true);
       }
+      return card;
+    }
+    async function saveCalendar(filename, text) {
+      let r = "declined";
+      try { r = has("ai", "download") ? await WB.ai.download(filename, text, "text/calendar") : (blobDownload(filename, text) ? "fallback" : "declined"); }
+      catch (e) { r = blobDownload(filename, text) ? "fallback" : "declined"; }
+      return r;
+    }
+
+    /* ---- week: several protected blocks in one .ics */
+    function weekCard() {
+      const events = weekEvents(inst, nowMs());
+      const groups = weekGroups(events);
+      const status = el("p", { class: "act-status", role: "status" });
+      const list = el("ul", { class: "act-week", "aria-label": "Blocks in the file" });
+      groups.forEach((g) => list.appendChild(el("li", { class: "act-week__row act-week__row--" + g.kind }, el("span", { class: "act-week__dot", "aria-hidden": "true" }), el("span", { class: "act-week__text", text: g.text }))));
+      if (!groups.length) list.appendChild(el("li", { class: "act-week__row", text: "No blocks to protect yet. Give one back to the week first." }));
+      const actRow = el("div", { class: "act-card__do" });
+      const card = el("section", { class: "act-card", "aria-label": "Week blocks" },
+        el("div", { class: "act-card__head" }, iconSpan("calendar"),
+          el("div", { class: "act-card__text" },
+            el("h3", { class: "act-card__title", text: "Put the week on my calendar" }),
+            el("p", { class: "act-card__meta wb-micro", text: events.length + (events.length === 1 ? " EVENT" : " EVENTS") + " · 4 WEEKS · .ICS FILE" }))),
+        list, status, actRow);
+      let busy = false;
+      async function run() {
+        if (busy || !events.length) return;
+        busy = true; status.textContent = "SAVING THE FILE…";
+        const text = buildICSMulti(events, nowMs());
+        const r = await saveCalendar("week-blocks.ics", text);
+        busy = false;
+        if (st.closed) return;
+        if (r === "declined") { status.textContent = "Not saved. Hold again when you want it."; return; }
+        finish("ics", { filename: "week-blocks.ics", events: events.length }, { saved: r }, "Week blocks saved. Open the file to add them.", true);
+      }
+      if (events.length) actRow.appendChild(holdButton("Add the blocks", run, st.disposers));
       return card;
     }
 
     /* ---- mission */
     function missionCard() {
-      const minutes = guessMinutes(inst);
+      const zoneNext = inst.mold === "zones" && has("molds", "nextZone") ? safe("nextZone", () => M().nextZone(inst), null) : null;
+      const minutes = zoneNext ? Math.round(zoneNext.minutes || 0) : guessMinutes(inst);
       const status = el("p", { class: "act-status", role: "status" });
       const stop = el("button", { type: "button", class: "act-inline-btn", text: "Stop", hidden: true, on: { click: () => { if (st.ctrl) st.ctrl.abort(); } } });
-      const btn = tapButton("Start the mission", () => run(), "primary");
-      const title = minutes ? "Start a " + minutes + "-minute mission" : "Start a short mission";
-      const sub = inst.mold === "spoil" ? "PINNED ON THIS SHELF · COOK TONIGHT" : inst.mold === "reset" ? "PINNED ON THIS PHOTO · AFTER PHOTO CHECKS IT" : "A FEW PHYSICAL STEPS · AFTER PHOTO CHECKS IT";
+      const btn = tapButton(zoneNext ? "Start now" : "Start the mission", () => run(), "primary");
+      const zname = zoneNext ? String(zoneNext.name || "next zone").replace(/^(the|a|an)\s+/i, "").replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()) : "";
+      const title = zoneNext ? "Start the " + zname + " now" + (minutes ? " · " + minutes + " min" : "")
+        : inst.mold === "zones" ? "Every zone is clear."
+        : minutes ? "Start a " + minutes + "-minute mission" : "Start a short mission";
+      if (inst.mold === "zones" && !zoneNext) btn.hidden = true;
+      const sub = zoneNext ? "PINNED ON YOUR PHOTO · AN AFTER PHOTO TURNS IT GREEN" : inst.mold === "spoil" ? "PINNED ON THIS SHELF · COOK TONIGHT" : inst.mold === "reset" ? "PINNED ON THIS PHOTO · AFTER PHOTO CHECKS IT" : "A FEW PHYSICAL STEPS · AFTER PHOTO CHECKS IT";
       const card = el("section", { class: "act-card", "aria-label": "Mission" },
         el("div", { class: "act-card__head" }, iconSpan("clock"),
           el("div", { class: "act-card__text" },
@@ -442,7 +645,7 @@
         const ctrl = new AbortController(); st.ctrl = ctrl;
         let mission = null, err = null;
         try {
-          mission = WB.mission && typeof WB.mission.plan === "function" ? await WB.mission.plan(id, { signal: ctrl.signal }) : null;
+          mission = WB.mission && typeof WB.mission.plan === "function" ? await WB.mission.plan(id, { signal: ctrl.signal, zoneId: zoneNext ? zoneNext.id : undefined }) : null;
         } catch (e) { err = e; }
         busy = false; st.writing = false; stop.hidden = true; btn.disabled = false; st.ctrl = null;
         if (st.closed) return;
@@ -454,7 +657,7 @@
         if (WB.mission && typeof WB.mission.linkAction === "function") WB.mission.linkAction(id, mission.id, action.id);
         st.undoable = false;
         sheet.close();
-        if (WB.router) WB.router.go("mission", { id });
+        if (WB.router) WB.router.go("mission", zoneNext ? { id, zoneId: zoneNext.id } : { id });
       }
       return card;
     }
@@ -465,7 +668,8 @@
       const live = !inst.demo && usable(c.gmail);
       const purposes = purposesFor(inst, intention);
       let purpose = purposes[0];
-      const who = (inst.words && inst.words.subject) || inst.title || "them";
+      const who = inst.mold === "project" ? ((inst.contact && inst.contact.name) || emailsOf(inst)[0] || inst.title || "them")
+        : (inst.words && inst.words.subject) || inst.title || "them";
       const titleEl = el("h3", { class: "act-card__title" });
       const setTitle = () => { titleEl.textContent = (PURPOSE_CARD[purpose] || "Draft a note to ") + who; };
       setTitle();
@@ -575,19 +779,32 @@
     function driveCard() {
       const status = el("p", { class: "act-status", role: "status" });
       const actRow = el("div", { class: "act-card__do" });
-      const fileTitle = "Workbench — " + (inst.title || "plan") + " — " + fmtDay(nowMs());
+      const isProject = inst.mold === "project";
+      let fileTitle = "Workbench — " + (inst.title || "plan") + " — " + fmtDay(nowMs());
       const card = el("section", { class: "act-card", "aria-label": "Google Drive file" },
         el("div", { class: "act-card__head" }, iconSpan("drive"),
           el("div", { class: "act-card__text" },
-            el("h3", { class: "act-card__title", text: "Save this plan to Google Drive" }),
-            el("p", { class: "act-card__meta wb-micro", text: "A SHORT TEXT FILE · ONLY IN YOUR DRIVE" }))),
-        el("pre", { class: "act-preview wb-mono", text: planText(inst, intention) }), status, actRow);
+            el("h3", { class: "act-card__title", text: isProject ? "Save a brief for the next step to Google Drive" : "Save this plan to Google Drive" }),
+            el("p", { class: "act-card__meta wb-micro", text: isProject ? "WRITTEN WHEN YOU HOLD · A SHORT TEXT FILE · ONLY IN YOUR DRIVE" : "A SHORT TEXT FILE · ONLY IN YOUR DRIVE" }))),
+        isProject ? (nextStepOf(inst) ? el("div", { class: "act-step" }, el("p", { class: "act-step__text", text: nextStepOf(inst) })) : null)
+          : el("pre", { class: "act-preview wb-mono", text: planText(inst, intention) }), status, actRow);
       let busy = false;
       async function save() {
         if (busy) return;
-        busy = true; status.textContent = "SAVING TO DRIVE…";
+        busy = true; status.textContent = isProject ? "WRITING THE BRIEF…" : "SAVING TO DRIVE…";
         let r = null, err = null;
-        try { r = await WB.ai.drive.create({ title: fileTitle, text: planText(inst, intention) }); } catch (e) { err = e; }
+        try {
+          let doc = { title: fileTitle, text: planText(inst, intention) };
+          if (isProject) {
+            let b = null;
+            try { b = has("forge", "writeBrief") ? await WB.forge.writeBrief(id, {}) : null; } catch (e) { b = null; }
+            if (!b || !b.text) b = { title: "Next step: " + (inst.title || "project"), text: "Workbench — " + (inst.title || "project") + "\n\nNext: " + (nextStepOf(inst) || "the next piece") + "\n" };
+            fileTitle = "Workbench — " + (b.title || inst.title || "brief") + " — " + fmtDay(nowMs());
+            doc = { title: fileTitle, text: String(b.text) };
+            status.textContent = "SAVING TO DRIVE…";
+          }
+          r = await WB.ai.drive.create(doc);
+        } catch (e) { err = e; }
         busy = false;
         if (r) {
           const url = pickUrl(r);
@@ -754,7 +971,7 @@
   }
 
   WB.actions = {
-    init, commit, openCommit, chooseAct, actOptions, commitTitle, buildICS, reminderStart, markAction, errText,
-    _test: { icsFold, icsText, makeIntention, purposesFor },
+    init, commit, openCommit, chooseAct, actOptions, commitTitle, buildICS, buildICSMulti, reminderStart, markAction, errText,
+    _test: { icsFold, icsText, makeIntention, purposesFor, focusStart, saturdayStart, weekEvents, weekGroups, clockRange },
   };
 })();

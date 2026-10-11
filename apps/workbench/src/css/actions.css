@@ -381,3 +381,31 @@ button.msn-pin::before { content: ""; position: absolute; inset: -11px; border-r
 .msn-room__box { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: var(--hair) solid var(--ink); border-radius: 4px; font-size: 13px; color: var(--paper); }
 .msn-room.is-on { color: var(--ink); }
 .msn-room.is-on .msn-room__box { background: var(--ink); }
+
+/* ================================================================ work & home additions */
+/* the next step, previewed with its time */
+.act-step {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--s3); background: var(--paper);
+  border: var(--hair) solid var(--rule); border-left: 3px solid var(--side-mark); border-radius: var(--r-chip);
+}
+.act-step__text { margin: 0; font-family: var(--font-serif); font-size: 17px; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.act-step__when { margin: 0; font-size: 12px; letter-spacing: .02em; color: var(--ink-3); }
+
+/* the week's protected blocks, grouped */
+.act-week { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.act-week__row { display: flex; align-items: center; gap: var(--s3); min-height: 32px; font-size: var(--t-small); line-height: 1.35; color: var(--ink); }
+.act-week__dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--wk-work); border: var(--hair) solid var(--rule); }
+.act-week__row--focus .act-week__dot { background: var(--wk-focus); border-color: var(--wk-focus); }
+.act-week__row--family .act-week__dot, .act-week__row--morning .act-week__dot { background: var(--wk-family); border-color: var(--wk-family); }
+.act-week__text { min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+/* a zone on the user's own photo: everything else dimmed, the zone outlined */
+.msn-zone { position: absolute; inset: 0; pointer-events: none; }
+.msn-zone__dim { position: absolute; background: var(--halo); }
+.msn-zone__box { position: absolute; border: 2px solid var(--zone-next); border-radius: 3px; box-sizing: border-box; }
+.msn-zone-note { margin: 0; font-size: 20px; line-height: 1.3; color: var(--ink); }
+.msn-zone-note.is-clear { color: var(--good); }
+.msn-locked { margin: 0; font-size: 20px; line-height: 1.3; color: var(--ink-2); }
+
+.rm-locked { margin: 0; padding: var(--s5) var(--s4); font-size: 20px; line-height: 1.3; color: var(--ink-2); text-align: center; }

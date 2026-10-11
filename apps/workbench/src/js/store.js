@@ -48,9 +48,25 @@
   function lsJSON(k) { const s = lsGet(k); if (!s) return null; try { return JSON.parse(s); } catch (e) { return null; } }
 
   /* ------------------------------------------------------------ shapes */
+  const FOCUS_KEYS = ["space", "social", "design3d", "work", "family", "budget"];
+  const MAX_LOOPS = 12;
+  function normFocus(f) {
+    const out = [];
+    (Array.isArray(f) ? f : []).forEach((k) => { if (FOCUS_KEYS.indexOf(k) >= 0 && out.indexOf(k) < 0) out.push(k); });
+    return out;
+  }
+  function normLoops(list) {
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach((l) => {
+      if (!isObj(l) || typeof l.id !== "string" || typeof l.text !== "string" || !l.text.trim()) return;
+      out.push({ id: l.id, text: l.text.trim().slice(0, 90), at: isNum(l.at) ? l.at : 0, instrumentId: typeof l.instrumentId === "string" ? l.instrumentId : null,
+        first: !!l.first, done: !!l.done });
+    });
+    return out.slice(-MAX_LOOPS);
+  }
   function newBench(t) {
-    return { v: 1, profile: { createdAt: t, firstRunDone: false, lastOpenAt: t, prevOpenAt: 0, gmailAsked: false, theme: "auto" },
-      order: [], melted: [], sessions: [], updatedAt: 0 };
+    return { v: 1, profile: { createdAt: t, firstRunDone: false, lastOpenAt: t, prevOpenAt: 0, gmailAsked: false, theme: "auto", side: "home", sideAt: 0, focus: [] },
+      order: [], melted: [], sessions: [], loops: [], updatedAt: 0 };
   }
   function normBench(b, t) {
     const d = newBench(t);
@@ -65,10 +81,14 @@
         prevOpenAt: isNum(p.prevOpenAt) ? p.prevOpenAt : 0,
         gmailAsked: !!p.gmailAsked,
         theme: p.theme === "light" || p.theme === "dark" ? p.theme : "auto",
+        side: p.side === "work" ? "work" : "home",
+        sideAt: isNum(p.sideAt) ? p.sideAt : 0,
+        focus: normFocus(p.focus),
       },
       order: Array.isArray(b.order) ? b.order.filter((x) => typeof x === "string") : [],
       melted: Array.isArray(b.melted) ? b.melted.filter(isObj).slice(-50) : [],
       sessions: Array.isArray(b.sessions) ? b.sessions.filter(isObj).slice(-30) : [],
+      loops: normLoops(b.loops),
       updatedAt: isNum(b.updatedAt) ? b.updatedAt : 0,
     };
   }
@@ -87,6 +107,18 @@
     if (i.observations.length > 60) i.observations = i.observations.slice(-60);
     if (i.actions.length > 20) i.actions = i.actions.slice(-20);
     if (i.photos.length > 6) i.photos = i.photos.slice(-6);
+    if (i.side !== "work" && i.side !== "home" && i.side !== "both") {
+      const m = M();
+      i.side = m && typeof m.sideOf === "function" ? m.sideOf({ mold: i.mold }) : "home";
+    }
+    if (!Array.isArray(i.zones)) i.zones = [];
+    i.zones.forEach((z) => {
+      if (!isObj(z)) return;
+      z.state = z.state === "done" ? "done" : "todo";
+      if (!isNum(z.doneAt)) z.doneAt = null;
+      if (z.by !== "claude" && z.by !== "self") z.by = null;
+      if (typeof z.afterThumb !== "string") z.afterThumb = null;
+    });
     return i;
   }
 
@@ -230,14 +262,27 @@
     (L.sessions || []).concat(C.sessions || []).forEach((s) => { if (!sk[s.at]) { sk[s.at] = 1; sessions.push(s); } });
     sessions.sort((a, b) => (a.at || 0) - (b.at || 0));
     const prevCloudOpen = C.profile && isNum(C.profile.lastOpenAt) && C.profile.lastOpenAt < bootAt ? C.profile.lastOpenAt : 0;
+    const lp = L.profile || {}, cp = C.profile || {};
+    const sideWin = (cp.sideAt || 0) > (lp.sideAt || 0) ? cp : lp;
+    const lk = {};
+    const loops = [];
+    (L.loops || []).concat(C.loops || []).forEach((l) => {
+      const o = lk[l.id];
+      if (!o) { lk[l.id] = Object.assign({}, l); loops.push(lk[l.id]); }
+      else if (l.done) o.done = true;
+    });
+    loops.sort((a, b) => (a.at || 0) - (b.at || 0));
     const profile = Object.assign({}, X.profile, W.profile, {
+      side: sideWin.side === "work" ? "work" : "home",
+      sideAt: sideWin.sideAt || 0,
+      focus: normFocus(W.profile && W.profile.focus),
       createdAt: Math.min(L.profile.createdAt || bootAt, (C.profile && C.profile.createdAt) || bootAt),
       firstRunDone: !!(L.profile.firstRunDone || (C.profile && C.profile.firstRunDone)),
       gmailAsked: !!(L.profile.gmailAsked || (C.profile && C.profile.gmailAsked)),
       lastOpenAt: L.profile.lastOpenAt,
       prevOpenAt: Math.max(L.profile.prevOpenAt || 0, prevCloudOpen),
     });
-    const bench = { v: 1, profile, order: W.order.slice(), melted: melted.slice(-50), sessions: sessions.slice(-30), updatedAt: Math.max(L.updatedAt || 0, C.updatedAt || 0) };
+    const bench = { v: 1, profile, order: W.order.slice(), melted: melted.slice(-50), sessions: sessions.slice(-30), loops: loops.slice(-MAX_LOOPS), updatedAt: Math.max(L.updatedAt || 0, C.updatedAt || 0) };
     return { bench, push: true, loserOrder: X.order || [], winnerAt: W.updatedAt || 0 };
   }
 
@@ -333,6 +378,14 @@
     try { list = WB.demo && typeof WB.demo.build === "function" ? WB.demo.build() || [] : []; } catch (e) { console.error("[WB.store] demo build", e); list = []; }
     const st = { bench: newBench(now()), instruments: {} };
     st.bench.profile.firstRunDone = true;
+    try {
+      const db = WB.demo && typeof WB.demo.bench === "function" ? WB.demo.bench() : null;
+      if (db) {
+        st.bench.profile.side = db.side === "home" ? "home" : "work";
+        st.bench.profile.sideAt = isNum(db.sideAt) ? db.sideAt : 0;
+        st.bench.loops = normLoops(db.loops);
+      }
+    } catch (e) { console.error("[WB.store] demo bench", e); }
     list.forEach((inst) => { if (validInst(inst)) { inst.demo = true; st.instruments[inst.id] = normInst(inst); st.bench.order.push(inst.id); } });
     // real instruments stay visible on the example bench
     real.bench.order.forEach((id) => { if (real.instruments[id] && !st.instruments[id]) { st.instruments[id] = real.instruments[id]; st.bench.order.push(id); } });
@@ -629,10 +682,74 @@
     return startCloud().then(() => api.state, () => api.state);
   }
 
+  /* ------------------------------------------------------------ side, loops, focus */
+  const sideBench = () => active().bench;
+  function side() { return sideBench().profile.side === "work" ? "work" : "home"; }
+  function sideAt() { const t = sideBench().profile.sideAt; return isNum(t) ? t : 0; }
+  function saveSideBench() { if (!demo) saveBench(); }
+  function loopId() {
+    let s = "";
+    while (s.length < 6) s += Math.random().toString(36).slice(2);
+    return "lp_" + s.slice(0, 6);
+  }
+  function setSide(to, o) {
+    if (!inited) init();
+    const next = to === "work" ? "work" : "home";
+    const b = sideBench();
+    const from = side();
+    const t = now();
+    const added = [];
+    const lines = o && Array.isArray(o.loops) ? o.loops : [];
+    const fi = o && isNum(o.firstIndex) ? o.firstIndex : -1;
+    lines.forEach((l, idx) => {
+      const text = l && typeof l.text === "string" ? l.text.trim().slice(0, 90) : "";
+      if (!text) return;
+      added.push({ id: loopId(), text, at: t + idx, instrumentId: l && typeof l.instrumentId === "string" ? l.instrumentId : null, first: idx === fi, done: false });
+    });
+    /* a fresh clock-out list supersedes what was still open from the last one */
+    if (added.length) (b.loops || []).forEach((l) => { l.first = false; l.done = true; });
+    b.loops = (b.loops || []).concat(added).slice(-MAX_LOOPS);
+    b.profile.side = next;
+    b.profile.sideAt = t;
+    saveSideBench();
+    emit("side:changed", { side: next, from, at: t, loops: added.length });
+    return next;
+  }
+  function loops() { return (sideBench().loops || []).filter((l) => !l.done).map(clone); }
+  function doneLoop(id) {
+    const b = sideBench();
+    const l = (b.loops || []).find((x) => x.id === id);
+    if (!l || l.done) return false;
+    l.done = true;
+    saveSideBench();
+    emit("loops:changed", { id });
+    return true;
+  }
+  function focus() { return normFocus(real.bench.profile.focus); }
+  function setFocus(keys) {
+    if (!inited) init();
+    real.bench.profile.focus = normFocus(keys);
+    saveBench();
+    emit("focus:changed", { focus: real.bench.profile.focus.slice() });
+    return real.bench.profile.focus.slice();
+  }
+  const sideOfInst = (inst) => (M() && typeof M().sideOf === "function" ? M().sideOf(inst) : (inst && inst.side) || "home");
+  function visible() {
+    const list = all_();
+    return side() === "home" ? list.filter((i) => sideOfInst(i) !== "work") : list;
+  }
+  function isHidden(inst) {
+    return !!inst && side() === "home" && sideOfInst(inst) === "work" && (inst.createdAt || 0) < sideAt();
+  }
+  function modesOn() {
+    return focus().indexOf("work") >= 0 || all_().some((i) => sideOfInst(i) === "work");
+  }
+
   const api = {
     init, load, all: all_, get, upsert, update, melt, melted, addObservation, setIntention, addAction, saveBench, mode,
     enterDemo, exitDemo, session, ledger, putPhoto,
     /* extras beyond the contract */
+    side, sideAt, setSide, loops, doneLoop, focus, setFocus, visible, isHidden, modesOn,
     unmelt, flush: flushAll, isDemo: () => !!demo, profile: () => real.bench.profile,
     markEnded() { ses.ended = true; return session(); },
     /* undo of a commit made this session: it no longer counts as a future committed, or as money in play */

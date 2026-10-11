@@ -333,6 +333,11 @@
     spark: '<path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5M6.2 6.2l2.6 2.6M15.2 15.2l2.6 2.6M17.8 6.2l-2.6 2.6M8.8 15.2l-2.6 2.6"/>',
     wipe: '<rect x="3.5" y="5" width="17" height="14" rx="1"/><path d="M12 3v18"/><path d="M9 10l-2 2 2 2M15 10l2 2-2 2"/>',
     people: '<circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.5" cy="8.5" r="2.4"/><path d="M15.5 13.6c2.6-.3 4.6 1.4 5 4.4"/>',
+    home: '<path d="M4 11l8-6.5 8 6.5"/><path d="M6 9.5V19.5h12V9.5"/><path d="M10 19.5v-5h4v5"/>',
+    work: '<rect x="3.5" y="7.5" width="17" height="12" rx="1.5"/><path d="M9 7.5V5.5h6v2M3.5 13h17"/>',
+    grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    door: '<path d="M5 20.5V4.5h8v16M3.5 20.5h10"/><circle cx="10.5" cy="12.5" r=".6"/><path d="M16 12h5M18.5 9.5L21 12l-2.5 2.5"/>',
     export: '<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"/><path d="M5 13v6.5h14V13"/>',
   };
   function icon(name) {
@@ -721,6 +726,100 @@
     return theme;
   }
 
+  /* ================================================================ side + form controls */
+  function setSide(side, opts) {
+    const root = document.documentElement;
+    const prev = root.dataset.side || "";
+    const next = side === "work" || side === "home" ? side : "";
+    if (next) root.dataset.side = next; else delete root.dataset.side;
+    if (opts && opts.animate && next && next !== prev && !reducedMotion() && document.body) {
+      const d = el("div", { class: "wb-dusk" + (next === "work" ? " wb-dusk--dawn" : ""), "aria-hidden": "true" });
+      let gone = false;
+      const rm = () => { if (!gone) { gone = true; d.remove(); } };
+      d.addEventListener("animationend", rm);
+      document.body.appendChild(d);
+      setTimeout(rm, 700);
+    }
+    return next;
+  }
+
+  function chips(o) {
+    const opts = (o && o.options) || [];
+    let val = Array.isArray(o && o.value) ? o.value.slice() : (o && o.value ? [o.value] : []);
+    const multi = !!(o && o.multi);
+    const root = el("div", { class: "wb-chips", role: "group" });
+    if (o && o.label) root.setAttribute("aria-label", o.label);
+    const btns = opts.map((op) => {
+      const b = el("button", { type: "button", class: "wb-chip", "aria-pressed": "false", text: op.label });
+      b.addEventListener("click", () => {
+        const on = val.indexOf(op.key) >= 0;
+        if (multi) val = on ? val.filter((k) => k !== op.key) : val.concat(op.key);
+        else val = on ? [] : [op.key];
+        paint();
+        if (o && typeof o.onChange === "function") o.onChange(val.slice());
+      });
+      root.appendChild(b);
+      return b;
+    });
+    function paint() {
+      btns.forEach((b, i) => {
+        const on = val.indexOf(opts[i].key) >= 0;
+        b.classList.toggle("is-active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+    paint();
+    return { el: root, value: () => val.slice() };
+  }
+
+  function seg(o) {
+    const opts = (o && o.options) || [];
+    let val = o && o.value != null ? o.value : (opts[0] && opts[0].key);
+    const root = el("div", { class: "wb-seg", role: "radiogroup" });
+    if (o && o.label) root.setAttribute("aria-label", o.label);
+    const btns = opts.map((op, i) => {
+      const b = el("button", { type: "button", class: "wb-seg__opt", role: "radio", text: op.label });
+      b.addEventListener("click", () => pick(i));
+      b.addEventListener("keydown", (e) => {
+        const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!dir) return;
+        e.preventDefault();
+        pick((i + dir + opts.length) % opts.length, true);
+      });
+      root.appendChild(b);
+      return b;
+    });
+    function paint() {
+      btns.forEach((b, i) => {
+        const on = opts[i].key === val;
+        b.classList.toggle("is-active", on);
+        b.setAttribute("aria-checked", on ? "true" : "false");
+        b.tabIndex = on ? 0 : -1;
+      });
+    }
+    function pick(i, focus) {
+      val = opts[i].key;
+      paint();
+      if (focus) btns[i].focus();
+      if (o && typeof o.onChange === "function") o.onChange(val);
+    }
+    paint();
+    if (!opts.some((op) => op.key === val) && btns[0]) btns[0].tabIndex = 0;
+    return { el: root, value: () => val };
+  }
+
+  function field(o) {
+    const c = o || {};
+    const id = uid("fld");
+    const type = c.type === "number" || c.type === "email" ? c.type : "text";
+    const input = el("input", { class: "wb-input", id, type, autocomplete: "off" });
+    if (c.value != null) input.value = String(c.value);
+    ["placeholder", "inputmode", "min", "max", "step"].forEach((k) => { if (c[k] != null) input.setAttribute(k, String(c[k])); });
+    if (c.maxLength != null) input.maxLength = c.maxLength;
+    const root = el("div", { class: "wb-field" }, el("label", { class: "wb-field__label", for: id, text: c.label || "" }), input);
+    return { el: root, input };
+  }
+
   WB.bus = bus;
-  WB.ui = { sheet, toast, hold, pickPhoto, icon, coach, setTheme };
+  WB.ui = { sheet, toast, hold, pickPhoto, icon, coach, setTheme, setSide, chips, seg, field };
 })();

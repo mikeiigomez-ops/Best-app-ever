@@ -137,6 +137,8 @@
     if (inst.mold === "dial") return n + " " + (w.stepUnit || "steps");
     if (inst.mold === "countdown") return n + " early";
     if (inst.mold === "reset") return n + (Math.abs(value - 1) < 1e-9 ? " move" : " moves");
+    if (inst.mold === "project" || inst.mold === "zones") return n + " a week";
+    if (inst.mold === "week") return n + (Math.abs(value - 1) < 1e-9 ? " family evening" : " family evenings");
     return n;
   }
   function draggable(S, v) { return !S.readOnly && !!v && (v.kind === "lever" || v.origin !== "seen"); }
@@ -147,6 +149,22 @@
     const out = [];
     tokens(S.inst, S.ov).forEach((t) => { if (t.t === "var" && S.inst.vars[t.id] && S.inst.vars[t.id].kind === "lever") out.push(t.id); });
     return out;
+  }
+  function isLocked(inst) { return !!(inst && has("store", "isHidden") && call("store", "isHidden", inst)); }
+  function isTyped(inst) { return !!inst && (inst.mold === "project" || inst.mold === "week"); }
+  function tracksDone(inst) { const d = moldDef(inst); return !!(d && d.tracks === "done"); }
+  function zonesOf(inst) { return inst && Array.isArray(inst.zones) ? inst.zones.slice().sort((a, b) => (a.n || 0) - (b.n || 0)) : []; }
+  function nextZoneOf(inst) {
+    const z = has("molds", "nextZone") ? call("molds", "nextZone", inst) : null;
+    if (z !== undefined && z !== null) return z;
+    return zonesOf(inst).find((x) => x.state !== "done") || null;
+  }
+  function singular(u) {
+    const w = String(u || "piece");
+    if (/ies$/i.test(w)) return w.replace(/ies$/i, "y");
+    if (/(ses|xes|ches|shes)$/i.test(w)) return w.replace(/es$/i, "");
+    if (/s$/i.test(w) && !/ss$/i.test(w)) return w.slice(0, -1);
+    return w;
   }
   function caps() { return has("app", "caps") ? call("app", "caps") || null : null; }
   function storeGet(id) { return id && has("store", "get") ? call("store", "get", id) || null : null; }
@@ -177,6 +195,7 @@
     mounts.add(S);
     el.textContent = "";
     if (!inst) { renderMissing(S); return handleFor(S); }
+    if (!S.readOnly && isLocked(inst)) { buildLocked(S); return handleFor(S); }
     build(S);
     if (!S.readOnly) emit("instrument:open", { id: S.id });
     return handleFor(S);
@@ -204,6 +223,27 @@
     S.root.appendChild(box);
   }
 
+  /* "Home never shows work": a clocked-out work instrument renders only this card. No title, numbers, photo or steps. */
+  function buildLocked(S) {
+    S.locked = true;
+    const root = h("div", { class: "ins ins--locked", dataset: { mold: S.inst.mold } });
+    S.refs.wrap = root;
+    const top = h("header", { class: "ins-top" },
+      h("button", { class: "wb-iconbtn ins-top__back", type: "button", "aria-label": "Back", html: icon("back"),
+        on: { click: () => { if (has("router", "back")) WB.router.back(); } } }));
+    root.appendChild(top);
+    const card = h("div", { class: "ins-lock", role: "group", "aria-label": "Clocked out" },
+      h("span", { class: "wb-micro ins-lock__tag", text: "WORK · CLOCKED OUT" }),
+      h("p", { class: "ins-lock__line wb-serif", text: "Clocked out. This one waits for Clock in." }),
+      h("button", { class: "wb-btn wb-btn--primary ins-lock__btn", type: "button",
+        on: { click: () => {
+          if (has("bench", "clockIn")) call("bench", "clockIn");
+          else if (has("store", "setSide")) call("store", "setSide", "work");
+        } } }, h("span", { class: "wb-btn__label", text: "Clock in" })));
+    root.appendChild(card);
+    S.root.appendChild(root);
+  }
+
   function build(S) {
     const inst = S.inst;
     const root = h("div", { class: "ins" + (S.readOnly ? " ins--readonly" : "") + (S.develop ? " is-developing" : "") + (inst.demo ? " ins--demo" : ""), dataset: { mold: inst.mold } });
@@ -216,6 +256,8 @@
     body.appendChild(buildSpecimen(S));
     S.refs.sentence = h("p", { class: "ins-sentence wb-serif" });
     body.appendChild(S.refs.sentence);
+    S.refs.nextcard = h("div", { class: "ins-next", hidden: true });
+    body.appendChild(S.refs.nextcard);
     S.refs.strip = h("div", { class: "ins-strip", "aria-live": "polite", hidden: true });
     body.appendChild(S.refs.strip);
     S.refs.hinge = h("p", { class: "ins-hinge", hidden: true });
@@ -230,7 +272,7 @@
     body.appendChild(S.refs.conf);
     S.refs.note = h("p", { class: "ins-note wb-serif", hidden: true });
     body.appendChild(S.refs.note);
-    S.refs.next = h("p", { class: "ins-next", hidden: true });
+    S.refs.next = h("p", { class: "ins-keep", hidden: true });
     body.appendChild(S.refs.next);
     const hair = svgEl("svg", { class: "ins-hair", "aria-hidden": "true", focusable: "false" });
     S.refs.hair = hair;
@@ -327,7 +369,7 @@
   }
   function describeOrigins(inst) {
     const c = confOf(inst);
-    const src = inst.photo ? "a photo" : "your mail";
+    const src = inst.photo ? "a photo" : isTyped(inst) ? "what you typed" : "your mail";
     const when = inst.createdAt ? " on " + fmtDay(inst.createdAt) : "";
     return "Built from " + src + when + ". Measured " + c.measured + " of " + c.total + ".";
   }
@@ -352,6 +394,8 @@
     const inst = S.inst;
     const fig = h("figure", { class: "ins-spec" });
     S.refs.spec = fig;
+    S.refs.img = S.refs.ov = S.refs.frame = S.refs.inner = S.refs.press = S.refs.plate = null;
+    S.brackets = null; S.pins = null; S.plateChart = null; S.plateNum = null;
     const photo = inst.photo || (Array.isArray(inst.photos) && inst.photos.length ? inst.photos[inst.photos.length - 1] : null);
     if (photo && (photo.src || photo.thumb)) {
       const mat = h("div", { class: "ins-spec__mat" });
@@ -383,6 +427,9 @@
       S.refs.img = img; S.refs.frame = frame; S.refs.inner = inner; S.refs.ov = overlay;
       overlay.addEventListener("click", (e) => onOverlayTap(S, e));
       overlay.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOverlayTap(S, e); } });
+    } else if (isTyped(inst) && !(inst.evidence || []).some((e) => e.type === "email")) {
+      fig.classList.add("ins-spec--plate");
+      fig.appendChild(buildPlate(S));
     } else {
       fig.classList.add("ins-spec--press");
       fig.appendChild(buildPress(S));
@@ -395,6 +442,36 @@
     const t = inst.title || "this";
     return inst.demo ? "Example drawing: " + t : "Your photo: " + t;
   }
+
+  /* a typed instrument has no photo: the week is its own chart, a project is a serif title and a big count */
+  function buildPlate(S) {
+    const inst = S.inst;
+    const plate = h("div", { class: "ins-plate ins-plate--" + inst.mold });
+    S.refs.plate = plate;
+    if (inst.mold === "week") {
+      S.plateChart = h("div", { class: "ins-plate__chart" });
+      plate.appendChild(S.plateChart);
+      return plate;
+    }
+    plate.appendChild(h("p", { class: "ins-plate__title wb-serif", text: inst.title || "Project" }));
+    S.plateNum = h("p", { class: "ins-plate__num wb-mono" });
+    plate.appendChild(S.plateNum);
+    if (!S.readOnly) {
+      plate.appendChild(h("button", { class: "wb-btn wb-btn--quiet ins-plate__add", type: "button", text: "Add a photo",
+        on: { click: () => { if (has("app", "capture")) { const r = call("app", "capture", { intent: "snap", instrumentId: S.id, source: "ask" }); if (r && typeof r.catch === "function") r.catch((err) => console.error("[WB.instrument] capture", err)); } else toast("Photos need the full app."); } } }));
+    }
+    return plate;
+  }
+  function renderPlate(S) {
+    const n = S.plateNum;
+    if (!n || !S.inst) return;
+    const done = valueOf(S, "done"), total = valueOf(S, "total");
+    const unit = (S.inst.words && S.inst.words.unit) || "pieces";
+    n.textContent = "";
+    n.appendChild(h("span", { class: "ins-plate__big", text: (isNum(done) ? Math.round(done) : "—") + "/" + (isNum(total) ? Math.round(total) : "—") }));
+    n.appendChild(h("span", { class: "ins-plate__unit", text: " " + unit }));
+  }
+  function chartBox(S) { return S.plateChart || S.refs.chart; }
 
   /* letterpress specimen for instruments forged from mail: subject, sender, the quoted line, in mono on paper-3 */
   function buildPress(S) {
@@ -489,6 +566,7 @@
       ov.appendChild(g);
       S.brackets[e.id] = { g, cx: x + w / 2, cy: y + hh / 2, varId: varFor[e.id] || null };
     });
+    if (inst.mold === "zones") drawZones(S, ov, sz);
     const states = pinStates(S);
     S.pins = {};
     pinList(S).forEach((p) => {
@@ -505,6 +583,34 @@
       S.pins[p.id] = g;
     });
   }
+  /* zone map: clear zones are filled, the next one pulses, the rest are dashed outlines */
+  function drawZones(S, ov, sz) {
+    const next = nextZoneOf(S.inst);
+    zonesOf(S.inst).forEach((z) => {
+      if (!Array.isArray(z.bbox) || z.bbox.length !== 4) return;
+      const [bx, by, bw, bh] = z.bbox.map(Number);
+      const x = bx * sz.w, y = by * sz.h, w = Math.max(14, bw * sz.w), hh = Math.max(14, bh * sz.h);
+      const st = z.state === "done" ? "done" : next && next.id === z.id ? "next" : "todo";
+      const g = svgEl("g", { class: "ins-zone ins-zone--" + st, "data-zone": z.id, role: "button", tabindex: S.readOnly ? null : "0",
+        "aria-label": z.name + ", " + (st === "done" ? "clear" : st === "next" ? "next" : "later") });
+      const hitW = Math.max(44, w), hitH = Math.max(44, hh);
+      g.appendChild(svgEl("rect", { class: "ins-zone__hit", x: x + w / 2 - hitW / 2, y: y + hh / 2 - hitH / 2, width: hitW, height: hitH }));
+      g.appendChild(svgEl("rect", { class: "ins-zone__r", x, y, width: w, height: hh, rx: 3 }));
+      const name = String(z.name || "").slice(0, 28);
+      const lw = Math.min(Math.max(30, w + 40), name.length * 6.2 + (st === "done" ? 26 : 12));
+      const lx = clamp(x, 0, Math.max(0, sz.w - lw)), ly = clamp(y, 0, Math.max(0, sz.h - 18));
+      g.appendChild(svgEl("rect", { class: "ins-zone__chip", x: lx, y: ly, width: lw, height: 18, rx: 3 }));
+      let tx = lx + 6;
+      if (st === "done") {
+        g.appendChild(svgEl("path", { class: "ins-zone__check", d: "M" + (lx + 5) + " " + (ly + 9.5) + "l3 3 5-6.5" }));
+        tx = lx + 18;
+      }
+      const t = svgEl("text", { class: "ins-zone__t", x: tx, y: ly + 12.5 });
+      t.textContent = name;
+      g.appendChild(t);
+      ov.appendChild(g);
+    });
+  }
   function updatePins(S) {
     if (!S.pins) return;
     const states = pinStates(S);
@@ -515,9 +621,10 @@
     }
   }
   function onOverlayTap(S, e) {
-    const t = e.target && e.target.closest ? e.target.closest("[data-ev],[data-pin]") : null;
+    const t = e.target && e.target.closest ? e.target.closest("[data-ev],[data-pin],[data-zone]") : null;
     if (!t) { if (S.zoomed) unzoom(S); return; }
     e.stopPropagation();
+    if (t.getAttribute("data-zone")) { openZone(S, t.getAttribute("data-zone")); return; }
     const ev = t.getAttribute("data-ev");
     const pin = t.getAttribute("data-pin");
     if (ev) {
@@ -584,6 +691,117 @@
     if (delay) setTimeout(go, delay); else go();
   }
   function cssEsc(s) { return String(s).replace(/["\\]/g, "\\$&"); }
+
+  /* ---------------------------------------------------------------- zones */
+  function zoneById(S, id) { return zonesOf(S.inst).find((z) => z.id === id) || null; }
+  function openZone(S, id) {
+    const z = zoneById(S, id);
+    if (!z || !has("ui", "sheet")) return;
+    const steps = Array.isArray(z.steps) ? z.steps : [];
+    const body = h("div", { class: "ins-zsheet" },
+      h("p", { class: "ins-zsheet__meta wb-mono", text: fmt(z.minutes, "min", S.inst) + " · " + steps.length + (steps.length === 1 ? " step" : " steps") }));
+    if (z.state === "done") {
+      if (z.afterThumb) body.appendChild(h("img", { class: "ins-zsheet__after", src: z.afterThumb, alt: "After: " + z.name, decoding: "async" }));
+      body.appendChild(h("p", { class: "ins-zsheet__done wb-micro", text: "clear · " + fmtDay(z.doneAt || Date.now()) + " · checked " + (z.by === "claude" ? "by photo" : "by you") }));
+    }
+    if (steps.length) {
+      const ol = h("ol", { class: "ins-zsheet__steps" });
+      steps.forEach((st) => ol.appendChild(h("li", { class: "ins-zsheet__step", text: st.text })));
+      body.appendChild(ol);
+    }
+    const actions = [{ label: "Start this zone", kind: "primary", onTap: (close) => { close(); if (has("router", "go")) WB.router.go("mission", { id: S.id, zoneId: z.id }); } }];
+    if (z.state !== "done") actions.push({ label: "Mark it clear without a photo", kind: "quiet", onTap: (close) => { close(); markZoneClear(S, z.id); } });
+    WB.ui.sheet({ title: z.name, body, actions });
+  }
+  function markZoneClear(S, zoneId) {
+    if (!has("store", "update")) return;
+    const r = call("store", "update", S.id, (inst) => {
+      const z = (inst.zones || []).find((x) => x.id === zoneId);
+      if (z) { z.state = "done"; z.doneAt = Date.now(); z.by = "self"; }
+    }, "set");
+    if (r && has("store", "addObservation")) {
+      S.flashChart = true;
+      WB.store.addObservation(S.id, { t: Date.now(), value: compute(r).primary, facts: {}, source: "manual", note: null });
+    }
+    toast("Zone clear.");
+  }
+
+  /* ---------------------------------------------------------------- project: the next step, one more done */
+  function nextStepOf(inst) { return (inst.steps || []).find((s) => !s.done) || null; }
+  function renderNextCard(S) {
+    const box = S.refs.nextcard;
+    if (!box) return;
+    const inst = S.inst;
+    if (inst.mold !== "project" || S.readOnly) { box.hidden = true; box.textContent = ""; return; }
+    const step = nextStepOf(inst);
+    const done = valueOf(S, "done"), total = valueOf(S, "total");
+    const unit = (inst.words && inst.words.unit) || "pieces";
+    const canMore = isNum(done) && isNum(total) && done < total;
+    const sig = [step ? step.id + ":" + step.text + ":" + step.minutes : "-", canMore ? unit : "x", S.live ? "live" : ""].join("|");
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.textContent = "";
+    const main = h("div", { class: "ins-next__main" });
+    main.appendChild(h("span", { class: "wb-micro ins-next__tag", text: step ? "NEXT STEP · " + Math.round(step.minutes || 25) + " MIN" : "NEXT STEP" }));
+    main.appendChild(h("p", { class: "ins-next__text", text: step ? step.text : "No next step yet." }));
+    const row = h("div", { class: "ins-next__row" });
+    if (step) {
+      row.appendChild(h("button", { class: "ins-next__check", type: "button", role: "checkbox", "aria-checked": "false", on: { click: () => completeStep(S, step.id) } },
+        h("span", { class: "ins-next__box", "aria-hidden": "true" }), h("span", { class: "ins-next__lbl", text: "Done" })));
+    }
+    row.appendChild(h("button", { class: "ins-next__edit", type: "button", text: step ? "Edit" : "Add a step", on: { click: () => editStep(S, step ? step.id : null) } }));
+    main.appendChild(row);
+    box.appendChild(main);
+    if (canMore) {
+      box.appendChild(h("button", { class: "wb-btn wb-btn--quiet ins-next__more", type: "button", text: "One more " + singular(unit) + " done", on: { click: () => oneMore(S) } }));
+    }
+    box.hidden = false;
+  }
+  function completeStep(S, stepId) {
+    if (!has("store", "update")) return;
+    call("store", "update", S.id, (inst) => { const st = (inst.steps || []).find((x) => x.id === stepId); if (st) st.done = true; }, "set");
+    haptic(6);
+    toast("Step done.");
+  }
+  function editStep(S, stepId) {
+    if (!has("ui", "sheet") || !has("ui", "field")) return;
+    const cur = stepId ? (S.inst.steps || []).find((x) => x.id === stepId) : null;
+    const f = WB.ui.field({ label: cur ? "Next step" : "Add a step", value: cur ? cur.text : "", placeholder: "What is the next concrete step?", maxLength: 72 });
+    const save = (close) => {
+      const text = String(f.input.value || "").trim().slice(0, 72);
+      if (!text) { try { f.input.focus(); } catch (e) { /* ignore */ } return; }
+      close();
+      call("store", "update", S.id, (inst) => {
+        inst.steps = Array.isArray(inst.steps) ? inst.steps : [];
+        const st = stepId ? inst.steps.find((x) => x.id === stepId) : null;
+        if (st) { st.text = text; return; }
+        // up to three steps: a new one makes room by dropping the oldest finished one
+        while (inst.steps.length >= 3) { const i = inst.steps.findIndex((x) => x.done); inst.steps.splice(i < 0 ? 0 : i, 1); }
+        inst.steps.push({ id: "st" + Date.now().toString(36), n: inst.steps.length + 1, text, minutes: 25, pin: null, done: false });
+        inst.steps.forEach((x, i) => { x.n = i + 1; });
+      }, "set");
+    };
+    f.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const b = document.querySelector(".wb-sheet__actions .wb-btn--primary"); if (b) b.click(); } });
+    WB.ui.sheet({ title: cur ? "Edit the next step" : "Next step", body: f.el, actions: [{ label: "Save", kind: "primary", onTap: save }, { label: "Cancel", kind: "quiet", onTap: (close) => close() }] });
+    setTimeout(() => { try { f.input.focus(); } catch (e) { /* ignore */ } }, 120);
+  }
+  function oneMore(S) {
+    if (!has("store", "update")) return;
+    const r = call("store", "update", S.id, (inst) => {
+      const d = inst.vars && inst.vars.done, t = inst.vars && inst.vars.total;
+      if (!d) return;
+      const cap = t && isNum(t.value) ? t.value : Infinity;
+      d.value = Math.min(cap, (isNum(d.value) ? d.value : 0) + 1);
+      d.origin = "set"; d.reason = null;
+    }, "set");
+    haptic(6);
+    if (r && has("store", "addObservation")) {
+      S.flashChart = true;
+      WB.store.addObservation(S.id, { t: Date.now(), value: compute(r).primary, facts: { done: r.vars.done.value }, source: "manual", note: null });
+    }
+    const box = chartBox(S);
+    if (box) { box.classList.remove("is-flash"); void box.offsetWidth; box.classList.add("is-flash"); setTimeout(() => box.classList.remove("is-flash"), 1400); }
+  }
 
   /* ---------------------------------------------------------------- the sentence */
   function sentenceSig(S, toks) {
@@ -727,6 +945,7 @@
     const text = fmt(value, f, S.inst, c.fmtOpts);
     setChipText(S, c, value, f, text, o);
     c.node.classList.toggle("is-open", !!(S.strip && S.strip.key === "o:" + c.id));
+    c.node.classList.toggle("ins-chip--short", S.inst.mold === "week" && c.id === "slack" && isNum(value) && value < 0);
     c.node.setAttribute("aria-label", text + ", " + ((od && od.label) || c.id) + ". Show the math.");
     c.node.setAttribute("aria-expanded", S.strip && S.strip.key === "o:" + c.id ? "true" : "false");
   }
@@ -925,6 +1144,7 @@
       S.rafId = 0;
       if (S.destroyed) return;
       renderSentence(S);
+      renderPlate(S);
       renderStrip(S);
       renderChart(S, { live: true });
       renderPeek(S);
@@ -946,6 +1166,8 @@
     const isLever = v.kind === "lever";
     const changed = !isNum(start) || value !== start;
     if (isLever && changed) { S.leverMoved = true; sessionLeverMoved = true; }
+    // the week has no "as it is": remember the week as it stood before the lever first moved
+    if (isLever && changed && S.inst.mold === "week" && !isNum(S.preLever)) S.preLever = compute(S.inst).primary;
     persist(S, varId, value, isLever);
     // coach 2 after the first drag, coach 3 after a lever moved
     // coach 3 is the bar's own hint ("Hold 1 a week to commit."), so no floating tag repeats it
@@ -995,10 +1217,12 @@
       return;
     }
     const stored = S.inst.vars[varId] && S.inst.vars[varId].value;
+    const preBase = S.inst.mold === "week" ? (isNum(S.preLever) ? S.preLever : compute(S.inst).primary) : null;
+    S.preLever = null;
     if (S.live) { clearTimeout(S.keyTimer); S.live = null; S.refs.wrap.classList.remove("is-live"); hidePeek(S); }
     if (stored !== value || isNum(S.ov[varId])) persist(S, varId, value, true);
     const inst = S.inst;
-    const baseline = has("molds", "baseline") ? WB.molds.baseline(inst) : compute(inst).primary;
+    const baseline = isNum(preBase) ? preBase : has("molds", "baseline") ? WB.molds.baseline(inst) : compute(inst).primary;
     const primary = outcomeAt(inst, { [varId]: value });
     stamp(S, node);
     S.inkNext = true;
@@ -1159,7 +1383,8 @@
   }
 
   function renderChart(S, o) {
-    const box = S.refs.chart;
+    const box = chartBox(S);
+    if (S.plateChart && S.refs.chart) S.refs.chart.hidden = true;
     if (!box || !has("charts", "render")) { if (box) box.hidden = true; return; }
     const opt = o || {};
     const inst = S.inst;
@@ -1185,9 +1410,9 @@
      above the bottom bar, so the curve visibly bends under the drag. */
   function renderPeek(S) {
     const pk = S.refs.peek;
-    if (!pk || !S.live || S.live.via === "chart" || !has("charts", "render") || !S.refs.chart) return;
+    if (!pk || !S.live || S.live.via === "chart" || !has("charts", "render") || !chartBox(S)) return;
     const band = visibleBand(S);
-    const cr = S.refs.chart.getBoundingClientRect();
+    const cr = chartBox(S).getBoundingClientRect();
     const visible = Math.min(cr.bottom, band.bottom) - Math.max(cr.top, band.top);
     if (!S.peekOn && visible > Math.min(110, cr.height * 0.7)) return;
     const c = compute(S.inst, S.ov);
@@ -1224,22 +1449,30 @@
     const inst = S.inst;
     const isSpoil = inst.mold === "spoil" && Array.isArray(inst.items) && inst.items.length;
     const isReset = inst.mold === "reset" && Array.isArray(inst.steps) && inst.steps.length;
-    if (!isSpoil && !isReset) { ol.hidden = true; return; }
+    const zs = inst.mold === "zones" ? zonesOf(inst) : [];
+    const isZones = zs.length > 0;
+    if (!isSpoil && !isReset && !isZones) { ol.hidden = true; return; }
     const states = pinStates(S);
-    const rows = isSpoil
+    const nz = isZones ? nextZoneOf(inst) : null;
+    const rows = isZones
+      ? zs.map((z, i) => ({ id: z.id, n: z.n || i + 1, a: z.name, b: "", c: fmt(z.minutes, "min", inst), origin: z.origin === "set" ? "set" : "inferred",
+          st: z.state === "done" ? "done" : nz && nz.id === z.id ? "next" : "later" }))
+      : isSpoil
       ? inst.items.map((it, i) => ({ id: it.id, n: i + 1, a: it.name, b: fmt(it.days, "days", inst), c: fmt(it.value, "usd", inst), origin: it.origin, st: states[it.id] || "safe" }))
       : inst.steps.slice().sort((x, y) => x.n - y.n).map((s, i) => ({ id: s.id, n: s.n || i + 1, a: s.text, b: "", c: fmt(s.minutes, "min", inst), origin: null, st: states[s.id] || "on" }));
-    const sig = rows.map((r) => r.id + ":" + r.a + ":" + r.c + ":" + r.b + ":" + r.origin).join("|");
+    const sig = rows.map((r) => r.id + ":" + r.a + ":" + r.c + ":" + r.b + ":" + r.origin + (isZones ? ":" + r.st : "")).join("|");
+    const ZWORD = { done: "clear", next: "next", later: "later" };
     if (ol.dataset.sig !== sig) {
       ol.dataset.sig = sig;
       ol.textContent = "";
-      ol.className = "ins-list ins-list--" + (isSpoil ? "items" : "steps");
+      ol.className = "ins-list ins-list--" + (isZones ? "zones" : isSpoil ? "items" : "steps");
       rows.forEach((r) => {
-        const btn = h("button", { class: "ins-row", type: "button", dataset: { row: r.id }, on: { click: () => flashRow(S, r.id) } },
+        const btn = h("button", { class: "ins-row", type: "button", dataset: { row: r.id }, on: { click: () => { if (isZones) openZone(S, r.id); else flashRow(S, r.id); } } },
           h("span", { class: "ins-row__n wb-mono", "aria-hidden": "true", text: String(r.n) }),
           h("span", { class: "ins-row__a", text: r.a }),
           r.b ? h("span", { class: "ins-row__b wb-mono", text: r.b }) : null,
           h("span", { class: "ins-row__c wb-mono" + (r.origin ? " ins-row__c--" + r.origin : ""), text: r.c }),
+          isZones ? h("span", { class: "ins-row__w wb-micro", text: ZWORD[r.st] }) : null,
           h("span", { class: "ins-row__st wb-sr" }));
         ol.appendChild(h("li", { class: "ins-li" }, btn));
       });
@@ -1248,10 +1481,10 @@
     rows.forEach((r) => {
       const btn = ol.querySelector('[data-row="' + cssEsc(r.id) + '"]');
       if (!btn) return;
-      const cls = "ins-row is-" + r.st;
+      const cls = "ins-row is-" + (isZones && r.st === "later" ? "off" : r.st);
       if (btn.className.replace(" is-flash", "") !== cls) btn.className = cls + (btn.classList.contains("is-flash") ? " is-flash" : "");
       const sr = btn.querySelector(".ins-row__st");
-      if (sr) sr.textContent = ", " + (STATE_WORD[r.st] || r.st) + (r.origin ? ", " + ORIGIN_WORD[r.origin] : "");
+      if (sr) sr.textContent = ", " + (isZones ? ZWORD[r.st] : (STATE_WORD[r.st] || r.st)) + (r.origin ? ", " + ORIGIN_WORD[r.origin] : "");
     });
     ol.hidden = false;
   }
@@ -1279,8 +1512,10 @@
       const ids = Array.isArray(cf.ids) && cf.ids.length === cf.total ? cf.ids : null;
       for (let i = 0; i < cf.total; i++) {
         const vid = ids ? ids[i] : null;
-        const on = vid ? (inst.vars[vid].origin === "seen" || inst.vars[vid].origin === "set") : i < cf.measured;
-        sq.appendChild(h("i", { class: on ? "is-on" : "", dataset: vid ? { var: vid } : {} }));
+        const zn = vid && inst.mold === "zones" ? zonesOf(inst).find((z) => z.id === vid) : null;
+        const vv = vid && inst.vars[vid];
+        const on = zn ? (zn.state === "done" || zn.origin === "set") : vv ? (vv.origin === "seen" || vv.origin === "set") : i < cf.measured;
+        sq.appendChild(h("i", { class: on ? "is-on" : "", dataset: vv ? { var: vid } : {} }));
       }
       row.appendChild(sq);
       const anyGuess = Object.keys(S.chips).some((k) => S.chips[k].kind === "var" && inst.vars[S.chips[k].id] && inst.vars[S.chips[k].id].origin === "assumed");
@@ -1402,8 +1637,17 @@
     const differs = it && lever === it.varId && isNum(it.value) && liveVal !== it.value;
     const vd = lever && isNum(liveVal) ? verdictOf(S, lever, liveVal) : "na";
     const moved = lever && (S.leverMoved || differs || (S.hinge && S.hinge.varId === lever && sessionLeverMoved));
-    let mono = null, text = null, btn = null;
-    if (it && !differs && g.status !== "none") {
+    let mono = null, text = null, btn = null, zNext = null;
+    const isZones = inst.mold === "zones";
+    const openMission = !!(inst.mission && !inst.mission.verified);
+    if (isZones) zNext = nextZoneOf(inst);
+    if (isZones && zNext && !differs && !S.leverMoved && !S.live && !S.refusal && (g.due || !openMission)) {
+      const zs = zonesOf(inst);
+      mono = zs.filter((z) => z.state === "done").length + " OF " + zs.length + " CLEAR";
+      btn = "zone";
+    } else if (isZones && g.due && !zNext && !differs) {
+      mono = "ALL ZONES CLEAR";
+    } else if (it && !differs && g.status !== "none") {
       if (g.due) { mono = "CHECK-IN DUE · HOW DID IT GO"; btn = "checkin"; }
       else if (g.status === "held") { mono = "HELD · " + leverPhrase(inst, it.varId, it.value).toUpperCase(); btn = "quiet"; }
       else if (g.status === "closer") {
@@ -1423,7 +1667,7 @@
     } else if (lever) {
       text = "Drag the " + fmt(liveVal, lv.format, inst) + ", then hold it to commit.";
     } else text = "Tap any number to see where it came from.";
-    const sig = [mono, text, btn].join("|");
+    const sig = [mono, text, btn, zNext ? zNext.id + zNext.name : ""].join("|");
     if (bar.dataset.sig === sig) return;
     bar.dataset.sig = sig;
     bar.textContent = "";
@@ -1437,6 +1681,10 @@
         h("button", { class: "wb-btn wb-btn--primary ins-bar__btn", type: "button", on: { click: () => checkIn(S) } },
           h("span", { class: "wb-btn__label", text: "How did it go?" })));
       bar.appendChild(row);
+    } else if (btn === "zone" && zNext) {
+      bar.appendChild(h("button", { class: "wb-btn wb-btn--primary ins-bar__btn ins-bar__btn--zone", type: "button",
+        on: { click: () => { if (has("router", "go")) WB.router.go("mission", { id: S.id, zoneId: zNext.id }); } } },
+        h("span", { class: "wb-btn__label ins-bar__zlbl", text: "Start the " + String(zNext.name || "next zone").replace(/^(the|a|an)\s+/i, "").replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()) })));
     } else if (btn) {
       bar.appendChild(h("button", { class: "wb-btn wb-btn--" + btn + " ins-bar__btn", type: "button", on: { click: () => rephotograph(S) } },
         h("span", { class: "ins-bar__icon", "aria-hidden": "true", html: icon("camera") }), h("span", { class: "wb-btn__label", text: "Re-photograph" })));
@@ -1454,29 +1702,42 @@
     countdown: () => "How many days early did you act?",
     reset: () => "How many of the moves did you do?",
   };
-  const CHECKIN_FACT = { leak: "rate", perUse: "uses" };
+  CHECKIN_Q.project = (w) => "How many " + (w.unit || "pieces") + " are done now?";
+  CHECKIN_Q.week = () => "How many family evenings did you really get?";
+  const CHECKIN_FACT = { leak: "rate", perUse: "uses", project: "done" };
   function checkIn(S) {
     const inst = S.inst;
     const it = inst && inst.intention;
-    if (!it || !has("ui", "sheet")) return;
+    if (!it || !has("ui", "sheet") || inst.mold === "zones") return;
     const v = inst.vars[it.varId];
     if (!v) return;
     const def = moldDef(inst);
+    const counts = tracksDone(inst);
     // what really happened is a fact (orders a week, visits a month), so it can land past "as it is" too
     const mirror = CHECKIN_FACT[inst.mold] && inst.vars[CHECKIN_FACT[inst.mold]] ? CHECKIN_FACT[inst.mold] : null;
     const asIs = mirror ? inst.vars[mirror].value : null;
     const r0 = rangeOf(inst, it.varId);
     const rf = mirror ? rangeOf(inst, mirror) : r0;
-    const r = { min: Math.min(r0.min, rf.min), max: Math.max(r0.max, rf.max, isNum(asIs) ? asIs : -Infinity), step: r0.step };
+    let r = { min: Math.min(r0.min, rf.min), max: Math.max(r0.max, rf.max, isNum(asIs) ? asIs : -Infinity), step: r0.step };
+    // a count of finished pieces steps over 0..total, starting at where it stands now
+    if (counts) { const tot = inst.vars.total && isNum(inst.vars.total.value) ? inst.vars.total.value : rf.max; r = { min: 0, max: Math.max(0, tot), step: 1 }; }
     const obsAt = (value) => {
       if (!has("molds", "compute")) return NaN;
       return mirror ? WB.molds.compute(inst, { [mirror]: value }).primary : WB.molds.compute(inst, { [it.varId]: value }).outcome;
     };
-    let val = isNum(it.value) ? it.value : valueOf(S, it.varId);
+    let val = counts && isNum(asIs) ? clamp(asIs, r.min, r.max) : isNum(it.value) ? it.value : valueOf(S, it.varId);
+    const gh = counts ? ghostOf(inst) : null;
+    const cnt = (n) => fmt(n, "int", inst);
     const pf = (def && def.outputs && def.outputs[def.primary] && def.outputs[def.primary].format) || "num";
     const valEl = h("span", { class: "ins-ci__v wb-mono" });
     const outEl = h("p", { class: "ins-ci__out wb-mono" });
     const paint = () => {
+      if (counts) {
+        valEl.textContent = val + " of " + r.max;
+        const b = gh && isNum(gh.baseline) ? gh.baseline : it.baseline, tg = gh && isNum(gh.target) ? gh.target : it.target;
+        outEl.textContent = cnt(b) + " → " + cnt(val) + " · LINE " + cnt(tg);
+        return;
+      }
       valEl.textContent = leverPhrase(inst, it.varId, val);
       const y = obsAt(val);
       outEl.textContent = isNum(y) ? fmt(it.baseline, pf, inst) + " → " + fmt(y, pf, inst) + " · LINE " + fmt(it.target, pf, inst) : "";
@@ -1495,6 +1756,7 @@
       const y = obsAt(value);
       if (!isNum(y) || !has("store", "addObservation")) return;
       S.flashChart = true;
+      if (counts && has("store", "update")) call("store", "update", S.id, (i) => { const dv = i.vars && i.vars.done; if (dv) { dv.value = value; dv.origin = "set"; dv.reason = null; } }, "set");
       WB.store.addObservation(S.id, { t: Date.now(), value: y, facts: { [mirror || it.varId]: value }, source: "manual", note });
     };
     WB.ui.sheet({
@@ -1692,6 +1954,8 @@
     renderTop(S);
     renderMission(S);
     renderSentence(S, { tween: opt.tween, countUp: opt.countUp, delay: opt.delay });
+    renderNextCard(S);
+    renderPlate(S);
     renderStrip(S);
     renderHinge(S);
     renderChart(S);
@@ -1706,6 +1970,8 @@
     if (S.destroyed) return;
     const inst = next || (S.readOnly ? S.inst : clone(storeGet(S.id))) || S.inst;
     if (!inst) return;
+    if (!S.readOnly && isLocked(inst) !== !!S.locked) { remount(S, inst); return; }
+    if (S.locked) return;
     if (S.live) { S.pendingRefresh = { inst, source }; return; }
     if (!S.refs.wrap) { remount(S, inst); return; }
     const photoChanged = photoKey(inst) !== photoKey(S.inst);
@@ -1822,6 +2088,15 @@
     const o = opts || {};
     const tile = h("div", { class: "ins-mini" + (o.bare ? " ins-mini--bare" : ""), dataset: { id: inst && inst.id, mold: inst && inst.mold } });
     if (!inst || !inst.mold) { tile.appendChild(h("span", { class: "ins-mini__title", text: "Missing" })); return tile; }
+    if (isLocked(inst)) {
+      tile.classList.add("ins-mini--locked");
+      tile.dataset.mold = "";
+      tile.appendChild(h("div", { class: "ins-mini__lock" },
+        h("span", { class: "wb-micro", text: "WORK · CLOCKED OUT" }),
+        h("span", { class: "ins-mini__lock-t", text: "Waits for Clock in." })));
+      tile.toString = function () { return this.outerHTML; };
+      return tile;
+    }
     const g = ghostOf(inst);
     if (g.due) tile.classList.add("is-due");
     if (inst.demo) tile.classList.add("is-demo");
@@ -1837,9 +2112,12 @@
       anchor = miniAnchor(inst, photo);
     } else {
       const ev = (inst.evidence || []).find((e) => e.type === "email");
+      let pq = ev && ev.quote ? "“" + ev.quote + "”" : "FROM YOUR MAIL";
+      if (!ev && inst.mold === "project") pq = Math.round((inst.vars.done && inst.vars.done.value) || 0) + "/" + Math.round((inst.vars.total && inst.vars.total.value) || 0) + " " + ((inst.words && inst.words.unit) || "pieces");
+      else if (!ev && inst.mold === "week") pq = "A WEEK, PLANNED";
       const press = h("div", { class: "ins-mini__press" },
         h("span", { class: "ins-mini__press-s", text: (ev && ev.subject) || inst.title || "From your mail" }),
-        h("span", { class: "ins-mini__press-q", text: ev && ev.quote ? "“" + ev.quote + "”" : "FROM YOUR MAIL" }));
+        h("span", { class: "ins-mini__press-q", text: pq }));
       thumb.appendChild(press);
     }
     if (anchor) {
@@ -1867,7 +2145,7 @@
     let promise = null;
     if (inst.intention && g.status !== "none" && isNum(g.baseline)) {
       const def = moldDef(inst);
-      const pf = def && def.outputs && def.outputs[def.primary] ? def.outputs[def.primary].format : "num";
+      const pf = def && def.tracks === "done" ? "int" : def && def.outputs && def.outputs[def.primary] ? def.outputs[def.primary].format : "num";
       const real = (g.points || []).filter((p) => p.t > g.start && !p.hollow);
       const shown = real.length ? real[real.length - 1].v : g.baseline;
       pv = { formatted: fmt(shown, pf, inst), label: pv.label };
@@ -1945,6 +2223,10 @@
     on("intention:created", (p) => { if (p && p.id) each(p.id, (S) => { S.inkNext = true; refresh(S, null, "intention"); }); });
     on("mission:done", (p) => { if (p && p.id) each(p.id, (S) => refresh(S, null, "mission")); });
     on("mission:start", (p) => { if (p && p.id) each(p.id, (S) => refresh(S, null, "mission")); });
+    // clocking in or out: a work instrument locks or opens in place
+    on("side:changed", () => {
+      Array.from(mounts).forEach((S) => { if (!S.readOnly && S.id && S.inst && isLocked(storeGet(S.id) || S.inst) !== !!S.locked) refresh(S, null, "system"); });
+    });
     on("instrument:melted", (p) => {
       if (!p || !p.id) return;
       each(p.id, (S) => {

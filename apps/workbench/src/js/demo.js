@@ -176,7 +176,101 @@
       stamp(170, 120, -9));
   }
 
-  const DRAWINGS = { receipt: [receiptSVG, 600, 800], fridge: [fridgeSVG, 800, 600], gym: [gymSVG, 800, 600], desk: [deskSVG, 800, 600] };
+
+  // 5. Basement, 800×600. Zone boxes match the zone seeds (stairs left, shelf wall, laundry nook, bike, cans, bins).
+  function basementSVG() {
+    let steps = "M20 90H70V140H120V190H170V240H220V290H252";
+    const box = (x, y, w, h, f) => '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + (f || "#FBF8F1") + '" stroke="' + INK + '" stroke-width="2"/>';
+    return svg(800, 600,
+      L("M10 520H790", { w: 3 }) + L("M10 530H790", { w: 1, c: INK3, dash: "3 8" }) + L("M10 40H790", { w: 1.2, c: INK3 }) +
+      // stairs and the dark triangle under them
+      L(steps, { w: 2.6 }) + L("M20 90V520M20 130L252 330", { w: 2.2 }) + L("M252 290V520", { w: 2.2 }) +
+      L("M20 300L252 520M20 400L150 520", { w: 1, c: INK3, dash: "4 6" }) +
+      L("M60 440h70v60H60zM70 500v-30h50", { w: 1.6, c: INK2 }) +
+      // shelf wall
+      box(290, 60, 230, 240, PAPER2) + L("M290 140H520M290 220H520", { w: 3 }) +
+      box(304, 92, 54, 48) + box(364, 104, 40, 36) + box(412, 84, 70, 56) + box(300, 168, 44, 52) + box(352, 180, 60, 40) + box(424, 164, 80, 56) +
+      box(306, 246, 90, 54) + box(404, 258, 50, 42) + L("M466 300v-34h40v34", { w: 1.8 }) +
+      L("M316 110h30M420 100h46M312 186h22M436 184h50", { w: 1, c: INK3 }) +
+      // laundry nook
+      box(560, 70, 100, 230, "#FBF8F1") + '<circle cx="610" cy="200" r="38" fill="' + PAPER3 + '" stroke="' + INK + '" stroke-width="2.2"/><circle cx="610" cy="200" r="24" fill="none" stroke="' + INK + '" stroke-width="1.6"/>' +
+      L("M572 92h28M640 92h8", { w: 1.6, c: INK2 }) +
+      box(668, 120, 110, 180, "#FBF8F1") + L("M668 160H778", { w: 2 }) + '<circle cx="690" cy="140" r="5" fill="none" stroke="' + INK + '" stroke-width="1.6"/>' +
+      L("M700 256c10-26 56-26 66 0v44h-66z", { fill: PAPER3, w: 2 }) + L("M706 276h54M706 288h54", { w: 1, c: INK2 }) +
+      // bike
+      '<circle cx="340" cy="450" r="62" fill="none" stroke="' + INK + '" stroke-width="3"/><circle cx="340" cy="450" r="5" fill="' + INK + '"/>' +
+      '<circle cx="470" cy="450" r="62" fill="none" stroke="' + INK + '" stroke-width="3"/><circle cx="470" cy="450" r="5" fill="' + INK + '"/>' +
+      L("M340 450L392 380H452L470 450M392 380L372 354M372 354H394M452 380L440 350M430 350H452M392 380L420 450L340 450", { w: 3 }) +
+      L("M420 450l-4 16", { w: 2 }) +
+      // paint cans
+      [[548, 480], [592, 480], [570, 438], [616, 440]].map((c) => L("M" + c[0] + " " + c[1] + "h38v36h-38z", { fill: "#FBF8F1", w: 2 }) + L("M" + c[0] + " " + (c[1] + 8) + "h38M" + (c[0] + 8) + " " + (c[1] - 6) + "h22", { w: 1.4, c: INK2 })).join("") +
+      L("M556 520h30", { w: 2, c: INK2, dash: "3 4" }) +
+      // kids' bins
+      box(666, 440, 108, 76, PAPER3) + box(672, 372, 96, 64, "#FBF8F1") + L("M672 388H768M666 458H774", { w: 1.6 }) +
+      L("M690 480h60M690 496h40", { w: 1.2, c: INK2 }) + '<circle cx="720" cy="414" r="8" fill="none" stroke="' + INK + '" stroke-width="1.8"/>' +
+      stamp(150, 52, -8));
+  }
+
+  // 6. Storyboard, 800×600: twelve sticky frames, the first four ticked.
+  function storyboardSVG() {
+    let g = "";
+    for (let i = 0; i < 12; i++) {
+      const x = 50 + (i % 4) * 185, y = 60 + Math.floor(i / 4) * 160;
+      const done = i < 4;
+      g += '<rect x="' + (x + 5) + '" y="' + (y + 6) + '" width="160" height="130" fill="' + PAPER3 + '"/>' +
+        '<rect x="' + x + '" y="' + y + '" width="160" height="130" fill="' + (done ? "#FBF8F1" : PAPER2) + '" stroke="' + INK + '" stroke-width="2"/>' +
+        T(x + 12, y + 24, 15, String(i + 1).padStart(2, "0"), { w: 700 }) +
+        L("M" + (x + 14) + " " + (y + 52) + "h" + (60 + (i * 17) % 50) + "M" + (x + 14) + " " + (y + 72) + "h" + (90 + (i * 11) % 40) + "M" + (x + 14) + " " + (y + 92) + "h" + (50 + (i * 23) % 60), { w: 1.4, c: INK2 });
+      if (done) g += L("M" + (x + 112) + " " + (y + 26) + "l12 14 24-30", { w: 4, c: SIGNAL });
+      else g += L("M" + (x + 14) + " " + (y + 112) + "h132", { w: 1, c: INK3, dash: "3 5" });
+    }
+    return svg(800, 600, T(50, 40, 14, "REEL SERIES · STORYBOARD", { c: INK2, ls: 3 }) + g + stamp(400, 566, -3));
+  }
+
+  // 7. Build plate, 800×600: two printed planters, three empty outlines.
+  function buildplateSVG() {
+    const planter = (cx, cy, k) => L("M" + (cx - 44 * k) + " " + (cy - 40 * k) + "h" + 88 * k + "l" + -10 * k + " " + 74 * k + "h" + -68 * k + "z", { fill: "#FBF8F1", w: 2.6 }) +
+      L("M" + (cx - 40 * k) + " " + (cy - 20 * k) + "h" + 80 * k + "M" + (cx - 36 * k) + " " + (cy) + "h" + 72 * k + "M" + (cx - 34 * k) + " " + (cy + 20 * k) + "h" + 68 * k, { w: 1, c: INK3 }) +
+      '<ellipse cx="' + cx + '" cy="' + (cy - 40 * k) + '" rx="' + 44 * k + '" ry="' + 9 * k + '" fill="' + PAPER3 + '" stroke="' + INK + '" stroke-width="2"/>';
+    const ghost = (cx, cy) => '<ellipse cx="' + cx + '" cy="' + cy + '" rx="50" ry="16" fill="none" stroke="' + INK2 + '" stroke-width="2" stroke-dasharray="7 6"/>' +
+      L("M" + (cx - 50) + " " + cy + "l8 -64h84l8 64", { w: 1.4, c: INK3, dash: "3 6" });
+    return svg(800, 600,
+      L("M80 360L720 360L780 470H20z", { fill: PAPER2, w: 2.6 }) + L("M20 470H780V496H20z", { fill: PAPER3, w: 2.6 }) +
+      L("M120 372L680 372L728 456H72z", { fill: "#FBF8F1", w: 1.6 }) +
+      L("M130 384H670M118 404H682M104 428H696", { w: 1, c: INK3 }) +
+      L("M130 90V330M670 90V330M130 90H670", { w: 3 }) + L("M130 150H670", { w: 3 }) + '<rect x="360" y="132" width="80" height="38" rx="5" fill="' + PAPER3 + '" stroke="' + INK + '" stroke-width="2.4"/>' +
+      L("M400 170v26", { w: 2.4 }) +
+      planter(230, 424, 1) + planter(380, 424, 0.9) + ghost(520, 424) + ghost(630, 410) + ghost(300, 392) +
+      T(400, 535, 15, "PLANTERS 2 OF 5", { a: "middle", c: INK2, ls: 3 }) +
+      stamp(660, 90, 8));
+  }
+
+  // 8. Task board on a laptop, 800×600: fifteen cards, seven in Done.
+  function taskboardSVG() {
+    let cols = "";
+    const defs = [["TO DO", 5, 90], ["DOING", 3, 300], ["DONE", 7, 510]];
+    defs.forEach((c) => {
+      const x = c[2];
+      cols += T(x, 112, 14, c[0], { w: 700, ls: 3 }) + L("M" + x + " 122h190", { w: 1.6 });
+      const h = c[1] === 7 ? 34 : 56, gap = c[1] === 7 ? 8 : 12;
+      for (let i = 0; i < c[1]; i++) {
+        const y = 136 + i * (h + gap);
+        cols += '<rect x="' + x + '" y="' + y + '" width="190" height="' + h + '" rx="3" fill="' + (c[1] === 7 ? PAPER2 : "#FBF8F1") + '" stroke="' + INK + '" stroke-width="1.8"/>' +
+          L("M" + (x + 12) + " " + (y + 14) + "h" + (90 + (i * 19) % 70), { w: 1.4, c: INK2 });
+        if (c[1] === 7) cols += L("M" + (x + 162) + " " + (y + 18) + "l6 7 12-14", { w: 2.4, c: SIGNAL });
+        else cols += L("M" + (x + 12) + " " + (y + 32) + "h" + (50 + (i * 13) % 50), { w: 1, c: INK3 });
+      }
+    });
+    return svg(800, 600,
+      '<rect x="60" y="40" width="680" height="440" rx="14" fill="#F8F5EE" stroke="' + INK + '" stroke-width="3"/>' +
+      '<rect x="78" y="58" width="644" height="404" rx="4" fill="' + PAPER + '" stroke="' + INK3 + '" stroke-width="1.5"/>' +
+      T(90, 90, 15, "LAB ROLLOUT · SPRINT BOARD", { c: INK2, ls: 2 }) + cols +
+      L("M30 480H770L740 530H60z", { fill: PAPER2, w: 2.6 }) + L("M340 496h120", { w: 2, c: INK3 }) +
+      stamp(400, 566, -4));
+  }
+
+  const DRAWINGS = { receipt: [receiptSVG, 600, 800], fridge: [fridgeSVG, 800, 600], gym: [gymSVG, 800, 600], desk: [deskSVG, 800, 600],
+    basement: [basementSVG, 800, 600], storyboard: [storyboardSVG, 800, 600], buildplate: [buildplateSVG, 800, 600], taskboard: [taskboardSVG, 800, 600] };
   const photoCache = {};
   function photo(key, at) {
     const d = DRAWINGS[key];
@@ -187,7 +281,8 @@
   }
 
   /* ------------------------------------------------------------ instruments */
-  const IDS = { takeout: "ins_dtakeout", fridge: "ins_dfridge1", gym: "ins_dgympass", desk: "ins_ddeskcnr" };
+  const IDS = { takeout: "ins_dtakeout", fridge: "ins_dfridge1", gym: "ins_dgympass", desk: "ins_ddeskcnr",
+    basement: "ins_dbasemnt", reels: "ins_dreelser", planter: "ins_dplanter", labroll: "ins_dlabroll", week: "ins_dweekpln" };
 
   function specs() {
     return {
@@ -258,6 +353,133 @@
     };
   }
 
+  /* Work & Home seeds. Zone boxes and pins match basementSVG(). */
+  const zs = (a) => a.map((x) => ({ text: x[0], minutes: x[1], pin: x[2] }));
+  function specsHome() {
+    return {
+      basement: {
+        fit: true, mold: "zones", kind: "home-basement", system: "Space", title: "Basement", side: "home",
+        words: { subject: "the basement" },
+        vars: { pace: { value: 1 } },
+        zones: [
+          { name: "Shelf wall", bbox: [0.3625, 0.1, 0.2875, 0.4], pin: [0.505, 0.3], minutes: 40,
+            steps: zs([["Pull the boxes off the top shelf", 10, [0.505, 0.16]], ["Sort keep, donate, bin", 20, [0.46, 0.3]], ["Label the keepers and shelve them", 10, [0.55, 0.4]]]) },
+          { name: "Under the stairs", bbox: [0.025, 0.5, 0.29, 0.37], pin: [0.12, 0.72], minutes: 30,
+            steps: zs([["Empty the stair nook onto the floor", 10, [0.1, 0.78]], ["Bag what is trash", 10, [0.14, 0.7]], ["Put back only what you use", 10, [0.08, 0.66]]]) },
+          { name: "Bike corner", bbox: [0.3625, 0.5667, 0.2875, 0.3], pin: [0.505, 0.72], minutes: 25,
+            steps: zs([["Wheel the bike against the wall", 5, [0.505, 0.75]], ["Hang the helmet and pump on a hook", 10, [0.45, 0.62]], ["Sweep the floor where it stood", 10, [0.5, 0.82]]]) },
+          { name: "Paint cans", bbox: [0.675, 0.6667, 0.1375, 0.2], pin: [0.744, 0.76], minutes: 30,
+            steps: zs([["Check each lid and label the colour", 10, [0.72, 0.78]], ["Set aside the empty and dried cans", 10, [0.76, 0.72]], ["Stack the keepers on one shelf", 10, [0.74, 0.82]]]) },
+          { name: "Laundry nook", bbox: [0.7, 0.117, 0.275, 0.38], pin: [0.8375, 0.31], minutes: 35,
+            steps: zs([["Clear the top of the dryer", 10, [0.84, 0.2]], ["Fold what is in the basket", 15, [0.9, 0.46]], ["Wipe the lint trap and the shelf", 10, [0.76, 0.34]]]) },
+          { name: "Kids' bins", bbox: [0.825, 0.6, 0.15, 0.267], pin: [0.9, 0.73], minutes: 45,
+            steps: zs([["Tip out the top bin on the floor", 15, [0.9, 0.67]], ["Keep one handful of each toy type", 20, [0.88, 0.76]], ["Bag the outgrown ones for donation", 10, [0.92, 0.82]]]) },
+        ],
+        fieldNote: "EXAMPLE: six areas, and the shelf wall and the stair nook are already clear.",
+        nextPhotos: ["The bike corner from the same spot"],
+        mailQuery: null,
+        act: { type: "mission", to: null, why: "Clear the next zone." },
+      },
+    };
+  }
+  function specsWork() {
+    return {
+      reels: {
+        fit: true, mold: "project", kind: "reel-series", system: "Work", title: "Reel series", side: "work",
+        words: { subject: "Reel series", unit: "posts" },
+        vars: { done: { value: 4, origin: "inferred", reason: "Four frames are ticked on the board." }, total: { value: 12, origin: "inferred", reason: "Twelve frames on the board." }, pace: { value: 2 } },
+        steps: [{ text: "Script reel 5: hook, 3 shots, caption", minutes: 25 }, { text: "Shoot reel 5 b-roll at the desk", minutes: 25 }],
+        fieldNote: "EXAMPLE: a third of the board is ticked.",
+        nextPhotos: ["The board after the next reel"],
+        act: { type: "ics", to: "editor@example.com", why: "A weekly check on the series." },
+      },
+      planter: {
+        fit: true, mold: "project", kind: "planter-model", system: "Things", title: "Planter model", side: "home",
+        words: { subject: "Planter model", unit: "prints" },
+        vars: { done: { value: 2, origin: "inferred", reason: "Two planters stand on the plate." }, total: { value: 5, origin: "inferred", reason: "Five spots are drawn on the plate." }, pace: { value: 1 } },
+        steps: [{ text: "Thicken the drainage-hole fillet to 1.2 mm", minutes: 25 }],
+        fieldNote: "EXAMPLE: two planters printed, three outlines waiting.",
+        nextPhotos: ["The plate after the next print"],
+        act: { type: "ics", to: null, why: "A weekly check on the prints." },
+      },
+      labroll: {
+        fit: true, mold: "project", kind: "lab-rollout", system: "Work", title: "Lab rollout", side: "work",
+        words: { subject: "Lab rollout", unit: "tasks" },
+        vars: { done: { value: 7, origin: "inferred", reason: "Seven cards sit in Done." }, total: { value: 15, origin: "inferred", reason: "Fifteen cards on the board." }, pace: { value: 3 } },
+        steps: [{ text: "Write the five-line status note for Monday", minutes: 20 }],
+        fieldNote: "EXAMPLE: seven of fifteen cards are done.",
+        nextPhotos: ["The board on Monday"],
+        act: { type: "draft", to: "teammate@example.com", why: "A short status note to the team." },
+      },
+      week: {
+        fit: true, mold: "week", kind: "week", system: "Time", title: "This week", side: "both",
+        words: { subject: "This week" },
+        vars: { workHours: { value: 42 }, focusBlocks: { value: 3 }, mornings: { value: 2 }, familyEvenings: { value: 3 } },
+        act: { type: "ics", to: null, why: "Put the week on your calendar." },
+      },
+    };
+  }
+
+  function stampInst(inst, id, at, i) {
+    inst.id = id; inst.demo = true; inst.createdAt = at; inst.updatedAt = at + i;
+    (inst.observations || []).forEach((o) => { o.t = at; });
+  }
+  function withDone(inst, n) { const c = JSON.parse(JSON.stringify(inst)); c.vars.done.value = n; return c; }
+  function buildWorkHome(out, t, M) {
+    const add = (spec, photoKey, source, id, age, i) => {
+      let inst = null;
+      try { inst = M.build(spec, photoKey ? photo(photoKey, t - age) : null, { demo: true, source }); }
+      catch (e) { console.error("[WB.demo] build " + id, e); return null; }
+      stampInst(inst, id, t - age, i);
+      out.push(inst);
+      return inst;
+    };
+    const hs = specsHome(), ws = specsWork();
+    // basement: two zones cleared by Claude, a pace of 1 promised five days ago
+    const bs = add(hs.basement, "basement", "photo", IDS.basement, 24 * DAY, 5);
+    if (bs) {
+      const ago = [21 * DAY, 9 * DAY];
+      bs.zones.slice(0, 2).forEach((z, k) => { z.state = "done"; z.doneAt = t - ago[k]; z.by = "claude"; });
+      const at = t - 5 * DAY;
+      const it = typeof M.intentionFor === "function" ? M.intentionFor(bs, "pace", 1, at) : null;
+      if (it) { it.checkAt = t + 2 * DAY; bs.intention = it; }
+      bs.updatedAt = at;
+    }
+    // projects: observations tell the pace
+    const reels = add(ws.reels, "storyboard", "photo", IDS.reels, 14 * DAY, 6);
+    if (reels) {
+      const mk = (n, ago) => (M.observe ? M.observe(withDone(reels, n), "photo", null, t - ago) : null);
+      reels.observations = [mk(2, 13 * DAY), mk(3, 6 * DAY), mk(4, 1 * DAY)].filter(Boolean);
+      const at = t - 6 * DAY;
+      const it = typeof M.intentionFor === "function" ? M.intentionFor(withDone(reels, 3), "pace", 2, at) : null;
+      if (it) { it.checkAt = at + 7 * DAY; reels.intention = it; }
+      reels.contact = { to: "editor@example.com", threadId: null, messageId: null };
+      reels.updatedAt = t - DAY;
+    }
+    const planter = add(ws.planter, "buildplate", "photo", IDS.planter, 4 * DAY, 7);
+    const lab = add(ws.labroll, "taskboard", "photo", IDS.labroll, 9 * DAY, 8);
+    if (lab) lab.contact = { to: "teammate@example.com", threadId: null, messageId: null };
+    const wk = add(ws.week, null, "manual", IDS.week, 20 * HOUR, 9);
+    if (wk) {
+      ["meetingHours", "spillHours"].forEach((k) => {
+        const v = wk.vars[k];
+        if (!v) return;
+        v.value = k === "meetingHours" ? 18 : 5;
+        v.origin = "assumed";
+        v.reason = "A starting guess. Set it.";
+      });
+      if (M.observe) wk.observations = [Object.assign(M.observe(wk, "manual", null, wk.createdAt), { t: wk.createdAt })];
+    }
+    return planter;
+  }
+
+  /* the example bench starts on the Work side, clocked in two hours ago, with one loop from "yesterday" */
+  function benchState() {
+    const t = now();
+    return { side: "work", sideAt: t - 2 * HOUR,
+      loops: [{ id: "lp_demo01", text: "Reel 5: pick the hook from the three drafts", at: t - 2 * HOUR, instrumentId: IDS.reels, first: true, done: false }] };
+  }
+
   /* build(): Instrument[] for the example bench. Fresh objects every call; never persisted. */
   function build() {
     const M = WB.molds;
@@ -279,6 +501,7 @@
       (inst.observations || []).forEach((o) => { o.t = at; });
       out.push(inst);
     });
+    buildWorkHome(out, t, M);
     const takeout = out.find((x) => x.id === IDS.takeout);
     if (takeout) {
       // an earlier receipt, and the promise made a week ago: 1 a week, check due today
@@ -321,6 +544,9 @@
 
   function verifyFallback(mission) {
     const steps = (mission && mission.steps) || [];
+    if (mission && (mission.zoneId || mission.focus)) {
+      return { done: steps.map((x) => x.id), notDone: [], reclaimed: 100, by: "claude", fieldNote: "EXAMPLE: the bike corner reads clear.", zoneClear: true };
+    }
     const done = steps.filter((x) => x.done).map((x) => x.id);
     const notDone = steps.filter((x) => !x.done).map((x) => x.id);
     return { done, notDone, reclaimed: steps.length ? Math.round((done.length / steps.length) * 100) : 0, by: "self", fieldNote: "Checked by you." };
@@ -331,6 +557,16 @@
     const purpose = (opts && opts.purpose) || "ask";
     if (!inst) return null;
     const it = inst.intention;
+    if (purpose === "update" && inst.mold === "project") {
+      const v = inst.vars || {};
+      const done = v.done ? v.done.value : 0, total = v.total ? v.total.value : 0;
+      const unit = (inst.words && inst.words.unit) || "pieces";
+      const next = ((inst.steps || []).find((x) => !x.done) || {}).text;
+      const to = inst.contact && inst.contact.to ? [inst.contact.to] : [];
+      const body = "Hi,\n\nQuick update on " + (inst.title || "the project") + ": " + done + " of " + total + " " + unit + " are done.\n" +
+        (next ? "Next up: " + next + ".\n" : "") + "If anything should change, tell me and I will adjust.\n\n[Name]";
+      return { to, subject: (inst.title || "Project") + ": " + done + " of " + total + " " + unit + " done", body: body, replyToMessageId: null };
+    }
     if (inst.mold === "leak") {
       const n = it && typeof it.value === "number" ? it.value : 1;
       const T = {
@@ -353,8 +589,29 @@
     return null;
   }
 
+  /* a short Drive brief for the next step, from the instrument alone */
+  function briefFallback(inst) {
+    if (!inst) return { title: "Brief", text: "" };
+    const title = (inst.title || "Project") + ": next step";
+    const lines = ["EXAMPLE BRIEF", "", inst.title || "Project"];
+    const M = WB.molds;
+    if (inst.mold === "zones") {
+      const z = M && M.nextZone ? M.nextZone(inst) : null;
+      if (z) { lines.push("Next zone: " + z.name + " (about " + z.minutes + " min)"); (z.steps || []).forEach((x, i) => lines.push((i + 1) + ". " + x.text)); }
+      else lines.push("All zones are clear.");
+    } else {
+      const v = inst.vars || {};
+      const unit = (inst.words && inst.words.unit) || "pieces";
+      if (v.done && v.total) lines.push(v.done.value + " of " + v.total.value + " " + unit + " done.");
+      const next = (inst.steps || []).find((x) => !x.done);
+      lines.push(next ? "Next step: " + next.text + " (" + next.minutes + " min)" : "Next step: pick the smallest piece and do it first.");
+      lines.push("Done when: the step is finished and the count goes up by one.");
+    }
+    return { title, text: lines.join("\n") };
+  }
+
   WB.demo = {
-    build, enrichPatch, verifyFallback, draftFallback,
+    build, enrichPatch, verifyFallback, draftFallback, briefFallback, bench: benchState,
     /* extras beyond the contract */
     photo, ids: () => Object.assign({}, IDS),
   };

@@ -64,7 +64,7 @@
   }
 
   /* ---------------- copy ---------------- */
-  const NOUN = { leak: "RECEIPT", spoil: "SHELF", perUse: "TAG", dial: "BILL", countdown: "SLIP", reset: "CORNER" };
+  const NOUN = { leak: "RECEIPT", spoil: "SHELF", perUse: "TAG", dial: "BILL", countdown: "SLIP", reset: "CORNER", zones: "SPACE", project: "PROJECT", week: "WEEK" };
   function label(kind, stage, ctx) {
     switch (stage) {
       case "reading": return kind === "verify" ? "LOOKING AT THE AFTER…" : "READING THE " + ((ctx && NOUN[ctx.mold]) || "PHOTO") + "…";
@@ -76,7 +76,7 @@
       case "reading-mail": return "READING AN EMAIL…";
       case "comparing": return "CHECKING WHAT CHANGED…";
       case "writing":
-        return kind === "plan" ? "PLANNING THE MISSION…" : kind === "draft" ? "WRITING THE DRAFT…" : "WRITING IT UP…";
+        return kind === "plan" ? "PLANNING THE MISSION…" : kind === "brief" ? "WRITING THE BRIEF…" : kind === "draft" ? "WRITING THE DRAFT…" : "WRITING IT UP…";
       default: return String(stage || "").toUpperCase() + "…";
     }
   }
@@ -97,6 +97,7 @@
     },
     verify: { invalid_json: "I couldn’t compare those two photos. Try the after photo again." },
     plan: { invalid_json: "I couldn’t plan that one. Try again." },
+    brief: { invalid_json: "I couldn’t write that brief. Try again." },
     draft: { invalid_json: "I couldn’t write that draft. Try again.", refused: "I can’t write that one." },
   };
 
@@ -182,6 +183,13 @@
   }
   function meltedList() { return storeMelted().slice(-50).map((m) => ({ mold: m.mold, kind: m.kind, title: m.title })); }
 
+  const FOCUS_LABELS = { space: "Basement / garage", social: "Social media", design3d: "3D design", work: "Work projects", family: "Family time", budget: "Budget" };
+  function focusLine() {
+    let keys = [];
+    try { keys = (S() && typeof S().focus === "function" ? S().focus() : []) || []; } catch (e) { keys = []; }
+    const labels = keys.map((k) => FOCUS_LABELS[k]).filter(Boolean);
+    return labels.length ? "The user said they are working on: " + labels.join(", ") + ". Prefer zones for a whole room, project for work-in-progress." : null;
+  }
   function photoPrompt(target) {
     const guides = M().list().map((m) => "- " + m.promptGuide).join("\n");
     const snapLine = target
@@ -210,29 +218,32 @@
       "",
       "THE USER DOES NOT WANT instruments like: " + JSON.stringify(meltedList()),
       "",
+      focusLine(),
       "If nothing fits: if it shows a physical space or objects to deal with, use \"reset\". Otherwise return",
       "{\"fit\": false, \"why\": \"<one short sentence>\", \"try\": \"<one suggestion of a better photo>\"}.",
       "",
       "Return ONLY JSON:",
       "{",
       " \"fit\": true,",
-      " \"mold\": \"leak|spoil|perUse|dial|countdown|reset\",",
+      " \"mold\": \"leak|spoil|perUse|dial|countdown|reset|zones|project|week\",",
       " \"kind\": \"<stable lowercase slug for this kind of thing, e.g. takeout-golden-wok, home-fridge, electric-bill>\",",
-      " \"system\": \"Food|Money|Energy|Things|Space|Health\",",
+      " \"system\": \"Food|Money|Energy|Things|Space|Health|Work|Time\",",
+      " \"side\": \"work|home|both\",",
       " \"title\": \"<2-3 words>\",",
       " \"snapTo\": \"<existing id or null>\",",
-      " \"words\": { \"subject\": \"...\", \"period\": \"week|month\", \"basis\": \"once|month\", \"stepUnit\": \"...\", \"currency\": \"$\" },",
+      " \"words\": { \"subject\": \"...\", \"period\": \"week|month\", \"basis\": \"once|month\", \"stepUnit\": \"...\", \"unit\": \"<plural noun, project only>\", \"currency\": \"$\" },",
       " \"vars\": { \"<varId>\": { \"value\": <number>, \"origin\": \"seen|inferred|assumed\",",
       "                         \"evidence\": { \"bbox\": [x,y,w,h], \"text\": \"...\" } | null, \"reason\": \"...\" | null } },",
       " \"items\": [ { \"id\": \"i1\", \"name\": \"...\", \"value\": <number>, \"days\": <number>, \"origin\": \"seen|inferred|assumed\", \"pin\": [x,y] } ],",
       " \"steps\": [ { \"id\": \"s1\", \"n\": 1, \"text\": \"<imperative, specific to this photo, <= 9 words>\", \"minutes\": <number>, \"pin\": [x,y] } ],",
+      " \"zones\": [ { \"name\": \"...\", \"bbox\": [x,y,w,h], \"pin\": [x,y], \"minutes\": <15-60>, \"steps\": [ { \"text\": \"...\", \"minutes\": <number>, \"pin\": [x,y] } ] } ],",
       " \"fieldNote\": \"<one dry, specific sentence about this exact photo, no exclamation marks>\",",
       " \"nextPhotos\": [\"<what to photograph next to keep this true>\"],",
       " \"mailQuery\": \"<Gmail search query that would find more evidence, or null>\",",
       " \"act\": { \"type\": \"draft|ics|mission\", \"to\": \"<email if visible or null>\", \"why\": \"<short>\" }",
       "}",
       "Dates: for countdown.deadline give \"value\" as days from TODAY=" + todayISO() + " (integer), the app converts.",
-      "items is required for spoil (3-12 items) and steps for reset (3-7 steps); omit both otherwise.",
+      "items is required for spoil (3-12 items), steps for reset (3-7 steps) and zones for zones (3-8 zones, each with 2-5 steps); for project give 1-3 steps. Omit what does not apply.",
     ].join("\n");
   }
 
@@ -286,6 +297,53 @@
       await S().upsert(inst);
       return { value: { id: inst.id, isNew: true, snapped: false }, done: { instrumentId: inst.id, isNew: true, snapped: false, summary: inst.fieldNote || null } };
     });
+  }
+
+  /* ---------------- 7.1b forge from a form (local only, no Claude) ---------------- */
+  function slug(t) { return String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48); }
+  function formNum(v) { return typeof v === "string" && !v.trim() ? NaN : Number(v); }
+  function validEmail(v) {
+    const e = clip(v, 120);
+    return e && /^[^\s@<>()"',;]+@[^\s@<>()"',;]+\.[a-z]{2,}$/i.test(e) ? e : null;
+  }
+  const WEEK_RANGES = {
+    workHours: [20, 70, "Hours at work"], focusBlocks: [0, 10, "Focus blocks"], meetingHours: [0, 40, "Hours of meetings"],
+    spillHours: [0, 20, "Hours that spill into evenings"], mornings: [0, 2, "Protected mornings"], familyEvenings: [0, 7, "Family evenings"],
+  };
+  async function fromForm(moldId, fields) {
+    fields = isObj(fields) ? fields : {};
+    if (moldId !== "project" && moldId !== "week") throw fail("unknown", "That form isn’t one I can build.");
+    let spec;
+    if (moldId === "project") {
+      const title = plain(fields.title, 28) || "Project";
+      const unit = plain(fields.unit, 16) || "pieces";
+      const done = formNum(fields.done), total = formNum(fields.total), pace = formNum(fields.pace);
+      if (!isNum(total) || total < 1) throw fail("invalid", "How many in all? At least 1.");
+      if (!isNum(done) || done < 0 || done > total) throw fail("invalid", "Done has to be between 0 and " + total + ".");
+      if (!isNum(pace) || pace < 0.5 || pace > 20) throw fail("invalid", "A week’s pace runs from 0.5 to 20.");
+      const side = fields.side === "work" ? "work" : "home";
+      const next = plain(fields.next, 72);
+      spec = {
+        fit: true, mold: "project", kind: slug(title) || "project", system: side === "work" ? "Work" : "Things", title, side,
+        words: { subject: title, unit },
+        vars: { done: { value: done }, total: { value: total }, pace: { value: pace } },
+        steps: next ? [{ text: next, minutes: 25 }] : [],
+        act: { type: "ics", to: validEmail(fields.to) },
+      };
+    } else {
+      const vars = {};
+      for (const k in WEEK_RANGES) {
+        const r = WEEK_RANGES[k];
+        const n = formNum(fields[k]);
+        if (!isNum(n) || n < r[0] || n > r[1]) throw fail("invalid", r[2] + " runs from " + r[0] + " to " + r[1] + ".");
+        vars[k] = { value: n };
+      }
+      spec = { fit: true, mold: "week", kind: "week", system: "Time", title: "This week", side: "both", words: { subject: "This week" }, vars, act: { type: "ics" } };
+    }
+    const inst = M().build(spec, null, { source: "manual" });
+    if (!S() || typeof S().upsert !== "function") throw fail("unknown", "The bench isn’t ready yet.");
+    await S().upsert(inst);
+    return { id: inst.id, isNew: true };
   }
 
   /* ---------------- mail tools (7.2 / 7.3) ---------------- */
@@ -583,6 +641,7 @@
   function sortedSteps(inst) { return (inst.steps || []).slice().sort((a, b) => a.n - b.n); }
   function missionShell(inst) {
     return { id: uid("msn"), instrumentId: inst.id, title: "", minutes: 0, steps: [], beforePhoto: inst.photo || null,
+      zoneId: null, focus: null,
       startedAt: null, endsAt: null, afterPhoto: null, verified: null, fieldNote: null };
   }
   function finishSteps(steps, cap) {
@@ -661,6 +720,26 @@
     const f = finishSteps([{ text: plain((inst.act && inst.act.why) || "Do the one thing this needs", 60), minutes: 5 }], 0);
     return Object.assign(m, { title: plain(inst.title, 40) + ".", steps: f.steps, minutes: f.minutes });
   }
+  /* zones: one zone is one mission */
+  function pickZone(inst, zoneId) {
+    const zs = Array.isArray(inst.zones) ? inst.zones : [];
+    const z = zoneId ? zs.find((x) => x.id === zoneId) : null;
+    if (z) return z;
+    return typeof M().nextZone === "function" ? M().nextZone(inst) : (zs.filter((x) => x.state !== "done")[0] || null);
+  }
+  function zoneBase(name) { return String(name || "zone").replace(/^(the|a|an)\s+/i, "").replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()); }
+  function zoneMission(inst, zone, steps) {
+    const m = missionShell(inst);
+    const needMin = !steps.length || steps.some((s) => !isNum(Number(s.minutes)) || Number(s.minutes) <= 0);
+    const list = needMin ? steps.map((s) => Object.assign({}, s, { minutes: Math.max(1, Math.round((zone.minutes || 30) / Math.max(1, steps.length))) })) : steps;
+    const f = finishSteps(list, 0);
+    return Object.assign(m, { title: "Clear the " + zoneBase(zone.name) + ".", steps: f.steps, minutes: needMin ? Math.round(zone.minutes || f.minutes) : f.minutes,
+      zoneId: zone.id, focus: Array.isArray(zone.bbox) ? zone.bbox.slice(0, 4) : null, beforePhoto: inst.photo || null });
+  }
+  function zoneGenericSteps(zone) {
+    const n = zoneBase(zone.name).toLowerCase();
+    return [{ text: "Pull everything out of the " + n, minutes: 10, pin: zone.pin }, { text: "Sort keep / give / toss", minutes: 10, pin: zone.pin }, { text: "Put the keeps back, labelled", minutes: 10, pin: zone.pin }];
+  }
   function validatePlan(o) {
     if (!isObj(o)) return ["The reply must be one JSON object."];
     const errs = [];
@@ -676,6 +755,36 @@
       if (!inst) throw fail("unknown", "That instrument isn’t on the bench any more.");
       job.ctx = { mold: inst.mold };
       job.progress("writing");
+      if (inst.mold === "zones") {
+        const zone = pickZone(inst, opts.zoneId);
+        if (!zone) throw fail("unknown", "Every zone here is clear.");
+        const own = (zone.steps || []).filter((x) => x && x.text);
+        if (own.length || inst.demo) {
+          const m = zoneMission(inst, zone, own.length ? own : zoneGenericSteps(zone));
+          return { value: m, done: { instrumentId: id, summary: m.title } };
+        }
+        let steps = zoneGenericSteps(zone);
+        const caps = await capsNow();
+        if (caps.sample) {
+          try {
+            const images = [];
+            if (caps.images && inst.photo && (inst.photo.thumb || inst.photo.src)) {
+              try { images.push(await WB.ai.rasterBlob(inst.photo.src || inst.photo.thumb, 1000)); } catch (e) { /* plan without the photo */ }
+            }
+            const o = await WB.ai.json(
+              "You plan a short clearing mission in Workbench. The photo is the user's " + ((inst.words && inst.words.subject) || "space") + ".\n" +
+              "Plan only the area called \"" + plain(zone.name, 28) + "\"" + (Array.isArray(zone.bbox) ? ", the region [x,y,w,h] = " + JSON.stringify(zone.bbox) + " (fractions 0..1 of the photo from its top-left)" : "") + ".\n" +
+              "Give 2-5 imperative steps, each at most 9 words, specific to what is visible there, with minutes and a pin [x,y] in whole-photo fractions. No exclamation marks.\n" +
+              "Return ONLY JSON: {\"title\": \"Clear the " + plain(zoneBase(zone.name), 28) + ".\", \"steps\": [{\"text\": \"...\", \"minutes\": <number>, \"pin\": [x,y]}]}",
+              { images: images.length ? images : undefined, tier: "quick", signal: job.signal, validate: validatePlan });
+            steps = o.steps.slice(0, 5);
+          } catch (e) {
+            if (job.signal.aborted || (e && e.code === "cancelled")) throw e;
+          }
+        }
+        const m = zoneMission(inst, zone, steps);
+        return { value: m, done: { instrumentId: id, summary: m.title } };
+      }
       const local = localPlan(inst);
       const caps = inst.demo || inst.mold === "reset" || (inst.mold !== "spoil" && inst.mold !== "dial") ? null : await capsNow();
       if (!caps || !caps.sample) return { value: local, done: { instrumentId: id, summary: local.title } };
@@ -719,17 +828,27 @@
   }
 
   /* ---------------- 7.5 verify mission ---------------- */
+  /* zone missions also say whether the zone itself is clear */
+  function withZone(mission, m, hint) {
+    if (!mission || !mission.zoneId || !m || !m.verified) return m;
+    const v = m.verified;
+    if (typeof v.zoneClear !== "boolean") {
+      const ids = (m.steps || []).map((s) => s.id);
+      v.zoneClear = typeof hint === "boolean" ? hint : !!ids.length && (v.notDone || []).length === 0 && (v.done || []).length === ids.length;
+    }
+    return m;
+  }
   async function selfCheck(mission, afterPhoto, inst) {
     if (inst && inst.demo && WB.demo && typeof WB.demo.verifyFallback === "function") {
       try {
         const r = await WB.demo.verifyFallback(mission, afterPhoto);
-        if (isObj(r) && isObj(r.verified)) return Object.assign({}, mission, r, { afterPhoto: r.afterPhoto || afterPhoto });
+        if (isObj(r) && isObj(r.verified)) return withZone(mission, Object.assign({}, mission, r, { afterPhoto: r.afterPhoto || afterPhoto }), r.zoneClear);
         if (isObj(r) && Array.isArray(r.done)) {
           const done = r.done.map(String);
-          return Object.assign({}, mission, { afterPhoto, steps: (mission.steps || []).map((s) => Object.assign({}, s, { done: done.indexOf(s.id) >= 0 })),
+          return withZone(mission, Object.assign({}, mission, { afterPhoto, steps: (mission.steps || []).map((s) => Object.assign({}, s, { done: done.indexOf(s.id) >= 0 })),
             verified: { done, notDone: Array.isArray(r.notDone) ? r.notDone.map(String) : (mission.steps || []).map((s) => s.id).filter((x) => done.indexOf(x) < 0),
               reclaimed: clamp(Math.round(Number(r.reclaimed) || 0), 0, 100), by: r.by === "claude" ? "claude" : "self" },
-            fieldNote: plain(r.fieldNote, 160) || "Checked by you." });
+            fieldNote: plain(r.fieldNote, 160) || "Checked by you." }), r.zoneClear);
         }
       } catch (e) { /* local self-check below */ }
     }
@@ -737,9 +856,9 @@
     const done = steps.filter((s) => s.done).map((s) => s.id);
     const notDone = steps.filter((s) => !s.done).map((s) => s.id);
     const reclaimed = steps.length ? Math.round((done.length / steps.length) * 100) : 0;
-    return Object.assign({}, mission, { afterPhoto, verified: { done, notDone, reclaimed, by: "self" }, fieldNote: "Checked by you." });
+    return withZone(mission, Object.assign({}, mission, { afterPhoto, verified: { done, notDone, reclaimed, by: "self" }, fieldNote: "Checked by you." }));
   }
-  function validateVerify(stepIds) {
+  function validateVerify(stepIds, zone) {
     return (o) => {
       if (!isObj(o)) return ["The reply must be one JSON object."];
       const errs = [];
@@ -748,6 +867,7 @@
       if (!isNum(Number(o.reclaimed))) errs.push("\"reclaimed\" must be a number 0-100.");
       if (typeof o.sameSpot !== "boolean") errs.push("\"sameSpot\" must be true or false.");
       if (typeof o.fieldNote !== "string") errs.push("\"fieldNote\" must be one sentence.");
+      if (zone && typeof o.zoneClear !== "boolean") errs.push("\"zoneClear\" must be true or false.");
       const all = (o.done || []).concat(o.notDone || []);
       if (all.some((x) => stepIds.indexOf(String(x)) < 0)) errs.push("Use only these step ids: " + stepIds.join(", ") + ".");
       return errs;
@@ -781,11 +901,16 @@
       }
       const steps = (mission.steps || []).map((s) => ({ id: s.id, text: s.text, tickedByUser: !!s.done }));
       const ids = steps.map((s) => s.id);
+      const zone = !!mission.zoneId && Array.isArray(mission.focus) && mission.focus.length === 4;
+      const zoneBlock = mission.zoneId
+        ? "This is one zone of a bigger space. Compare only inside the region of image 1 at [x,y,w,h] = " + JSON.stringify(zone ? mission.focus : [0, 0, 1, 1]) +
+          " (fractions 0..1 from the top-left) against the same region of image 2; ignore the rest. Also say whether that zone is now clear.\n"
+        : "";
       const o = await WB.ai.json(
-        "Image 1 is BEFORE, image 2 is AFTER of the same spot. Steps: " + JSON.stringify(steps) + ".\n" +
+        "Image 1 is BEFORE, image 2 is AFTER of the same spot. Steps: " + JSON.stringify(steps) + ".\n" + zoneBlock +
         "Judge only what is visible. A step the user ticked but you cannot see done goes in notDone. If image 2 is clearly a different place, sameSpot is false.\n" +
-        "Return ONLY JSON: {\"done\": [stepIds], \"notDone\": [stepIds], \"reclaimed\": <0-100, how much of the spot's mess is gone>, \"sameSpot\": <bool>, \"fieldNote\": \"<one dry, specific line naming a concrete change, e.g. the mugs are gone; no exclamation marks>\"}",
-        { images: [beforeBlob, prep.blob], tier: "default", signal: job.signal, timeoutMs: 90000, validate: validateVerify(ids),
+        "Return ONLY JSON: {\"done\": [stepIds], \"notDone\": [stepIds], \"reclaimed\": <0-100, how much of the spot's mess is gone>, \"sameSpot\": <bool>," + (mission.zoneId ? " \"zoneClear\": <bool>," : "") + " \"fieldNote\": \"<one dry, specific line naming a concrete change, e.g. the mugs are gone; no exclamation marks>\"}",
+        { images: [beforeBlob, prep.blob], tier: "default", signal: job.signal, timeoutMs: 90000, validate: validateVerify(ids, !!mission.zoneId),
           onChecking: () => job.progress("checking", null, "CHECKING THE CHANGES…"), onRetry: () => job.progress("retrying") });
       job.check();
       if (o.sameSpot === false) throw fail("not_same_spot");
@@ -794,7 +919,7 @@
       const m = Object.assign({}, mission, {
         afterPhoto,
         steps: (mission.steps || []).map((s) => Object.assign({}, s, { done: done.indexOf(s.id) >= 0 })),
-        verified: { done, notDone, reclaimed: clamp(Math.round(Number(o.reclaimed)), 0, 100), by: "claude" },
+        verified: Object.assign({ done, notDone, reclaimed: clamp(Math.round(Number(o.reclaimed)), 0, 100), by: "claude" }, mission.zoneId ? { zoneClear: o.zoneClear === true } : {}),
         fieldNote: plain(o.fieldNote, 160) || null,
       });
       return { value: m, done: { instrumentId: instId, summary: m.fieldNote } };
@@ -802,7 +927,7 @@
   }
 
   /* ---------------- 7.6 write draft ---------------- */
-  const PURPOSES = ["cancel", "pause", "return", "ask", "renew"];
+  const PURPOSES = ["cancel", "pause", "return", "ask", "renew", "update"];
   function intentionLine(inst) {
     const it = inst.intention;
     if (!it) return "none yet";
@@ -817,7 +942,41 @@
     [inst.contact && inst.contact.to, inst.act && inst.act.to].forEach((e) => { if (typeof e === "string" && /@/.test(e) && out.indexOf(e) < 0) out.push(e); });
     return out;
   }
+  /* where a progress-style instrument stands, in words (project / zones) */
+  function progressFacts(inst) {
+    let done = 0, total = 0, unit = (inst.words && inst.words.unit) || "pieces", pace = null;
+    if (inst.mold === "zones") {
+      const z = typeof M().zoneStats === "function" ? M().zoneStats(inst) : { done: 0, total: (inst.zones || []).length };
+      done = z.done; total = z.total; unit = "zones";
+    } else {
+      done = Math.round((inst.vars.done && inst.vars.done.value) || 0);
+      total = Math.round((inst.vars.total && inst.vars.total.value) || 0);
+    }
+    if (inst.vars.pace) pace = inst.vars.pace.value;
+    let finish = null;
+    try { const c = M().compute(inst); if (c.outputs && isNum(c.outputs.finish)) finish = M().format(c.outputs.finish, "day", inst); } catch (e) { finish = null; }
+    const stepList = (inst.steps || []).slice().sort((a, b) => (a.n || 0) - (b.n || 0));
+    const nextStep = stepList.find((x) => x && !x.done);
+    return { done, total, unit, pace, finish, next: nextStep ? clip(nextStep.text, 80) : null };
+  }
+  function updateDraft(inst) {
+    const f = progressFacts(inst);
+    const title = clip(inst.title, 40);
+    const lines = [
+      "Hi,",
+      "",
+      title + " stands at " + f.done + " of " + f.total + " " + f.unit + " done.",
+      f.next ? "Next up: " + f.next.replace(/[.!]+$/, "") + "." : "Next up: I’ll pick the next piece this week.",
+      f.finish ? "At this pace I expect to finish by " + f.finish + ". Does that date work, or is there something you need from me before then?" : "Could you tell me what date works for you for the next check-in?",
+      "",
+      "Thanks,",
+      "[Name]",
+    ];
+    const to = inst.contact && validEmail(inst.contact.to);
+    return { to: to ? [to] : [], subject: title + ": " + f.done + " of " + f.total + " " + f.unit + " done", body: lines.join("\n"), replyToMessageId: (inst.contact && inst.contact.messageId) || null, _f: f };
+  }
   function localDraft(inst, purpose) {
+    if (purpose === "update") { const d = updateDraft(inst); delete d._f; return d; }
     const subj = (inst.words && inst.words.subject) || inst.title;
     const sx = subj.replace(/^(the|this|my)\s+/i, "");
     const deadline = inst.vars.deadline ? M().format(inst.vars.deadline.value, "day", inst) : null;
@@ -847,14 +1006,20 @@
       }
       const caps = await capsNow();
       if (!caps.sample) return { value: fallback, done: { instrumentId: id, summary: fallback.subject } };
-      const given = givenAddresses(inst);
+      const given = purpose === "update" ? fallback.to.slice() : givenAddresses(inst);
       let out = fallback;
       try {
+        const upd = purpose === "update" ? updateDraft(inst)._f : null;
         const o = await WB.ai.json(
-          "Write a short email as the user, for Workbench.\n" +
+          (upd
+            ? "Write a short progress note as the user to their collaborator, for Workbench.\n" +
+              "About: " + plain(inst.title, 40) + ". Done: " + upd.done + " of " + upd.total + " " + upd.unit + ". Next step: " + (upd.next || "not set") + ". Expected finish: " + (upd.finish || "unknown") + ".\n" +
+              "Exactly 3-5 plain lines in the body: where it stands, the next step, one concrete ask or date. Subject: \"" + plain(inst.title, 40) + ": " + upd.done + " of " + upd.total + " " + upd.unit + " done\".\n"
+            : "Write a short email as the user, for Workbench.\n") +
+          (upd ? "" :
           "About: " + plain(inst.title, 40) + " — " + plain((inst.words && inst.words.subject) || inst.title, 60) + " (" + inst.mold + ").\n" +
           "Their intention: " + intentionLine(inst) + ".\n" +
-          "Purpose: " + purpose + ".\n" +
+          "Purpose: " + purpose + ".\n") +
           "Addresses you were given: " + JSON.stringify(given) + ".\n" +
           (inst.enriched && inst.enriched.summary ? "What their mail showed: " + plain(inst.enriched.summary, 200) + "\n" : "") +
           "Write as the user. Plain text, ≤90 words, polite, specific, no exclamation marks, no AI phrasing, no placeholders except [Name] if unknown.\n" +
@@ -874,7 +1039,62 @@
     });
   }
 
-  WB.forge = { fromPhoto, enrich, fromMail, planMission, verifyMission, writeDraft, cancel,
+  /* ---------------- 7.7 write a Drive brief for the next step ---------------- */
+  function briefText(inst, outline) {
+    const f = progressFacts(inst);
+    const title = clip(inst.title, 40);
+    const step = f.next || "Pick the next piece and write down what it needs";
+    const stepRec = (inst.steps || []).slice().sort((a, b) => (a.n || 0) - (b.n || 0)).find((x) => x && !x.done);
+    const mins = stepRec && isNum(Number(stepRec.minutes)) ? Math.round(Number(stepRec.minutes)) : 25;
+    const lines = (outline && outline.length ? outline : [1, 2, 3].map((i) => "Unit " + (f.done + i) + ": …")).slice(0, 3);
+    return {
+      title: title + " — next step brief",
+      text: [
+        "Where it stands",
+        f.done + " of " + f.total + " " + f.unit + " done" + (isNum(f.pace) ? ", at " + M().format(f.pace, "num", inst) + " a week" : "") + (f.finish ? ", finishing " + f.finish : "") + ".",
+        "",
+        "The next step",
+        step.replace(/[.!]+$/, "") + " (" + mins + " min).",
+        "",
+        "Outline for the next 3 " + f.unit,
+        lines.map((l) => "- " + l).join("\n"),
+        "",
+        "Done means",
+        "That step is finished and the count moves from " + f.done + " to " + Math.min(f.total, f.done + 1) + ".",
+      ].join("\n"),
+    };
+  }
+  async function writeBrief(id, opts) {
+    opts = opts || {};
+    return run("brief", id, opts, async (job) => {
+      const inst = storeGet(id);
+      if (!inst) throw fail("unknown", "That instrument isn’t on the bench any more.");
+      job.progress("writing");
+      let out = briefText(inst, null);
+      const caps = inst.demo ? null : await capsNow();
+      if (caps && caps.sample) {
+        try {
+          const f = progressFacts(inst);
+          const o = await WB.ai.json(
+            "You help the user keep a project moving, inside Workbench.\n" +
+            "Project: " + plain(inst.title, 40) + (inst.fieldNote ? " — " + plain(inst.fieldNote, 180) : "") + ". Done " + f.done + " of " + f.total + " " + f.unit + ". Next step: " + (f.next || "not set") + ".\n" +
+            "Steps on the list: " + JSON.stringify((inst.steps || []).map((x) => x.text)) + ".\n" +
+            "Write a one-line outline for each of the next 3 " + f.unit + ", each starting \"Unit N: \" style with the number and a specific, plain idea (at most 14 words). No exclamation marks.\n" +
+            "Return ONLY JSON: {\"outline\": [\"<line 1>\", \"<line 2>\", \"<line 3>\"]}",
+            { tier: "quick", signal: job.signal,
+              validate: (x) => (!isObj(x) || !Array.isArray(x.outline) || !x.outline.length ? ["\"outline\" must be an array of 3 short lines."] : []) });
+          const lines = o.outline.map((l) => plain(l, 120)).filter(Boolean).slice(0, 3);
+          if (lines.length) out = briefText(inst, lines);
+        } catch (e) {
+          if (job.signal.aborted || (e && e.code === "cancelled")) throw e;
+          if (e && e.code === "rate_limited") throw e;
+        }
+      }
+      return { value: out, done: { instrumentId: id, summary: out.title } };
+    });
+  }
+
+  WB.forge = { fromPhoto, enrich, fromMail, planMission, verifyMission, writeDraft, cancel, fromForm, writeBrief,
     /* extras beyond the contract */
     active: () => Object.keys(jobs).map((k) => ({ jobId: k, kind: jobs[k].kind, instrumentId: jobs[k].instrumentId })),
     _prompts: { photo: photoPrompt, enrich: enrichPrompt, mail: mailPrompt },

@@ -339,8 +339,8 @@
 .ins-mail__err { margin: 0; font-size: var(--t-small); color: var(--ink-2); }
 
 .ins-note { margin: var(--s5) 0 0; font-family: var(--font-serif); font-style: italic; font-size: 17px; line-height: 1.4; color: var(--ink-2); text-wrap: pretty; }
-.ins-next { margin: var(--s3) 0 0; font-size: var(--t-small); color: var(--ink-3); }
-.ins-next .wb-micro { color: var(--ink-3); }
+.ins-keep { margin: var(--s3) 0 0; font-size: var(--t-small); color: var(--ink-3); }
+.ins-keep .wb-micro { color: var(--ink-3); }
 
 /* sheets opened from here */
 .ins-menu__line { margin: 0 0 var(--s2); font-size: var(--t-small); color: var(--ink-2); }
@@ -567,3 +567,112 @@
 .ins-ci__out { margin: 0; text-align: center; font-size: 13px; color: var(--ink-2); }
 .ins-ci__fine { margin: 0; color: var(--ink-3); text-align: center; }
 @media (prefers-reduced-motion: reduce) { .ins-chart.is-flash, .ins-coach2 { animation: none; } .ins-chip__ring { transition: none; } }
+
+/* ================================================================ Work & Home additions */
+/* clocked out: the only thing a hidden work instrument shows */
+.ins--locked { min-height: 100vh; min-height: 100dvh; padding-bottom: var(--s6); }
+.ins-lock {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
+  margin: var(--s6) 0 0; padding: var(--s5) var(--s4);
+  background: var(--paper-2); border: var(--hair) solid var(--rule); border-left: 3px solid var(--side-mark); border-radius: var(--r-card);
+}
+.ins-lock__tag { color: var(--ink-3); }
+.ins-lock__line { margin: 0; font-size: 26px; line-height: 1.2; color: var(--ink); text-wrap: pretty; }
+.ins-lock__btn { min-height: 44px; padding: 0 var(--s5); }
+.ins-mini--locked { min-height: 96px; justify-content: center; border-style: dashed; }
+.ins-mini__lock { display: flex; flex-direction: column; gap: 4px; padding: var(--s3) var(--s2); color: var(--ink-3); }
+.ins-mini__lock-t { font-size: 14px; color: var(--ink-2); line-height: 1.3; }
+
+/* a typed instrument has no photo: a plate */
+.ins-plate {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3);
+  min-height: 160px; padding: var(--s4);
+  background: var(--paper-3); border: var(--hair) solid var(--rule); border-radius: 2px; color: var(--ink);
+}
+.ins-plate--week { padding: var(--s3); align-items: stretch; background: var(--paper-2); }
+.ins-plate__chart { width: 100%; min-width: 0; }
+.ins-plate__title { margin: 0; font-size: 26px; line-height: 1.15; text-wrap: balance; overflow-wrap: anywhere; }
+.ins-plate__num { margin: 0; line-height: 1.05; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ins-plate__big { font-size: 52px; font-weight: 500; letter-spacing: -.03em; }
+.ins-plate__unit { font-size: 15px; color: var(--ink-2); }
+.ins-plate__add { min-height: 44px; margin-top: var(--s1); padding: 0 var(--s3); }
+
+/* zone map on the photo */
+.ins-zone { cursor: pointer; outline: none; }
+.ins-zone__hit { fill: transparent; }
+.ins-zone__r { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.ins-zone__chip { fill: var(--paper); fill-opacity: .88; stroke: var(--rule); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ins-zone__t { fill: var(--ink); font-family: var(--font-mono); font-size: 10px; font-weight: 500; pointer-events: none; }
+.ins-zone__check { fill: none; stroke: var(--good); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.ins-zone--done .ins-zone__r { fill: var(--zone-done); stroke: var(--good); }
+.ins-zone--todo .ins-zone__r { stroke: var(--rule); stroke-dasharray: 5 4; }
+.ins-zone--todo .ins-zone__chip { fill-opacity: .7; }
+.ins-zone--next .ins-zone__r { stroke: var(--zone-next); stroke-width: 2.5; animation: ins-zone-pulse 2.4s ease-in-out infinite; }
+.ins-zone--next .ins-zone__chip { stroke: var(--zone-next); }
+.ins-zone:focus-visible .ins-zone__r { stroke: var(--signal); stroke-width: 3; }
+@keyframes ins-zone-pulse { 0%, 100% { stroke-opacity: 1; fill: transparent; } 50% { stroke-opacity: .45; fill: var(--signal-soft); } }
+.ins.is-zoomed .ins-zone { opacity: 0; }
+
+.ins-list--zones .ins-row { grid-template-columns: 26px 1fr auto auto; }
+.ins-list--zones .ins-row__w { min-width: 44px; text-align: right; color: var(--ink-3); }
+.ins-row.is-next .ins-row__n { background: var(--signal); }
+.ins-row.is-next .ins-row__w { color: var(--signal); }
+.ins-row.is-done .ins-row__w { color: var(--good); }
+.ins-zsheet { display: flex; flex-direction: column; gap: var(--s3); }
+.ins-zsheet__meta { margin: 0; font-size: 13px; color: var(--ink-2); }
+.ins-zsheet__done { margin: 0; color: var(--good); }
+.ins-zsheet__after { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 4px; background: var(--paper-3); }
+.ins-zsheet__steps { margin: 0; padding: 0 0 0 1.3em; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.35; color: var(--ink); }
+.ins-zsheet__step { overflow-wrap: anywhere; }
+.ins-bar__btn--zone { min-width: 0; max-width: 62%; }
+.ins-bar__zlbl { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* project: the next step */
+.ins-next {
+  margin: var(--s4) 0 0; padding: var(--s3) var(--s3) var(--s2);
+  display: flex; flex-direction: column; gap: var(--s2);
+  background: var(--paper-2); border: var(--hair) solid var(--rule); border-left: 3px solid var(--mine); border-radius: var(--r-card);
+}
+.ins-next__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ins-next__tag { color: var(--ink-3); }
+.ins-next__text { margin: 0; font-size: 17px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.ins-next__row { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+.ins-next__check, .ins-next__edit {
+  display: inline-flex; align-items: center; gap: var(--s2); min-height: 44px; padding: 0 var(--s2);
+  border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 15px; font-weight: 600;
+}
+.ins-next__edit { color: var(--ink-2); font-weight: 500; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 4px; }
+.ins-next__box { width: 22px; height: 22px; border: 1.5px solid var(--ink); border-radius: 5px; background: var(--paper); transition: background-color var(--d-fast); }
+.ins-next__check:hover .ins-next__box, .ins-next__check:active .ins-next__box { background: var(--mine-soft); }
+.ins-next__check:focus-visible, .ins-next__edit:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: var(--r-chip); }
+.ins-next__more { align-self: flex-start; min-height: 44px; padding: 0 var(--s3); }
+
+/* chips: a negative hours slack */
+.ins-chip--short { color: var(--danger); box-shadow: inset 0 -2px 0 var(--danger); }
+
+/* ================================================================ progress + week charts */
+.ch-pg__grid { stroke: var(--rule); stroke-width: 1; opacity: .5; }
+.ch-pg__total { stroke: var(--ink); stroke-width: 1; }
+.ch-pg__done { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ch-pg__now { fill: var(--ink); stroke: var(--paper); stroke-width: 1.5; }
+.ch-pg__pace { fill: none; stroke: var(--signal); stroke-width: 2; stroke-dasharray: 6 4; stroke-linecap: round; }
+.ch-pg__end { fill: var(--paper); stroke: var(--signal); stroke-width: 2; }
+.ch-pg__mine { fill: none; stroke: var(--mine); stroke-width: 1; stroke-dasharray: 3 3; }
+.ch-lbl--mine { fill: var(--mine); }
+.ch-end--good { fill: var(--good); font-size: 11px; letter-spacing: .06em; }
+
+.ch-wk { stroke: none; transition: fill var(--d-fast); }
+.ch-wk--focus { fill: var(--wk-focus); }
+.ch-wk--work { fill: var(--wk-work); }
+.ch-wk--family { fill: var(--wk-family); }
+.ch-wk--spill { fill: var(--wk-spill); }
+.ch-wk--free { fill: var(--wk-free); stroke: var(--rule); stroke-width: 1; }
+.ch-wk--chg { animation: ch-wk-fade 160ms var(--ease-out) both; }
+@keyframes ch-wk-fade { from { opacity: .25; } to { opacity: 1; } }
+.ch-wk__spare { fill: var(--ink); font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.ch-wk__spare.is-short { fill: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ins-zone--next .ins-zone__r, .ch-wk--chg { animation: none !important; }
+  .ch-wk, .ins-next__box { transition: none; }
+}

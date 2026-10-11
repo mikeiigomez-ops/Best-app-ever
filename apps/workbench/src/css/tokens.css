@@ -28,6 +28,10 @@
   /* Ives additions (still tokens): 2% paper grain, the negative filter for forging */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.04 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
   --negative: grayscale(1) contrast(1.55) brightness(1.06);
+  --good-soft: rgba(31,138,91,.16); --mine-soft: rgba(39,65,230,.12); --warn-soft: rgba(185,121,0,.16);
+  --side-mark: var(--signal); --zone-done: var(--good-soft); --zone-next: var(--signal);
+  --wk-work: var(--paper-3); --wk-focus: var(--mine); --wk-family: var(--signal); --wk-spill: var(--danger); --wk-free: transparent;
+  --d-dusk: 600ms;
   color-scheme: light;
 }
 
@@ -40,6 +44,7 @@
     --mine: #8796FF; --good: #4CC38A; --warn: #E7B33A; --danger: #FF6B57;
     --halo: rgba(0,0,0,.7); --scrim: rgba(0,0,0,.55);
     --lift: 0 1px 0 rgba(0,0,0,.3), 0 14px 30px -14px rgba(0,0,0,.8);
+    --good-soft: rgba(76,195,138,.20); --mine-soft: rgba(135,150,255,.18); --warn-soft: rgba(231,179,58,.18);
     --grain: none;
     color-scheme: dark;
   }
@@ -54,4 +59,21 @@
   --lift: 0 1px 0 rgba(0,0,0,.3), 0 14px 30px -14px rgba(0,0,0,.8);
   --grain: none;
   color-scheme: dark;
+  --good-soft: rgba(76,195,138,.20); --mine-soft: rgba(135,150,255,.18); --warn-soft: rgba(231,179,58,.18);
+}
+
+/* Work side: cooler paper. Light first, dark blocks after so they win. */
+:root[data-side="work"] {
+  --paper: #ECEDE8; --paper-2: #E1E3DC; --paper-3: #D3D6CD; --rule: #C6C9BF;
+  --side-mark: var(--mine);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-side="work"]:not([data-theme="light"]) {
+    --paper: #0F1113; --paper-2: #181B1E; --paper-3: #22262A; --rule: #33383D;
+    --side-mark: var(--mine);
+  }
+}
+:root[data-side="work"][data-theme="dark"] {
+  --paper: #0F1113; --paper-2: #181B1E; --paper-3: #22262A; --rule: #33383D;
+  --side-mark: var(--mine);
 }

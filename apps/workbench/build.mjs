@@ -43,9 +43,14 @@ function slim(text) {
   return out.join("\n");
 }
 
+// CSS can go further: no comments, no whitespace around { } ; , (no CSS string here holds those characters)
+function slimCss(text) {
+  if (RAW) return text.trim();
+  return slim(text).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s*([{};,])\s*/g, "$1").replace(/;}/g, "}").replace(/\s*\n\s*/g, " ").trim();
+}
 const css = CSS.map((rel) => {
   const body = readPart(rel);
-  return body == null ? "" : "/* ---- src/" + rel + " ---- */\n" + slim(body) + "\n";
+  return body == null ? "" : "/* ---- src/" + rel + " ---- */\n" + slimCss(body) + "\n";
 }).join("\n");
 
 const js = JS.map((rel) => {
@@ -101,5 +106,6 @@ console.log("  css     " + kb(css));
 console.log("  js      " + kb(js));
 console.log("  dist/workbench.html  " + kb(content));
 console.log("  dist/index.html      " + kb(standalone));
-if (Buffer.byteLength(content, "utf8") > 400 * 1024) console.warn("  warning: bundle is over the 400 KB target");
+console.log("  size warning threshold  720 KB");
+if (Buffer.byteLength(content, "utf8") > 720 * 1024) console.warn("  warning: bundle is over the 720 KB target");
 if (missing.length) console.warn("  missing (skipped): " + missing.join(", "));

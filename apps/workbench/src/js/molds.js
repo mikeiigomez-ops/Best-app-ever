@@ -7,8 +7,8 @@
 
   const DAY = 86400000;
   const ORIGINS = ["seen", "inferred", "assumed", "set", "lever"];
-  const SYSTEMS = ["Food", "Money", "Energy", "Things", "Space", "Health"];
-  const FORMATS = ["usd", "num", "int", "days", "pct", "day", "min", "times"];
+  const SYSTEMS = ["Food", "Money", "Energy", "Things", "Space", "Health", "Work", "Time"];
+  const FORMATS = ["usd", "num", "int", "days", "pct", "day", "min", "times", "hours"];
   const EPS = 1e-9;
 
   /* ---------------- small pure helpers ---------------- */
@@ -119,6 +119,10 @@
         const r = Math.max(0, Math.round(value * 2) / 2);
         const whole = Math.floor(r);
         return (r === whole ? String(whole) : (whole ? whole : "") + "½") + " min";
+      }
+      case "hours": {
+        const r = Math.round(a * 10) / 10;
+        return (r === 0 ? "" : sign) + (Number.isInteger(r) ? r : r.toFixed(1)) + " h";
       }
       case "pct": return sign + Math.round(a) + "%";
       case "day": return fmtDayMs(fromDayNum(Math.round(value)));
@@ -404,7 +408,217 @@
       promptGuide:
         'reset (Square meter) — any physical chaos: a desk, drawer, nightstand, entryway, a dying plant (revive it), a pile to give away (release it). vars: minutes (fact, inferred total minutes, the sum of the steps), take (lever, how many steps to do now; start at all of them). steps (REQUIRED, 3-7): imperative, specific to THIS photo, <= 9 words each, with minutes and a pin [x,y] on the thing it touches. Keep the total near 7 minutes. words: subject (e.g. "the desk corner").',
     },
+
+    zones: {
+      id: "zones", name: "Zone map", system: "Space", chart: "progress",
+      primary: "finish", outcome: "finish", better: "lower",
+      template: "{w.subject}: {done} of {total} zones clear. At {pace} a week the last one is done by {finish}, about {hoursLeft} of work left.",
+      templateFor: (vals, raw) => (raw && raw.left === 0 ? "{w.subject}: all {total} zones clear." : null),
+      acts: ["mission", "ics"], checkDays: 7, needsItems: false, needsSteps: false, needsZones: true, side: "home", tracks: "done",
+      words: { subject: "the basement" },
+      vars: {
+        pace: { kind: "lever", label: "zones a week, your call", unit: "zones a week", format: "num", min: 0.5, max: 7, step: 0.5, default: 1,
+          range: (v, c) => [0.5, Math.max(2, (c.zones || []).length)] },
+      },
+      outputs: {
+        done: { label: "clear", format: "int" },
+        total: { label: "zones", format: "int" },
+        left: { label: "to go", format: "int" },
+        finish: { label: "done by", format: "day" },
+        hoursLeft: { label: "of work left", format: "hours" },
+      },
+      calc(v, inst, today) {
+        const zs = Array.isArray(inst.zones) ? inst.zones : [];
+        const total = zs.length;
+        const doneZ = zs.filter((z) => z.state === "done");
+        const todo = zs.filter((z) => z.state !== "done");
+        const left = todo.length;
+        const pace = Math.max(0.25, toNum(v.pace, 1));
+        let finish = today + Math.ceil((left / pace) * 7 - EPS);
+        if (left === 0) {
+          const last = doneZ.reduce((m, z) => (isNum(z.doneAt) ? Math.max(m, z.doneAt) : m), 0);
+          finish = last ? dayNum(last) : today;
+        }
+        const mins = todo.reduce((s, z) => s + toNum(z.minutes, 0), 0);
+        return { done: doneZ.length, total, left, finish, hoursLeft: Math.round((mins / 60) * 2) / 2, _mins: todo.map((z) => toNum(z.minutes, 0)), _pace: pace };
+      },
+      formula(id, v, o, inst) {
+        if (id === "done") return o.done + " of " + o.total;
+        if (id === "total") return o.total + " zones";
+        if (id === "left") return o.total + " " + MINUS + " " + o.done;
+        if (id === "finish") return o.left === 0 ? "all clear" : "today + ⌈" + o.left + " ÷ " + format(o._pace, "num") + " × 7⌉ days";
+        if (id === "hoursLeft") return o._mins.length ? o._mins.join(" + ") + " min ÷ 60" : "nothing left";
+        return "";
+      },
+      series(v, o, inst) { return progressSeries(inst, { unit: "zones", total: o.total, done: o.done, finish: o.finish, perWeek: v.pace }); },
+      promptGuide:
+        'zones (Zone map) — a whole big messy space: basement, garage, attic, storage room, a long closet wall. zones (REQUIRED, 3-8): named areas by what is there ("shelf wall", "under the stairs", "bike corner"), each with bbox [x,y,w,h] covering it, pin [x,y] at its centre, minutes (one honest session, 15-60), steps (2-5 imperative steps, <= 9 words, pins in whole-photo fractions). vars: pace (lever, zones per week; start at 1). words: subject (e.g. "the basement").',
+    },
+
+    project: {
+      id: "project", name: "Project", system: "Work", chart: "progress",
+      primary: "finish", outcome: "finish", better: "lower",
+      template: "{w.subject}: {done} of {total} {w.unit} done. At {pace} a week you finish {finish}.",
+      templateFor: (vals, raw) => (raw && raw.left === 0 ? "{w.subject}: all {total} {w.unit} done." : null),
+      acts: ["ics", "drive", "draft"], checkDays: 7, needsItems: false, needsSteps: false, optSteps: 3, needsZones: false, side: "home", tracks: "done",
+      words: { subject: "This project", unit: "pieces" },
+      vars: {
+        done: { kind: "fact", label: "done", unit: "{unit}", format: "int", min: 0, max: 200, step: 1, default: 0, required: true },
+        total: { kind: "fact", label: "in all", unit: "{unit}", format: "int", min: 1, max: 200, step: 1, default: 10, required: true,
+          range: (v, c) => [Math.max(1, toNum(c.vals.done, 0)), niceCeil(Math.max(10, v * 2))] },
+        pace: { kind: "lever", label: "{unit} a week, your call", unit: "a week", format: "num", min: 0.5, max: 20, step: 0.5, default: 1,
+          range: (v, c) => [0.5, Math.max(5, Math.ceil(Math.max(0, toNum(c.vals.total, 10) - toNum(c.vals.done, 0))))] },
+      },
+      outputs: {
+        left: { label: "to go", format: "int" },
+        finish: { label: "you finish", format: "day" },
+        weeks: { label: "weeks", format: "num" },
+      },
+      calc(v, inst, today) {
+        const total = Math.max(1, toNum(v.total, 10));
+        const done = clamp(toNum(v.done, 0), 0, total);
+        const left = Math.max(0, total - done);
+        const pace = Math.max(0.25, toNum(v.pace, 1));
+        return { left, finish: today + Math.ceil((left / pace) * 7 - EPS), weeks: Math.round((left / pace) * 10) / 10, _pace: pace, _done: done, _total: total };
+      },
+      formula(id, v, o, inst) {
+        if (id === "left") return format(o._total, "int") + " " + MINUS + " " + format(o._done, "int");
+        if (id === "finish") return "today + ⌈" + format(o.left, "int") + " ÷ " + format(o._pace, "num") + " × 7⌉ days";
+        if (id === "weeks") return format(o.left, "int") + " ÷ " + format(o._pace, "num");
+        return "";
+      },
+      series(v, o, inst) { return progressSeries(inst, { unit: word(inst, "unit", "pieces"), total: o._total, done: o._done, finish: o.finish, perWeek: v.pace }); },
+      promptGuide:
+        'project (Project) — creative or work project in progress: storyboard or sticky notes, a sketch, a 3D print on a build plate, a whiteboard, a screen with a task board or timeline. vars: done (fact, units finished), total (fact, units planned), pace (lever, units per week; start near the pace the evidence suggests, else 1). words: subject (project name, <= 28 chars), unit (plural noun: "posts", "prints", "tasks"). steps (1-3): the next concrete steps, each doable in <= 25 minutes, specific to what is visible. side: "work" if it looks like their job, else "home".',
+    },
+
+    week: {
+      id: "week", name: "Week", system: "Time", chart: "week",
+      primary: "familyTimes", outcome: "familyTimes", better: "higher",
+      template: "{workHours} at work holds {focusBlocks} focus blocks and {meetingHours} of meetings. Protect {familyEvenings} evenings and {displaced} moves into the day, with {slack} still spare: {familyTimes} family times a week.",
+      acts: ["ics"], checkDays: 7, needsItems: false, needsSteps: false, needsZones: false, side: "both",
+      words: { subject: "This week" },
+      vars: {
+        workHours: { kind: "fact", label: "hours at work a week", unit: "h", format: "hours", min: 20, max: 70, step: 1, default: 40 },
+        focusBlocks: { kind: "fact", label: "2-hour focus blocks your work needs", unit: "blocks", format: "int", min: 0, max: 10, step: 1, default: 3 },
+        meetingHours: { kind: "fact", label: "hours of meetings and must-answer work", unit: "h", format: "hours", min: 0, max: 40, step: 1, default: 15 },
+        spillHours: { kind: "fact", label: "work hours that spill into evenings now", unit: "h", format: "hours", min: 0, max: 20, step: 0.5, default: 4 },
+        mornings: { kind: "fact", label: "protected weekend mornings", unit: "mornings", format: "int", min: 0, max: 2, step: 1, default: 1 },
+        familyEvenings: { kind: "lever", label: "family evenings, your call", unit: "evenings", format: "int", min: 0, max: 7, step: 1, default: 3 },
+      },
+      outputs: {
+        familyTimes: { label: "family times a week", format: "int" },
+        displaced: { label: "moves into the workday", format: "hours" },
+        slack: { label: "spare in the work week", format: "hours" },
+      },
+      calc(v) {
+        const fe = clamp(Math.round(toNum(v.familyEvenings, 0)), 0, 7);
+        const focusH = 2 * toNum(v.focusBlocks, 0);
+        const displaced = toNum(v.spillHours, 0) * Math.min(fe, 5) / 5;
+        const slack = toNum(v.workHours, 40) - focusH - toNum(v.meetingHours, 0) - displaced;
+        return { familyTimes: fe + clamp(Math.round(toNum(v.mornings, 0)), 0, 2), displaced, slack, _focusH: focusH, _fe: fe };
+      },
+      formula(id, v, o, inst) {
+        const f = (x) => format(x, "hours", inst);
+        if (id === "familyTimes") return o._fe + " evenings + " + clamp(Math.round(toNum(v.mornings, 0)), 0, 2) + " mornings";
+        if (id === "displaced") return f(v.spillHours) + " × " + Math.min(o._fe, 5) + " ÷ 5";
+        if (id === "slack") return f(v.workHours) + " " + MINUS + " " + f(o._focusH) + " " + MINUS + " " + f(v.meetingHours) + " " + MINUS + " " + f(o.displaced);
+        return "";
+      },
+      series(v, o) {
+        return { type: "week", days: weekPlanFrom(v).days, focusH: o._focusH, displaced: o.displaced, slack: o.slack, familyTimes: o.familyTimes };
+      },
+      promptGuide:
+        'week (Week) — a screenshot of a calendar week or a planner page. vars: workHours, focusBlocks (2-hour blocks), meetingHours, spillHours (work done in evenings), mornings (protected weekend mornings 0-2) as facts; familyEvenings (lever 0-7, start at what the calendar shows). side "both".',
+    },
   };
+
+  /* ---------------- progress molds (zones, project) and the week plan ---------------- */
+  function zonesOf(inst) { return inst && Array.isArray(inst.zones) ? inst.zones : []; }
+  function doneCount(inst) {
+    if (inst.mold === "zones") return zonesOf(inst).filter((z) => z.state === "done").length;
+    return Math.max(0, toNum(inst.vars && inst.vars.done && inst.vars.done.value, 0));
+  }
+  function totalCount(inst) {
+    if (inst.mold === "zones") return zonesOf(inst).length;
+    return Math.max(1, toNum(inst.vars && inst.vars.total && inst.vars.total.value, 1));
+  }
+  /* done over time: project from observations' facts.done, zones from cumulative doneAt. Always at least one point. */
+  function trackPoints(inst) {
+    let pts = [];
+    if (inst.mold === "zones") {
+      const ds = zonesOf(inst).filter((z) => z.state === "done" && isNum(z.doneAt)).map((z) => z.doneAt).sort((a, b) => a - b);
+      pts = [{ t: inst.createdAt, v: 0 }].concat(ds.map((t, i) => ({ t: Math.max(t, inst.createdAt), v: i + 1 })));
+    } else {
+      pts = ((inst.observations) || []).filter((o) => isNum(o.t) && o.facts && isNum(o.facts.done)).map((o) => ({ t: o.t, v: o.facts.done })).sort((a, b) => a.t - b.t);
+      if (!pts.length) pts = [{ t: isNum(inst.createdAt) ? inst.createdAt : now(), v: doneCount(inst) }];
+    }
+    return pts;
+  }
+  function progressSeries(inst, p) {
+    const t = now();
+    const it = inst.intention;
+    let gline = null;
+    if (it && isNum(it.value)) {
+      const g = ghost(inst);
+      if (isNum(g.start)) gline = { from: { t: g.start, v: g.baseline }, perWeek: it.value, end: g.end };
+    }
+    return { type: "progress", unit: p.unit, total: p.total, done: p.done, start: isNum(inst.createdAt) ? inst.createdAt : t, today: t,
+      finish: fromDayNum(Math.round(p.finish)), points: trackPoints(inst),
+      pace: { from: { t, v: p.done }, perWeek: p.perWeek }, ghost: gline };
+  }
+  function tracksTarget(inst, base, perWeek) {
+    const mold = MOLDS[inst.mold];
+    return Math.min(totalCount(inst), base + perWeek * ((mold.checkDays || 7) / 7));
+  }
+
+  const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const FAM_ORDER = [6, 4, 2, 5, 1, 3, 0];
+  /* Pure and fast: called per pointermove. v = week values keyed by var id. */
+  function weekPlanFrom(v) {
+    const nf = clamp(Math.round(toNum(v.focusBlocks, 0)), 0, 10);
+    const fe = clamp(Math.round(toNum(v.familyEvenings, 0)), 0, 7);
+    const nm = clamp(Math.round(toNum(v.mornings, 0)), 0, 2);
+    const spill = toNum(v.spillHours, 0);
+    const displaced = spill * Math.min(fe, 5) / 5;
+    const days = DOW.map((label, dow) => ({ dow, label, morning: dow < 5 ? "work" : "free", day: dow < 5 ? "work" : "free", evening: "free" }));
+    const focus = [];
+    for (let i = 0; i < nf; i++) {
+      const dow = i % 5;
+      focus.push({ dow, start: i < 5 ? "09:00" : "14:00", minutes: 120 });
+      if (i < 5) days[dow].morning = "focus";
+    }
+    const family = [];
+    for (let i = 0; i < fe; i++) { family.push({ dow: FAM_ORDER[i], start: "18:00", minutes: 180 }); days[FAM_ORDER[i]].evening = "family"; }
+    const mornings = [];
+    for (let i = 0; i < nm; i++) { const dow = 5 + i; mornings.push({ dow, start: "08:00", minutes: 240 }); days[dow].morning = "family"; }
+    if (spill > 0 && displaced < spill - EPS) for (let d = 0; d < 5; d++) if (days[d].evening !== "family") days[d].evening = "spill";
+    return { days, focus, family, mornings };
+  }
+  function weekPlan(inst, overrides) {
+    const wm = MOLDS.week;
+    const v = {};
+    for (const id in wm.vars) {
+      let x = overrides && isNum(overrides[id]) ? overrides[id] : inst && inst.vars && inst.vars[id] ? toNum(inst.vars[id].value, null) : null;
+      v[id] = isNum(x) ? x : wm.vars[id].default;
+    }
+    return weekPlanFrom(v);
+  }
+  function sideOf(inst) {
+    if (inst && (inst.side === "work" || inst.side === "home" || inst.side === "both")) return inst.side;
+    const m = inst && MOLDS[inst.mold];
+    return (m && m.side) || "home";
+  }
+  function zoneStats(inst) {
+    const zs = zonesOf(inst);
+    const todo = zs.filter((z) => z.state !== "done");
+    const done = zs.length - todo.length;
+    return { done, total: zs.length, left: todo.length, minutesLeft: todo.reduce((s, z) => s + toNum(z.minutes, 0), 0), next: nextZone(inst) };
+  }
+  function nextZone(inst) {
+    const todo = zonesOf(inst).filter((z) => z.state !== "done").slice().sort((a, b) => a.n - b.n);
+    return todo[0] || null;
+  }
 
   function riskyItems(inst, horizon) {
     const h = isNum(horizon) ? horizon : 3;
@@ -419,7 +633,7 @@
 
   /* ---------------- var ranges ---------------- */
   function ctxFor(inst, vals) {
-    return { vals: vals || {}, words: Object.assign({}, (MOLDS[inst.mold] || {}).words, inst.words || {}), items: inst.items || [], steps: inst.steps || [], today: dayNum(now()) };
+    return { vals: vals || {}, words: Object.assign({}, (MOLDS[inst.mold] || {}).words, inst.words || {}), items: inst.items || [], steps: inst.steps || [], zones: zonesOf(inst), today: dayNum(now()) };
   }
   function rangeFor(mold, id, value, ctx) {
     const d = mold.vars[id];
@@ -515,6 +729,7 @@
   function baseline(inst) {
     const mold = inst && MOLDS[inst.mold];
     if (!mold) return NaN;
+    if (mold.tracks === "done") return doneCount(inst);
     return compute(inst, mold.asIs || undefined).primary;
   }
   /* verdict(inst, varId, value, overrides): is committing the lever at value a step the right way?
@@ -543,9 +758,16 @@
   }
 
   /* ---------------- sentence ---------------- */
-  function templateIds(mold) {
+  /* the sentence for the current state: a mold may swap in another template (templateFor), e.g. when nothing is left */
+  function tplFor(inst, mold, overrides) {
+    if (typeof mold.templateFor === "function") {
+      try { const c = compute(inst, overrides); const t = mold.templateFor(c.values, c._raw, inst); if (typeof t === "string" && t) return t; } catch (e) { /* default */ }
+    }
+    return mold.template;
+  }
+  function templateIds(mold, tpl) {
     const ids = [];
-    mold.template.replace(/\{([a-zA-Z.]+)\}/g, (m, k) => { if (k.indexOf("w.") !== 0) ids.push(k); return m; });
+    (tpl || mold.template).replace(/\{([a-zA-Z.]+)\}/g, (m, k) => { if (k.indexOf("w.") !== 0) ids.push(k); return m; });
     return ids;
   }
   function sentence(inst, overrides) {
@@ -560,7 +782,7 @@
     };
     const re = /\{([a-zA-Z.]+)\}/g;
     let i = 0, m;
-    const tpl = mold.template;
+    const tpl = tplFor(inst, mold, overrides);
     let lastVal = null;
     while ((m = re.exec(tpl))) {
       let lit = tpl.slice(i, m.index);
@@ -591,13 +813,13 @@
   /* ---------------- hinge & confidence ---------------- */
   function sentenceFacts(inst) {
     const mold = MOLDS[inst.mold];
-    return templateIds(mold).filter((id) => mold.vars[id] && mold.vars[id].kind === "fact" && inst.vars && inst.vars[id]);
+    return templateIds(mold, tplFor(inst, mold)).filter((id) => mold.vars[id] && mold.vars[id].kind === "fact" && inst.vars && inst.vars[id]);
   }
   function hinge(inst) {
     const none = { varId: null, impact: 0, isLever: false, note: "" };
     const mold = inst && MOLDS[inst.mold];
     if (!mold) return none;
-    const ids = templateIds(mold).filter((id) => mold.vars[id] && inst.vars && inst.vars[id]);
+    const ids = templateIds(mold, tplFor(inst, mold)).filter((id) => mold.vars[id] && inst.vars && inst.vars[id]);
     let best = null;
     for (const id of ids) {
       const d = mold.vars[id];
@@ -626,6 +848,11 @@
   function confidence(inst) {
     const mold = inst && MOLDS[inst.mold];
     if (!mold) return { measured: 0, total: 0, ratio: 0 };
+    if (mold.needsZones) {
+      const zs = zonesOf(inst);
+      const m = zs.filter((z) => z.origin === "set" || z.state === "done").length;
+      return { measured: m, total: zs.length, ratio: zs.length ? m / zs.length : 0, ids: zs.map((z) => z.id) };
+    }
     let ids = Array.isArray(mold.confFacts) ? mold.confFacts.filter((id) => inst.vars && inst.vars[id]) : sentenceFacts(inst);
     if (!ids.length) ids = Object.keys(mold.vars).filter((id) => mold.vars[id].kind === "fact" && inst.vars && inst.vars[id]);
     const measured = ids.filter((id) => inst.vars[id].origin === "seen" || inst.vars[id].origin === "set").length;
@@ -645,13 +872,42 @@
   function intentionFor(inst, varId, value, at) {
     const mold = MOLDS[inst.mold];
     const t = isNum(at) ? at : now();
+    if (mold.tracks === "done") {
+      const b = baseline(inst);
+      return { varId, value, baseline: b, target: tracksTarget(inst, b, value), outputId: "done",
+        committedAt: t, checkAt: checkAtFor(inst, t, value), status: "open", actionId: null };
+    }
     const tgt = compute(inst, { [varId]: value });
     return { varId, value, baseline: baseline(inst), target: tgt.outcome, outputId: mold.primary,
       committedAt: t, checkAt: checkAtFor(inst, t, value), status: "open", actionId: null };
   }
+  /* ghost for molds that track a done count (project, zones): units are DONE COUNT */
+  function trackGhost(inst, mold) {
+    const it = inst.intention;
+    const total = totalCount(inst);
+    const points = trackPoints(inst);
+    if (!it) return { baseline: null, target: null, start: null, end: null, points, status: "none", due: false, progress: null, perWeek: null, total };
+    const base = isNum(it.baseline) ? it.baseline : doneCount(inst);
+    const perWeek = toNum(it.value, 1);
+    const target = Math.min(total, base + perWeek * (mold.checkDays || 7) / 7);
+    const start = isNum(it.committedAt) ? it.committedAt : now();
+    const end = isNum(it.checkAt) ? it.checkAt : start + (mold.checkDays || 7) * DAY;
+    const t = now();
+    const after = points.filter((p) => p.t > start);
+    const last = points.length ? points[points.length - 1].v : doneCount(inst);
+    let status = it.status === "held" || it.status === "missed" ? it.status : "open";
+    if (status === "open") {
+      if (after.some((p) => p.v >= target - 0.01)) status = "held";
+      else if (t >= end) status = last > base ? "closer" : "missed";
+    }
+    const span = target - base;
+    const progress = span > EPS ? clamp((last - base) / span, -1, 1) : null;
+    return { baseline: base, target, start, end, points, status, due: status === "open" && t >= end, progress, perWeek, total };
+  }
   function ghost(inst) {
     const mold = inst && MOLDS[inst.mold];
     const it = inst && inst.intention;
+    if (mold && mold.tracks === "done") return trackGhost(inst, mold);
     const points = ((inst && inst.observations) || []).filter((o) => isNum(o.t) && isNum(o.value))
       .map((o) => (o.hollow ? { t: o.t, v: o.value, hollow: true, source: o.source } : { t: o.t, v: o.value, source: o.source })).sort((a, b) => a.t - b.t);
     if (!mold || !it) return { baseline: null, target: null, start: null, end: null, points, status: "none", due: false, progress: null };
@@ -722,14 +978,33 @@
         else if (!isNum(toNum(it.days, NaN))) errs.push("items[" + i + "].days must be a number.");
       });
     }
+    if (mold.needsZones) {
+      if (!Array.isArray(spec.zones) || spec.zones.length < 3 || spec.zones.length > 8) errs.push('"zones" must list 3-8 named areas for mold zones.');
+      else spec.zones.forEach((z, i) => {
+        if (!z || typeof z.name !== "string" || !z.name.trim()) { errs.push("zones[" + i + "].name must be a string."); return; }
+        const b = badBox(z.bbox);
+        if (b) errs.push("zones[" + i + "].bbox " + b + ".");
+        (Array.isArray(z.steps) ? z.steps : []).forEach((s, j) => { if (!s || typeof s.text !== "string" || !s.text.trim()) errs.push("zones[" + i + "].steps[" + j + "].text must be a string."); });
+      });
+    }
+    if (mold.id === "project") {
+      const tv = spec.vars.total, dv = spec.vars.done;
+      const tn = toNum(tv && typeof tv === "object" ? tv.value : tv, NaN), dn = toNum(dv && typeof dv === "object" ? dv.value : dv, NaN);
+      if (isNum(tn) && tn < 1) errs.push("vars.total.value must be at least 1.");
+      if (isNum(dn) && dn < 0) errs.push("vars.done.value must not be negative.");
+    }
+    if (spec.side != null && ["work", "home", "both"].indexOf(spec.side) < 0) errs.push('"side" must be "work", "home" or "both".');
     if (mold.needsSteps) {
       if (!Array.isArray(spec.steps) || !spec.steps.length) errs.push('"steps" must list 3-7 steps for mold reset.');
       else spec.steps.forEach((s, i) => { if (!s || typeof s.text !== "string" || !s.text.trim()) errs.push("steps[" + i + "].text must be a string."); });
     }
     if (!opts || opts.source !== "mail") {
-      for (const k of ["items", "steps"]) {
+      for (const k of ["items", "steps", "zones"]) {
         (Array.isArray(spec[k]) ? spec[k] : []).forEach((x, i) => {
           if (x && Array.isArray(x.pin) && x.pin.some((p) => toNum(p, 0) > 1.5)) errs.push(k + "[" + i + "].pin must be fractions 0..1, not pixels.");
+          if (k === "zones" && x) (Array.isArray(x.steps) ? x.steps : []).forEach((s, j) => {
+            if (s && Array.isArray(s.pin) && s.pin.some((p) => toNum(p, 0) > 1.5)) errs.push("zones[" + i + "].steps[" + j + "].pin must be fractions 0..1, not pixels.");
+          });
         });
       }
     }
@@ -764,13 +1039,28 @@
       pin: cleanPin(it.pin),
     }));
   }
-  function cleanSteps(arr) {
-    return (Array.isArray(arr) ? arr : []).filter((s) => s && typeof s.text === "string" && s.text.trim()).slice(0, 7).map((s, i) => ({
+  function cleanSteps(arr, max, defMinutes) {
+    return (Array.isArray(arr) ? arr : []).filter((s) => s && typeof s.text === "string" && s.text.trim()).slice(0, max || 7).map((s, i) => ({
       id: "s" + (i + 1), n: i + 1,
       text: cleanWord(s.text, 72, "Do this step"),
-      minutes: clamp(Math.round(toNum(s.minutes, 2) * 2) / 2, 0.5, 30),
+      minutes: clamp(Math.round(toNum(s.minutes, defMinutes || 2) * 2) / 2, 0.5, 30),
       pin: cleanPin(s.pin),
     }));
+  }
+  function cleanZones(arr) {
+    return (Array.isArray(arr) ? arr : []).filter((z) => z && typeof z.name === "string" && z.name.trim()).slice(0, 8).map((z, i) => {
+      const bbox = cleanBox(z.bbox);
+      return {
+        id: "z" + (i + 1), n: i + 1,
+        name: cleanWord(z.name, 28, "Zone " + (i + 1)),
+        bbox,
+        pin: cleanPin(z.pin) || (bbox ? [Math.round((bbox[0] + bbox[2] / 2) * 1000) / 1000, Math.round((bbox[1] + bbox[3] / 2) * 1000) / 1000] : null),
+        minutes: clamp(Math.round(toNum(z.minutes, 30)), 5, 120),
+        origin: "inferred",
+        steps: cleanSteps(z.steps, 5, 5),
+        state: "todo", doneAt: null, by: null, afterThumb: null,
+      };
+    });
   }
   function cleanWords(mold, w) {
     w = w && typeof w === "object" ? w : {};
@@ -779,10 +1069,12 @@
     if (subj) out.subject = subj; else if (mold.words.subject) out.subject = mold.words.subject;
     if (mold.id === "leak") out.period = w.period === "month" ? "month" : "week";
     if (mold.id === "perUse") out.basis = w.basis === "month" ? "month" : "once";
+    if (mold.id === "project") out.unit = cleanWord(w.unit, 16, null) || mold.words.unit;
     if (mold.id === "dial") out.stepUnit = cleanWord(w.stepUnit, 28, null) || mold.words.stepUnit;
     return out;
   }
-  function labelFor(d, words) { return d.label.replace("{period}", words.period || "week"); }
+  function labelFor(d, words) { return d.label.replace("{period}", words.period || "week").replace("{unit}", words.unit || "pieces"); }
+  function unitFor(d, words) { return d.unit.replace("{period}", words.period || "week").replace("{unit}", words.unit || "pieces"); }
 
   /* Makes one Evidence entry from a Claude var evidence object. ctx.source 'photo'|'mail'. Returns entry or null. */
   function evidenceFrom(ev, ctx, n) {
@@ -810,11 +1102,15 @@
       raw[id] = sv == null ? null : toNum(typeof sv === "object" ? sv.value : sv, null);
     }
     if (mold.id === "countdown" && isNum(raw.deadline)) raw.deadline = today + Math.round(raw.deadline);
+    if (mold.id === "project") {
+      if (isNum(raw.total)) raw.total = Math.max(1, raw.total);
+      if (isNum(raw.done)) raw.done = Math.max(0, isNum(raw.total) ? Math.min(raw.done, raw.total) : raw.done);
+    }
     if (mold.id === "reset" && !isNum(raw.minutes)) raw.minutes = (extra.steps || []).reduce((s, x) => s + x.minutes, 0) || null;
     if (mold.id === "reset" && !isNum(raw.take)) raw.take = (extra.steps || []).length || null;
     const vals = {};
     for (const id in mold.vars) vals[id] = isNum(raw[id]) ? raw[id] : mold.vars[id].default;
-    const rctx = { vals, words, items: extra.items || [], steps: extra.steps || [], today };
+    const rctx = { vals, words, items: extra.items || [], steps: extra.steps || [], zones: extra.zones || [], today };
     const vars = {};
     const evidence = [];
     for (const id in mold.vars) {
@@ -829,9 +1125,11 @@
       let origin;
       if (d.kind === "lever") origin = "lever";
       else if (!isNum(raw[id])) origin = "assumed";
+      else if (ctx.source === "manual") origin = "set";
       else origin = ["seen", "inferred", "assumed"].indexOf(sv.origin) >= 0 ? sv.origin : "inferred";
       let evidenceId = null;
       let reason = cleanNote(sv.reason, 140);
+      if (origin === "set") reason = null;
       if (origin === "seen") {
         const ev = evidenceFrom(sv.evidence, ctx, evidence.length + 1);
         if (ev) { evidence.push(ev); evidenceId = ev.id; }
@@ -841,8 +1139,9 @@
       if (d.kind === "lever") reason = null;
       const r = rangeFor(mold, id, value, rctx);
       value = clamp(value, r.min, r.max);
-      if (d.kind === "lever" || d.format === "int" || d.format === "days" || d.format === "day") value = Math.round(value);
-      vars[id] = { id, kind: d.kind, label: labelFor(d, words), unit: d.unit.replace("{period}", words.period || "week"), format: d.format,
+      if (d.kind === "lever" && d.step < 1) value = roundTo(value, d.step);
+      else if (d.kind === "lever" || d.format === "int" || d.format === "days" || d.format === "day") value = Math.round(value);
+      vars[id] = { id, kind: d.kind, label: labelFor(d, words), unit: unitFor(d, words), format: d.format,
         value, min: r.min, max: r.max, step: r.step, origin, evidenceId, reason };
     }
     return { vars, evidence };
@@ -863,12 +1162,13 @@
     opts = opts || {};
     const mold = MOLDS[spec && spec.mold];
     if (!mold) throw { code: "invalid_json", message: "Unknown mold." };
-    const source = opts.source === "mail" ? "mail" : "photo";
+    const source = opts.source === "mail" ? "mail" : opts.source === "manual" ? "manual" : "photo";
     const t = now();
     const words = cleanWords(mold, spec.words);
     const items = mold.needsItems ? cleanItems(spec.items) : [];
-    const steps = mold.needsSteps ? cleanSteps(spec.steps) : [];
-    const mv = makeVars(mold, spec.vars, words, { items, steps }, { source, threads: opts.threads });
+    const steps = mold.needsSteps ? cleanSteps(spec.steps) : mold.optSteps ? cleanSteps(spec.steps, mold.optSteps, 25) : [];
+    const zones = mold.needsZones ? cleanZones(spec.zones) : [];
+    const mv = makeVars(mold, spec.vars, words, { items, steps, zones }, { source, threads: opts.threads });
     const act = spec.act && typeof spec.act === "object" ? spec.act : {};
     const actType = mold.acts.indexOf(act.type) >= 0 ? act.type : mold.acts[0];
     const to = email(act.to);
@@ -880,6 +1180,7 @@
       title: cleanWord(spec.title, 28, mold.name) || mold.name,
       createdAt: t, updatedAt: t,
       photo, photos: photo ? [photo] : [],
+      side: ["work", "home", "both"].indexOf(spec.side) >= 0 ? spec.side : (mold.side || "home"), zones,
       words, vars: mv.vars, items, steps, evidence: mv.evidence,
       fieldNote: cleanNote(spec.fieldNote, 180),
       nextPhotos: (Array.isArray(spec.nextPhotos) ? spec.nextPhotos : []).map((s) => cleanWord(s, 90, null)).filter(Boolean).slice(0, 3),
@@ -892,7 +1193,7 @@
       const c = compute(inst)._raw;
       if (!(spec.vars && spec.vars.cookN != null)) inst.vars.cookN.value = Math.min(2, c._risk.length);
     }
-    inst.observations.push(observe(inst, source === "mail" ? "email" : "photo", null, t));
+    inst.observations.push(observe(inst, source === "mail" ? "email" : source === "manual" ? "manual" : "photo", null, t));
     return inst;
   }
 
@@ -904,7 +1205,7 @@
     const words = out.words || cleanWords(mold, {});
     const items = mold.needsItems ? cleanItems(spec.items) : out.items || [];
     const steps = mold.needsSteps ? cleanSteps(spec.steps) : out.steps || [];
-    const mv = makeVars(mold, spec.vars, words, { items, steps }, { source: "photo" });
+    const mv = makeVars(mold, spec.vars, words, { items, steps, zones: zonesOf(out) }, { source: "photo" });
     const keptEvidence = (out.evidence || []).filter((e) => e.type === "email");
     const evidence = keptEvidence.slice();
     let n = evidence.reduce((m, e) => Math.max(m, parseInt(String(e.id).replace(/\D/g, ""), 10) || 0), 0);
@@ -973,7 +1274,7 @@
       const ev = evidenceFrom(Object.assign({}, p && p.evidence), { source: "mail", threads: opts.threads }, n);
       if (!ev) { n -= 1; continue; }
       out.evidence.push(ev);
-      const prev = out.vars[id] || { id, kind: "fact", label: labelFor(d, out.words || {}), unit: d.unit.replace("{period}", (out.words && out.words.period) || "week"), format: d.format, step: d.step };
+      const prev = out.vars[id] || { id, kind: "fact", label: labelFor(d, out.words || {}), unit: unitFor(d, out.words || {}), format: d.format, step: d.step };
       if (d.format === "int" || d.format === "days" || d.format === "day") value = Math.round(value);
       prev.value = value;
       prev.min = isNum(prev.min) ? Math.min(prev.min, value) : Math.min(d.min, value);
@@ -1023,7 +1324,7 @@
     const outputs = {};
     for (const id in m.outputs) outputs[id] = { label: m.outputs[id].label, format: m.outputs[id].format };
     return { id: m.id, name: m.name, system: m.system, chart: m.chart, vars, outputs, primary: m.primary, better: m.better, template: m.template,
-      acts: m.acts.slice(), checkDays: m.checkDays, needsItems: m.needsItems, needsSteps: m.needsSteps, promptGuide: m.promptGuide };
+      acts: m.acts.slice(), checkDays: m.checkDays, needsItems: m.needsItems, needsSteps: m.needsSteps, needsZones: m.needsZones === true, side: m.side || "home", tracks: m.tracks || null, promptGuide: m.promptGuide };
   }
   const DEFS = {};
   for (const id in MOLDS) DEFS[id] = publicDef(MOLDS[id]);
@@ -1033,6 +1334,7 @@
     get: (id) => DEFS[id] || null,
     compute, hinge, confidence, ghost, sentence, format, primaryOf, validate, build, applyPatch,
     /* extras beyond the contract (safe to ignore) */
+    sideOf, zoneStats, nextZone, weekPlan,
     outcome, baseline, formula, range, snap, observe, intentionFor, checkAtFor, verdict, riskyItems: (inst, h) => riskyItems(inst, h),
     ids: () => Object.keys(DEFS),
     SYSTEMS: SYSTEMS.slice(), FORMATS: FORMATS.slice(), ORIGINS: ORIGINS.slice(),

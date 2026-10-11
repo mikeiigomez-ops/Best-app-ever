@@ -7,7 +7,7 @@
   const WB = window.WB;
 
   const DAY = 86400000;
-  const SYSTEMS = ["Food", "Money", "Energy", "Things", "Space", "Health"];
+  const SYSTEMS = ["Food", "Money", "Energy", "Things", "Space", "Health", "Work", "Time"];
   const MAIL_MOLDS = { leak: 1, perUse: 1, countdown: 1 };
 
   /* ------------------------------------------------------------ helpers */
@@ -44,6 +44,26 @@
   function session() { return has("store", "session") ? safe("store.session", () => WB.store.session(), null) || {} : {}; }
   function ledger() { return has("store", "ledger") ? safe("store.ledger", () => WB.store.ledger(), null) : null; }
 
+  /* work and home: every call into the store/molds is guarded */
+  function sideNow() { return has("store", "side") ? safe("store.side", () => WB.store.side(), "home") : "home"; }
+  function sideAtNow() { return has("store", "sideAt") ? safe("store.sideAt", () => WB.store.sideAt(), 0) : 0; }
+  function modesOn() { return has("store", "modesOn") ? !!safe("store.modesOn", () => WB.store.modesOn(), false) : false; }
+  function focusNow() { return has("store", "focus") ? safe("store.focus", () => WB.store.focus(), []) || [] : []; }
+  function loopsNow() { return has("store", "loops") ? safe("store.loops", () => WB.store.loops(), []) || [] : []; }
+  function sideOfInst(inst) {
+    if (has("molds", "sideOf")) return safe("molds.sideOf", () => WB.molds.sideOf(inst), "home");
+    return inst && (inst.side === "work" || inst.side === "both") ? inst.side : "home";
+  }
+  function isHiddenInst(inst) { return has("store", "isHidden") ? !!safe("store.isHidden", () => WB.store.isHidden(inst), false) : false; }
+  /* what the bench may show right now: while Home, nothing that belongs to the work side */
+  function shown() {
+    if (has("store", "visible")) { const v = safe("store.visible", () => WB.store.visible(), null); if (Array.isArray(v)) return v; }
+    return list().filter((i) => !isHiddenInst(i));
+  }
+  function syncSide() {
+    if (has("ui", "setSide")) safe("ui.setSide", () => { if (document.documentElement.dataset.side !== sideNow()) WB.ui.setSide(sideNow()); });
+  }
+
   /* molds wrappers, all guarded */
   const Mo = (fn) => has("molds", fn);
   function moldOf(inst) { return Mo("get") ? safe("molds.get", () => WB.molds.get(inst.mold), null) : null; }
@@ -68,6 +88,8 @@
     Things: '<path d="M2.8 8.6V3h5.6l5 5-5.6 5.6z"/><circle cx="5.6" cy="5.8" r="1"/>',
     Space: '<path d="M2.5 13.5v-11M2.5 13.5h11"/><path d="M5.5 10.5v-5h5"/>',
     Health: '<path d="M1.8 8.4h3l1.4-3.3 2.5 6.3 1.6-3h3.9"/>',
+    Work: '<rect x="2" y="5.2" width="12" height="8.3" rx="1.2"/><path d="M6 5.2V3.6h4v1.6M2 9h12"/>',
+    Time: '<circle cx="8" cy="8" r="5.6"/><path d="M8 4.8V8l2.3 1.6"/>',
   };
   function sysGlyph(sys) {
     return '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (SYS_GLYPH[sys] || SYS_GLYPH.Things) + "</svg>";
@@ -75,6 +97,10 @@
   const DRAW = {
     receipt: '<path d="M16 6h20v38l-2.5-1.8-2.5 1.8-2.5-1.8-2.5 1.8-2.5-1.8-2.5 1.8-2.5-1.8L16 44z"/><path d="M20 12h8M20 17h12M20 21h9M20 25h12"/><path d="M20 30h12" stroke-dasharray="1 2.2"/><path d="M20 35h5M28 35h4" stroke-width="2"/>',
     fridge: '<rect x="7" y="7" width="38" height="38" rx="2"/><path d="M7 27h38"/><path d="M13 27v-8l2-3v-3h2v3l2 3v8"/><path d="M23 27V17l3-3 3 3v10zM23 17h6"/><circle cx="37" cy="23.4" r="3.4"/><path d="M11 34h13c0 4-2.9 6.2-6.5 6.2S11 38 11 34z"/><rect x="29" y="31" width="9" height="10" rx="1.4"/>',
+    basement: '<path d="M6 12h10v6h8v6h8v6h8"/><path d="M6 12v32h40"/><rect x="29" y="28" width="12" height="16"/><path d="M33 28V22h4v6"/>',
+    typed: '<rect x="8" y="8" width="36" height="36" rx="3"/><path d="M14 18h24M14 26h24"/><path d="M14 34h10" stroke-width="2"/><path d="M32 33l3 3 6-7"/>',
+    board: '<rect x="6" y="9" width="40" height="34" rx="2"/><path d="M19 9v34M32 9v34"/><rect x="9" y="14" width="7" height="6"/><rect x="9" y="23" width="7" height="6"/><rect x="22" y="14" width="7" height="6"/><rect x="35" y="14" width="7" height="6"/><rect x="35" y="23" width="7" height="6"/><rect x="35" y="32" width="7" height="6"/>',
+    week: '<rect x="7" y="10" width="38" height="34" rx="2"/><path d="M7 19h38M16 7v7M36 7v7"/><path d="M13 26h5M23 26h5M33 26h5M13 34h5M23 34h5" stroke-width="2"/>',
     bill: '<path d="M12 6h19l8 8v32H12z"/><path d="M31 6v8h8"/><path d="M17 13h9M17 17h6"/><path d="M16 36.5h19"/><path d="M18.5 36v-4M22.5 36v-7M26.5 36v-5M30.5 36v-9"/><path d="M24 41.5h10" stroke-width="2"/>',
   };
   function drawing(key) {
@@ -84,7 +110,7 @@
   /* ------------------------------------------------------------ view state */
   const V = {
     el: null, raf: 0, peers: [], enrich: {}, mailNote: {}, mailHidden: false, chips: {},
-    lastMission: null, routedEnd: false, firstOpen: null,
+    lastMission: null, routedEnd: false, firstOpen: null, homeOpen: false,
   };
   let inited = false;
 
@@ -104,7 +130,7 @@
     const fresh = (t) => isNum(t) && (since ? t > since : demoMode);
     const out = [];
     const add = (pri, inst, text) => out.push({ pri, inst, text });
-    items.forEach((inst) => {
+    items.filter((inst) => !isHiddenInst(inst)).forEach((inst) => {
       const g = ghostOf(inst);
       const title = inst.title || "Instrument";
       const it = inst.intention;
@@ -180,7 +206,18 @@
 
   /* ------------------------------------------------------------ ledger line */
   function ledgerLine() {
-    const l = ledger();
+    let l = ledger();
+    if (l && l.total && sideNow() === "home" && list().some(isHiddenInst)) {
+      // promises that belong to the work side are not counted while the bench is on Home
+      const c = { held: 0, closer: 0, missed: 0, open: 0, total: 0 };
+      shown().forEach((i) => {
+        if (!i.intention) return;
+        c.total += 1;
+        const st = ghostOf(i).status;
+        if (st === "held" || st === "closer" || st === "missed") c[st] += 1; else c.open += 1;
+      });
+      l = Object.assign({}, l, c);
+    }
     if (!l || !l.total) return null;
     const p = h("p", { class: "bn-ledger wb-mono" });
     p.appendChild(h("span", { class: "bn-ledger__k", text: "STEERED" }));
@@ -216,7 +253,47 @@
       h("div", { class: "bn-mini__title", text: inst.title || "Instrument" }),
       h("div", { class: "wb-micro bn-mini__sys", text: String(inst.system || "").toUpperCase() }));
   }
+  /* project, zone map and week: tiles of their own (a photo is optional) */
+  function progressMini(inst) {
+    const p = primaryOf(inst);
+    const c = computeOf(inst);
+    const o = (c && c.outputs) || {};
+    const v = inst.vars || {};
+    const unit = (inst.words && inst.words.unit) || "pieces";
+    let num = p.formatted, sub = "", strip = null;
+    if (inst.mold === "project") {
+      const dn = v.done ? v.done.value : 0, tt = v.total ? v.total.value : 0;
+      num = o.left === 0 ? "all done" : "finish " + p.formatted;
+      sub = dn + " of " + tt + " " + unit;
+    } else if (inst.mold === "zones") {
+      const z = Mo("zoneStats") ? safe("molds.zoneStats", () => WB.molds.zoneStats(inst), null) : null;
+      const done = z ? z.done : o.done || 0, total = z ? z.total : o.total || 0;
+      num = done + "/" + total;
+      sub = "zones" + (isNum(o.finish) && done < total ? " · done by " + fmt(o.finish, "day", inst) : " · all clear");
+      const cells = h("span", { class: "bn-mini__zones", "aria-hidden": "true" });
+      const nxt = z && z.next ? z.next.id : null;
+      (inst.zones || []).forEach((zn) => cells.appendChild(h("span", { class: "bn-mini__zone" + (zn.state === "done" ? " is-done" : zn.id === nxt ? " is-next" : "") })));
+      strip = cells;
+    } else if (inst.mold === "week") {
+      num = p.formatted + " family times";
+      sub = isNum(o.slack) ? fmt(o.slack, "hours", inst) + " spare" : "";
+    }
+    const photo = inst.photo || (inst.photos || [])[0];
+    const src = photo && (photo.thumb || photo.src);
+    const thumb = src ? h("img", { src, alt: "", decoding: "async", loading: "lazy", draggable: "false" }) : h("span", { class: "bn-mini__blank", html: sysGlyph(inst.system) });
+    return h("div", { class: "bn-mini bn-mini--" + inst.mold },
+      h("div", { class: "bn-mini__thumb" + (src ? "" : " is-blank") }, thumb),
+      h("div", { class: "bn-mini__num wb-mono", text: num }),
+      sub ? h("div", { class: "bn-mini__subline wb-mono", text: sub }) : null,
+      strip,
+      h("div", { class: "bn-mini__title", text: inst.title || "Instrument" }),
+      h("div", { class: "wb-micro bn-mini__sys", text: String(inst.system || "").toUpperCase() }));
+  }
   function miniFor(inst) {
+    if (inst.mold === "project" || inst.mold === "zones" || inst.mold === "week") {
+      const n = safe("progressMini", () => progressMini(inst), null);
+      if (n) return n;
+    }
     if (has("instrument", "renderMini")) {
       const n = safe("instrument.renderMini", () => WB.instrument.renderMini(inst), null);
       if (n && n instanceof Node) return n;
@@ -431,7 +508,7 @@
     }).join("");
   }
   function exportText() {
-    const items = sortTiles(list());
+    const items = sortTiles(shown());
     const L = [];
     L.push("Workbench — " + fmtDay(now()));
     if (mode() === "demo") L.push("EXAMPLE BENCH: built from drawn example photos, not real data.");
@@ -550,6 +627,7 @@
       h("span", { class: "wb-choice__text" }, h("span", { class: "wb-choice__label", text: label }), sub ? h("span", { class: "wb-choice__sub", text: sub }) : null)));
     const body = h("div", { class: "bn-menu" },
       h("ul", { class: "wb-choices" },
+        item("grid", "What you\u2019re working on", "Basement, projects, family time. The bench starts with these.", () => { sh.close({ instant: true }); focusSheet(); }),
         item("export", "Export bench", "To Google Drive, or as a .md file.", () => { sh.close({ instant: true }); exportSheet(); }),
         item("spark", "About provenance", "Solid, dotted, hollow and cobalt numbers.", () => { sh.close({ instant: true }); aboutSheet(); }),
         demoMode ? item("close", "Exit example bench", "Put the example away. Your own instruments stay.", () => { sh.close(); exitDemo(); }) : null),
@@ -574,19 +652,325 @@
     capture({ intent: "new", source: "mail" });
   }
 
+  /* ------------------------------------------------------------ split bench: work and home */
+  /* tiles for one side; grouped by system once there are more than six */
+  function tilesBlock(key, group, mailId) {
+    const frag = h("div", { class: "bn-block" });
+    if (group.length > 6) {
+      SYSTEMS.concat(["Other"]).forEach((sys) => {
+        const g = group.filter((i) => (SYSTEMS.indexOf(i.system) >= 0 ? i.system : "Other") === sys);
+        if (!g.length) return;
+        const gid = "bn-g-" + key + "-" + sys.toLowerCase();
+        frag.appendChild(h("h3", { class: "wb-micro bn-group", id: gid },
+          h("span", { class: "bn-group__glyph", html: sysGlyph(sys) }), sys.toUpperCase() + " \u00b7 " + g.length));
+        const ul = h("ul", { class: "bn-grid", "aria-labelledby": gid });
+        g.forEach((inst) => ul.appendChild(tile(inst, mailId)));
+        frag.appendChild(ul);
+      });
+    } else {
+      const ul = h("ul", { class: "bn-grid", "aria-label": key === "all" ? "Instruments" : key === "work" ? "Work instruments" : "Home instruments" });
+      group.forEach((inst) => ul.appendChild(tile(inst, mailId)));
+      frag.appendChild(ul);
+    }
+    return frag;
+  }
+  function sideSection(key, label, group, mailId) {
+    const hid = "bn-sec-" + key;
+    const sec = h("section", { class: "bn-sec bn-sec--" + key, "aria-labelledby": hid },
+      h("h2", { class: "wb-micro bn-sec__h", id: hid }, h("span", { class: "bn-sec__glyph", html: svgIcon(key) }), label + " \u00b7 " + group.length));
+    if (group.length) sec.appendChild(tilesBlock(key, group, mailId));
+    else {
+      sec.appendChild(h("div", { class: "bn-sec__empty" },
+        h("p", { class: "bn-sec__line", text: key === "work" ? "No work on the bench yet." : "Nothing at home yet." }),
+        key === "work"
+          ? h("button", { type: "button", class: "wb-link bn-sec__act", text: "Type a project", on: { click: () => newProjectSheet({ side: "work" }) } })
+          : h("button", { type: "button", class: "wb-link bn-sec__act", text: "Plan my week", on: { click: weekSheet } })));
+    }
+    return sec;
+  }
+
+  function loopTitle(l) {
+    const inst = l.instrumentId ? getInst(l.instrumentId) : null;
+    return inst ? inst.title || "" : "";
+  }
+  function startCard() {
+    const ls = loopsNow();
+    if (!ls.length) return null;
+    const first = ls.find((l) => l.first) || null;
+    const others = ls.filter((l) => !first || l.id !== first.id).slice(0, 3);
+    const doneLoop = (id) => { if (has("store", "doneLoop")) safe("store.doneLoop", () => WB.store.doneLoop(id)); schedule(); };
+    const rows = others.length ? h("ul", { class: "bn-loops" }, others.map((l) => h("li", { class: "bn-loop" },
+      h("span", { class: "bn-loop__text" }, l.text, loopTitle(l) ? h("span", { class: "bn-loop__for", text: " \u00b7 " + loopTitle(l) }) : null),
+      h("button", { type: "button", class: "bn-loop__tick", "aria-label": "Done: " + l.text, dataset: { key: "loop:" + l.id }, on: { click: () => { haptic(8); doneLoop(l.id); } },
+        html: svgIcon("check") })))) : null;
+    if (!first) return h("section", { class: "bn-start bn-start--rows", "aria-label": "Open loops" }, h("h2", { class: "wb-micro bn-start__k", text: "OPEN LOOPS" }), rows);
+    const inst = first.instrumentId ? getInst(first.instrumentId) : null;
+    return h("section", { class: "bn-start", "aria-label": "Start with" },
+      h("h2", { class: "wb-micro bn-start__k", text: "START WITH" }),
+      h("p", { class: "bn-start__text", text: first.text }),
+      inst ? h("p", { class: "wb-micro bn-start__for", text: String(inst.title || "").toUpperCase() }) : null,
+      h("div", { class: "bn-start__acts" },
+        inst ? h("button", { type: "button", class: "wb-btn wb-btn--primary bn-start__btn", text: "Open", dataset: { key: "start:open" }, on: { click: () => go("instrument", { id: inst.id }) } }) : null,
+        h("button", { type: "button", class: "wb-btn wb-btn--quiet bn-start__btn", text: "Done", dataset: { key: "start:done" }, on: { click: () => { haptic(8); doneLoop(first.id); } } })),
+      rows);
+  }
+  function clockTime(ms) {
+    if (!ms) return "";
+    const d = new Date(ms);
+    const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString([], { weekday: "short" }) + " " + t;
+  }
+  /* Home: one dark line stands where work was. Never a work title, number, photo or loop text. */
+  function clockStrip() {
+    const k = loopsNow().length;
+    const at = sideAtNow();
+    const text = "WORK \u00b7 " + (at ? "CLOCKED OUT " + clockTime(at).toUpperCase() : "OFF THE CLOCK") + " \u00b7 " + (k ? k + (k === 1 ? " LOOP" : " LOOPS") + " FOR TOMORROW" : "NOTHING OPEN");
+    return h("div", { class: "bn-clock", role: "group", "aria-label": "Work is clocked out" },
+      h("span", { class: "wb-micro bn-clock__text", text }),
+      h("button", { type: "button", class: "bn-clock__btn", text: "Clock in", dataset: { key: "clockin" }, on: { click: clockIn } }));
+  }
+
+  /* ------------------------------------------------------------ clock out / in */
+  /* form controls: the shared ones when they exist, a plain fallback when they do not */
+  function mkField(o) {
+    if (has("ui", "field")) return WB.ui.field(o);
+    const input = h("input", { class: "wb-input", type: o.type || "text", autocomplete: "off" });
+    if (o.value != null) input.value = String(o.value);
+    ["placeholder", "inputmode", "min", "max", "step"].forEach((k) => { if (o[k] != null) input.setAttribute(k, String(o[k])); });
+    if (o.maxLength != null) input.maxLength = o.maxLength;
+    const lab = h("label", { class: "wb-field__label", text: o.label || "" }, input);
+    return { el: h("div", { class: "wb-field" }, lab), input };
+  }
+  function mkSeg(o) {
+    if (has("ui", "seg")) return WB.ui.seg(o);
+    let val = o.value != null ? o.value : o.options[0] && o.options[0].key;
+    const root = h("div", { class: "bn-seg", role: "radiogroup", "aria-label": o.label || "" });
+    const paint = () => Array.from(root.children).forEach((b, i) => b.setAttribute("aria-pressed", String(o.options[i].key === val)));
+    o.options.forEach((op) => root.appendChild(h("button", { type: "button", class: "bn-seg__btn", text: op.label, on: { click: () => { val = op.key; paint(); if (o.onChange) o.onChange(val); } } })));
+    paint();
+    return { el: root, value: () => val };
+  }
+  function mkChips(o) {
+    if (has("ui", "chips")) return WB.ui.chips(o);
+    let val = (o.value || []).slice();
+    const root = h("div", { class: "bn-seg", role: "group", "aria-label": o.label || "" });
+    const paint = () => Array.from(root.children).forEach((b, i) => b.setAttribute("aria-pressed", String(val.indexOf(o.options[i].key) >= 0)));
+    o.options.forEach((op) => root.appendChild(h("button", { type: "button", class: "bn-seg__btn", text: op.label, on: { click: () => {
+      val = val.indexOf(op.key) >= 0 ? val.filter((k) => k !== op.key) : val.concat(op.key); paint(); if (o.onChange) o.onChange(val.slice());
+    } } })));
+    paint();
+    return { el: root, value: () => val.slice() };
+  }
+  function nextStep(inst) { return (inst && inst.steps || []).find((x) => x && !x.done) || null; }
+
+  function clockOut() {
+    if (!has("ui", "sheet")) return;
+    const works = sortTiles(list().filter((i) => sideOfInst(i) === "work")).slice(0, 4);
+    const rows = works.map((inst) => {
+      const ns = nextStep(inst);
+      const f = mkField({ label: inst.title || "Work", value: ns ? ns.text : "", placeholder: "Where did you leave it? One line.", maxLength: 90 });
+      return { inst, f };
+    });
+    const extra = mkField({ label: "Anything else on your mind?", value: "", placeholder: "One line.", maxLength: 90 });
+    const lines = () => {
+      const out = rows.map((r) => ({ text: r.f.input.value.trim(), instrumentId: r.inst.id, inst: r.inst, label: r.inst.title || "Work" }));
+      out.push({ text: extra.input.value.trim(), instrumentId: null, inst: null, label: "Else" });
+      return out.filter((x) => x.text);
+    };
+    const segBox = h("div", { class: "bn-clockout__first" });
+    let pick = 0;
+    const paintSeg = () => {
+      segBox.textContent = "";
+      const ls = lines();
+      if (ls.length < 2) { pick = 0; return; }
+      if (pick >= ls.length) pick = 0;
+      segBox.appendChild(h("span", { class: "wb-micro bn-clockout__k", text: "TOMORROW STARTS WITH" }));
+      segBox.appendChild(mkSeg({ label: "Tomorrow starts with", options: ls.map((l, i) => ({ key: String(i), label: l.label })), value: String(pick),
+        onChange: (k) => { pick = parseInt(k, 10) || 0; } }).el);
+    };
+    rows.concat([{ f: extra }]).forEach((r) => r.f.input.addEventListener("input", paintSeg));
+    paintSeg();
+
+    const ringSVG = '<svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true" focusable="false"><circle class="bn-ring__track" cx="22" cy="22" r="19"/><circle class="bn-ring__arc" cx="22" cy="22" r="19" pathLength="100"/></svg>';
+    const ringNum = h("span", { class: "bn-ring__num wb-mono", text: reduced() ? "60 s" : "60" });
+    const ring = h("div", { class: "bn-ring", role: "img", "aria-label": "A minute to think" }, h("span", { class: "bn-ring__svg", html: ringSVG }), ringNum);
+    if (!reduced()) {
+      const t0 = now();
+      const iv = setInterval(() => {
+        if (!document.body.contains(ring)) { clearInterval(iv); return; }
+        const left = Math.max(0, 60 - Math.floor((now() - t0) / 1000));
+        ringNum.textContent = String(left);
+        if (!left) clearInterval(iv);
+      }, 500);
+    } else ring.classList.add("is-still");
+
+    const body = h("div", { class: "bn-clockout" },
+      h("div", { class: "bn-clockout__top" }, ring, h("p", { class: "wb-micro bn-clockout__micro", text: "60 SECONDS · WHAT’S STILL OPEN?" })),
+      works.length ? null : h("p", { class: "bn-clockout__none", text: "Nothing open on the work side." }),
+      h("div", { class: "bn-form" }, rows.map((r) => r.f.el), extra.el),
+      segBox);
+
+    WB.ui.sheet({ title: "Clock out", body, actions: [
+      { label: "Clock out", kind: "primary", onTap: (close) => {
+        const ls = lines();
+        const firstIndex = ls.length ? Math.min(pick, ls.length - 1) : -1;
+        ls.forEach((l) => {
+          const inst = l.inst;
+          if (!inst || inst.mold !== "project" || !has("store", "update")) return;
+          const ns = nextStep(inst);
+          if (ns && ns.text === l.text) return;
+          safe("store.update", () => WB.store.update(inst.id, (i) => {
+            const cur = (i.steps || []).slice();
+            const steps = [{ id: "s1", n: 1, text: l.text, minutes: 25, pin: null }].concat(cur).slice(0, 3);
+            i.steps = steps.map((x, k) => Object.assign({}, x, { id: "s" + (k + 1), n: k + 1 }));
+          }, "system"));
+        });
+        close();
+        if (has("ui", "setSide")) safe("ui.setSide", () => WB.ui.setSide("home", { animate: true }));
+        if (has("store", "setSide")) safe("store.setSide", () => WB.store.setSide("home", { loops: ls.map((l) => ({ text: l.text, instrumentId: l.instrumentId })), firstIndex }));
+        window.scrollTo(0, 0);
+        toast(ls.length ? "Work is put away. " + ls.length + (ls.length === 1 ? " loop" : " loops") + " saved for tomorrow." : "Work is put away. Nothing open.");
+        if (curView() !== "bench") go("bench", {}, { replace: true }); else schedule();
+      } },
+      { label: "Not yet", kind: "quiet", onTap: (close) => close() },
+    ] });
+  }
+  function clockIn() {
+    if (has("ui", "setSide")) safe("ui.setSide", () => WB.ui.setSide("work", { animate: true }));
+    if (has("store", "setSide")) safe("store.setSide", () => WB.store.setSide("work"));
+    if (curView() !== "bench") go("bench", {}, { replace: true }); else schedule();
+    try { window.scrollTo(0, 0); } catch (e) { /* no window */ }
+  }
+
+  /* ------------------------------------------------------------ typed forms */
+  function stepper(o) {
+    let val = o.value;
+    const out = h("span", { class: "bn-step__val wb-mono", "aria-live": "polite", text: String(val) });
+    const mk = (d, label, sym) => h("button", { type: "button", class: "bn-step__btn", "aria-label": label + ": " + o.label, text: sym, on: { click: () => {
+      val = Math.max(o.min, Math.min(o.max, Math.round((val + d * (o.step || 1)) * 10) / 10)); out.textContent = String(val);
+    } } });
+    return { el: h("div", { class: "bn-step", role: "group", "aria-label": o.label },
+      h("span", { class: "bn-step__label", text: o.label }), h("span", { class: "bn-step__ctl" }, mk(-1, "Less", "−"), out, mk(1, "More", "+"))), value: () => val };
+  }
+  const numOf = (f) => { const t = String(f.input.value).trim(); return t === "" ? NaN : Number(t); };
+
+  function newProjectSheet(o) {
+    if (!has("ui", "sheet")) return;
+    o = o || {};
+    const fk = focusNow();
+    const defSide = o.side === "work" || o.side === "home" ? o.side : modesOn() ? sideNow() : fk.indexOf("work") >= 0 ? "work" : "home";
+    const name = mkField({ label: "Name", placeholder: "Reel series", maxLength: 28 });
+    const unit = mkField({ label: "What you count", placeholder: "posts, prints, tasks", maxLength: 16 });
+    const done = mkField({ label: "Done", type: "number", inputmode: "numeric", min: 0, step: 1, value: 0 });
+    const total = mkField({ label: "In all", type: "number", inputmode: "numeric", min: 1, step: 1, value: 10 });
+    const sideSeg = mkSeg({ label: "Which side", options: [{ key: "work", label: "Work" }, { key: "home", label: "Home" }], value: defSide });
+    const next = mkField({ label: "Next step (optional)", placeholder: "The smallest thing to do next", maxLength: 72 });
+    const to = mkField({ label: "Collaborator email (optional)", type: "email", placeholder: "name@example.com", maxLength: 80 });
+    const err = h("p", { class: "bn-form__err", role: "alert", text: "" });
+    let busy = false;
+    const problems = () => {
+      const d = numOf(done), t = numOf(total);
+      if (!(t >= 1)) return "In all has to be at least 1.";
+      if (!(d >= 0)) return "Done can’t be below 0.";
+      if (d > t) return "Done can’t be more than in all (" + t + ").";
+      return "";
+    };
+    const live = () => { err.textContent = problems(); };
+    done.input.addEventListener("input", live); total.input.addEventListener("input", live);
+    const body = h("div", { class: "bn-form" }, name.el, unit.el, h("div", { class: "bn-form__pair" }, done.el, total.el), err,
+      h("div", { class: "bn-form__seg" }, h("span", { class: "wb-micro bn-form__k", text: "WHICH SIDE" }), sideSeg.el), next.el, to.el);
+    WB.ui.sheet({ title: "New project", body, actions: [
+      { label: "Put it on the bench", kind: "primary", onTap: async (close) => {
+        if (busy) return;
+        if (!name.input.value.trim()) { err.textContent = "Give it a name."; name.input.focus(); return; }
+        const p = problems();
+        if (p) { err.textContent = p; return; }
+        if (!has("forge", "fromForm")) { err.textContent = "Typing a project needs the full app."; return; }
+        busy = true;
+        try {
+          const r = await WB.forge.fromForm("project", { title: name.input.value.trim(), unit: unit.input.value.trim() || "pieces", done: numOf(done), total: numOf(total), pace: 1,
+            side: sideSeg.value(), next: next.input.value.trim(), to: to.input.value.trim() });
+          close();
+          go("instrument", { id: r.id, develop: true });
+        } catch (e) { err.textContent = (e && e.message) || "That didn’t go onto the bench. Check the numbers."; }
+        finally { busy = false; }
+      } },
+      { label: "Cancel", kind: "quiet", onTap: (close) => close() },
+    ] });
+  }
+
+  function weekSheet() {
+    if (!has("ui", "sheet")) return;
+    const def = (id, d) => { const m = Mo("get") ? safe("molds.get", () => WB.molds.get("week"), null) : null; return m && m.vars && m.vars[id] ? m.vars[id].default : d; };
+    const F = [
+      ["workHours", "Hours at work a week", 20, 70, 1, def("workHours", 40)],
+      ["focusBlocks", "2-hour focus blocks your work needs", 0, 10, 1, def("focusBlocks", 3)],
+      ["meetingHours", "Hours of meetings and must-answer work", 0, 40, 1, def("meetingHours", 15)],
+      ["spillHours", "Work hours that spill into evenings now", 0, 20, 0.5, def("spillHours", 4)],
+    ];
+    const fields = {};
+    F.forEach((r) => { fields[r[0]] = mkField({ label: r[1], type: "number", inputmode: "decimal", min: r[2], max: r[3], step: r[4], value: r[5] }); });
+    const mornings = stepper({ label: "Protected weekend mornings", min: 0, max: 2, step: 1, value: def("mornings", 1) });
+    const evenings = stepper({ label: "Family evenings", min: 0, max: 7, step: 1, value: def("familyEvenings", 3) });
+    const err = h("p", { class: "bn-form__err", role: "alert", text: "" });
+    let busy = false;
+    const body = h("div", { class: "bn-form" }, F.map((r) => fields[r[0]].el), mornings.el, evenings.el, err);
+    WB.ui.sheet({ title: "Plan my week", body, actions: [
+      { label: "Put it on the bench", kind: "primary", onTap: async (close) => {
+        if (busy) return;
+        const vals = {};
+        for (const r of F) {
+          const n = numOf(fields[r[0]]);
+          if (!(n >= r[2] && n <= r[3])) { err.textContent = r[1] + " runs from " + r[2] + " to " + r[3] + "."; fields[r[0]].input.focus(); return; }
+          vals[r[0]] = n;
+        }
+        vals.mornings = mornings.value(); vals.familyEvenings = evenings.value();
+        if (!has("forge", "fromForm")) { err.textContent = "Planning a week needs the full app."; return; }
+        busy = true;
+        try {
+          const r = await WB.forge.fromForm("week", vals);
+          close();
+          go("instrument", { id: r.id, develop: true });
+        } catch (e) { err.textContent = (e && e.message) || "That didn’t go onto the bench. Check the numbers."; }
+        finally { busy = false; }
+      } },
+      { label: "Cancel", kind: "quiet", onTap: (close) => close() },
+    ] });
+  }
+
+  const FOCUS_OPTS = [
+    { key: "space", label: "Basement / garage" }, { key: "social", label: "Social media" }, { key: "design3d", label: "3D design" },
+    { key: "work", label: "Work projects" }, { key: "family", label: "Family time" }, { key: "budget", label: "Budget" },
+  ];
+  function focusSheet() {
+    if (!has("ui", "sheet")) return;
+    const c = mkChips({ label: "What you are working on", options: FOCUS_OPTS, value: focusNow(), multi: true, onChange: (v) => {
+      if (has("store", "setFocus")) safe("store.setFocus", () => WB.store.setFocus(v));
+    } });
+    WB.ui.sheet({ title: "What you’re working on", body: h("div", { class: "bn-focus" },
+      h("p", { class: "wb-sheet__text", text: "Pick what matters now. The empty bench suggests these first, and Claude hears them as a hint." }), c.el),
+    actions: [{ label: "Done", kind: "primary", onTap: (close) => close() }] });
+  }
+
   /* ------------------------------------------------------------ bench render */
   function renderBench(el) {
-    const items = list();
+    syncSide();
+    const modes = modesOn();
+    const sd = sideNow();
+    const items = shown();
     const sorted = sortTiles(items);
     const demoMode = mode() === "demo";
     const ses = session();
     const c = caps();
     V.chips = {};
-    const root = h("div", { class: "bn" + (demoMode ? " is-demo" : "") });
+    const root = h("div", { class: "bn" + (demoMode ? " is-demo" : "") + (modes ? " is-split is-" + sd : "") });
 
     root.appendChild(h("header", { class: "bn-head" },
       h("h1", { class: "bn-mark" }, "Workbench"),
       h("span", { class: "wb-micro bn-date", text: fmtDay(now()).toUpperCase() }),
+      modes ? h("button", { type: "button", class: "bn-side", dataset: { key: "side" }, on: { click: sd === "work" ? clockOut : clockIn },
+        "aria-label": sd === "work" ? "Clock out of work" : "Clock in to work" },
+        iconEl(sd === "work" ? "door" : "work", "bn-side__ico"), h("span", { class: "bn-side__text", text: sd === "work" ? "Clock out" : "Clock in" })) : null,
       h("button", { type: "button", class: "wb-iconbtn bn-more", "aria-label": "Bench options", html: svgIcon("more"), dataset: { key: "more" },
         on: { click: menuSheet } })));
     root.appendChild(h("div", { class: "bn-rule", "aria-hidden": "true" }));
@@ -609,6 +993,9 @@
         h("p", { class: "wb-micro bn-set__sub", text: "NOTHING ELSE NEEDS YOU TODAY" })));
     }
 
+    if (modes && sd === "work") { const sc = startCard(); if (sc) root.appendChild(sc); }
+    if (modes && sd === "home") root.appendChild(clockStrip());
+
     const lines = sinceLines(sorted);
     if (lines.length) {
       const strip = h("section", { class: "bn-since", "aria-label": "Since last time" },
@@ -625,26 +1012,33 @@
     const led = ledgerLine();
     if (led) root.appendChild(led);
 
-    if (!sorted.length) root.appendChild(emptyState());
+    if (modes && list().length) {
+      const mailId = mailChipTarget(sorted);
+      const wall = h("div", { class: "bn-wall bn-wall--split" });
+      const workItems = sorted.filter((i) => sideOfInst(i) === "work");
+      const homeItems = sorted.filter((i) => sideOfInst(i) !== "work");
+      if (sd === "work") {
+        wall.appendChild(sideSection("work", "WORK", workItems, mailId));
+        if (homeItems.length) {
+          const open = !!V.homeOpen;
+          wall.appendChild(h("section", { class: "bn-sec bn-sec--home" + (open ? " is-open" : " is-collapsed") },
+            h("button", { type: "button", class: "bn-homerow", "aria-expanded": String(open), dataset: { key: "homerow" },
+              on: { click: () => { V.homeOpen = !V.homeOpen; schedule(); } } },
+              h("span", { class: "bn-homerow__glyph", html: svgIcon("home") }),
+              h("span", { class: "wb-micro bn-homerow__text", text: "HOME \u00b7 " + homeItems.length }),
+              h("span", { class: "bn-homerow__act", text: open ? "Hide" : "Show" })),
+            open ? tilesBlock("home", homeItems, mailId) : null));
+        }
+      } else {
+        wall.appendChild(sideSection("home", "HOME", homeItems, mailId));
+      }
+      root.appendChild(wall);
+      root.appendChild(h("p", { class: "wb-micro bn-foot", text: "HOLD A TILE FOR OPTIONS" }));
+    } else if (!sorted.length) root.appendChild(emptyState());
     else {
       const mailId = mailChipTarget(sorted);
       const wall = h("div", { class: "bn-wall" });
-      if (sorted.length > 6) {
-        SYSTEMS.concat(["Other"]).forEach((sys) => {
-          const group = sorted.filter((i) => (SYSTEMS.indexOf(i.system) >= 0 ? i.system : "Other") === sys);
-          if (!group.length) return;
-          const gid = "bn-g-" + sys.toLowerCase();
-          wall.appendChild(h("h2", { class: "wb-micro bn-group", id: gid },
-            h("span", { class: "bn-group__glyph", html: sysGlyph(sys) }), sys.toUpperCase() + " · " + group.length));
-          const ul = h("ul", { class: "bn-grid", "aria-labelledby": gid });
-          group.forEach((inst) => ul.appendChild(tile(inst, mailId)));
-          wall.appendChild(ul);
-        });
-      } else {
-        const ul = h("ul", { class: "bn-grid", "aria-label": "Instruments" });
-        sorted.forEach((inst) => ul.appendChild(tile(inst, mailId)));
-        wall.appendChild(ul);
-      }
+      wall.appendChild(tilesBlock("all", sorted, mailId));
       root.appendChild(wall);
       root.appendChild(h("p", { class: "wb-micro bn-foot", text: "HOLD A TILE FOR OPTIONS" }));
     }
@@ -665,17 +1059,32 @@
   }
 
   function emptyState() {
-    const card = (key, label, sub) => h("li", null, h("button", { type: "button", class: "bn-suggest", dataset: { key: "sug:" + key },
-      on: { click: () => capture({ intent: "new", source: photoUsable(caps()) ? "camera" : "ask" }) } },
-      h("span", { class: "bn-suggest__draw", html: drawing(key) }),
+    const shoot = () => capture({ intent: "new", source: photoUsable(caps()) ? "camera" : "ask" });
+    const card = (key, label, sub, fn, dk) => h("li", null, h("button", { type: "button", class: "bn-suggest", dataset: { key: "sug:" + key },
+      on: { click: fn || shoot } },
+      h("span", { class: "bn-suggest__draw", html: drawing(dk || key) }),
       h("span", { class: "bn-suggest__text" }, h("span", { class: "bn-suggest__label", text: label }), h("span", { class: "bn-suggest__sub", text: sub }))));
+    const CARDS = {
+      basement: () => card("basement", "The whole basement or garage", "One wide photo. I split it into zones."),
+      typed: () => card("typed", "Type a project", "A name, what you count, how far along.", () => newProjectSheet({})),
+      board: () => card("board", "The sketch, build plate or board", "Anything with pieces to finish.", null, "board"),
+      week: () => card("week", "Plan my week", "Six numbers, no photo.", weekSheet),
+    };
+    const fk = focusNow();
+    const want = [];
+    const add = (k) => { if (want.indexOf(k) < 0) want.push(k); };
+    fk.forEach((k) => {
+      if (k === "space") add("basement");
+      else if (k === "social" || k === "design3d" || k === "work") { add("typed"); add("board"); }
+      else if (k === "family") add("week");
+    });
+    let cards;
+    if (want.length) cards = want.slice(0, 4).map((k) => CARDS[k]());
+    else cards = [card("receipt", "Your last receipt", "Takeout, coffee, a delivery."), card("fridge", "Inside your fridge", "One full shelf is plenty."), card("bill", "A bill", "The page with the total.")];
     return h("section", { class: "bn-empty", "aria-label": "Start the bench" },
       h("p", { class: "bn-empty__hero", text: "Nothing on the bench yet." }),
-      h("p", { class: "bn-empty__sub", text: "Photograph one ordinary thing and it becomes an instrument you can steer." }),
-      h("ul", { class: "bn-suggests" },
-        card("receipt", "Your last receipt", "Takeout, coffee, a delivery."),
-        card("fridge", "Inside your fridge", "One full shelf is plenty."),
-        card("bill", "A bill", "The page with the total.")),
+      h("p", { class: "bn-empty__sub", text: want.length ? "Start with the thing you are working on." : "Photograph one ordinary thing and it becomes an instrument you can steer." }),
+      h("ul", { class: "bn-suggests" }, cards),
       mode() === "demo" ? null : h("button", { type: "button", class: "wb-link bn-empty__demo", text: "See the example bench", on: { click: openDemo } }));
   }
 
@@ -711,6 +1120,9 @@
     dial: "Come back with the next bill.",
     countdown: "Come back before the act-by day.",
     reset: "Come back when the corner drifts.",
+    zones: "Come back when the next zone is clear.",
+    project: "Come back when the next piece is done.",
+    week: "Come back at the end of the week.",
   };
   const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
   function renderEnd(el) {
@@ -725,7 +1137,8 @@
     if (!counts.length) counts.push("THE BENCH IS QUIET");
 
     const lastId = has("store", "lastCommit") ? safe("store.lastCommit", () => { const x = WB.store.lastCommit(); return x && x.id; }, null) : null;
-    const inst = (lastId && getInst(lastId)) || (V.lastMission && getInst(V.lastMission.id)) || null;
+    let inst = (lastId && getInst(lastId)) || (V.lastMission && getInst(V.lastMission.id)) || null;
+    if (inst && isHiddenInst(inst)) inst = null;
     let plate = null;
     if (inst) {
       const it = inst.intention;
@@ -737,6 +1150,14 @@
         line = h("span", { class: "bn-plate__move wb-mono" }, "act by ", h("b", { text: c && c.outputs ? fmt(c.outputs.actBy, "day", inst) : "—" }),
           h("span", { class: "bn-plate__lbl", text: " · " + fmt(it.value, "days", inst) + " early" }));
         when = "REMINDER " + fmtDay(it.checkAt).toUpperCase();
+      } else if (it && (inst.mold === "project" || inst.mold === "zones")) {
+        /* done-count molds: the promise is a count of pieces, not the primary (a day) */
+        const g = ghostOf(inst);
+        const unit = inst.mold === "zones" ? "zones" : ((inst.words && inst.words.unit) || "pieces");
+        line = h("span", { class: "bn-plate__move wb-mono" }, h("span", { text: fmt(g.baseline, "num", inst) }),
+          h("span", { class: "bn-plate__arrow", "aria-hidden": "true", text: " → " }), h("span", { class: "wb-sr", text: " to " }),
+          h("b", { text: fmt(g.target, "num", inst) }), h("span", { class: "bn-plate__lbl", text: " " + unit + " done" }));
+        when = "CHECK " + fmtDay(it.checkAt).toUpperCase();
       } else if (it) {
         const g = ghostOf(inst);
         line = h("span", { class: "bn-plate__move wb-mono" }, h("span", { text: fmt(g.baseline, pf, inst) }),
@@ -744,7 +1165,11 @@
           h("b", { text: fmt(g.target, pf, inst) }), primaryLabel(inst) ? h("span", { class: "bn-plate__lbl", text: " " + primaryLabel(inst) }) : null);
         when = "CHECK " + fmtDay(it.checkAt).toUpperCase();
       }
-      if (m && m.verified && (!it || (V.lastMission && V.lastMission.id === inst.id))) {
+      if (m && m.verified && inst.mold === "zones" && has("molds", "zoneStats") && (!it || (V.lastMission && V.lastMission.id === inst.id))) {
+        const zs = safe("molds.zoneStats", () => WB.molds.zoneStats(inst), null);
+        if (zs) line = h("span", { class: "bn-plate__move wb-mono" }, h("b", { text: zs.done + " of " + zs.total }), " zones clear");
+        when = m.verified.by === "claude" ? "CHECKED BY CLAUDE" : "CHECKED BY YOU";
+      } else if (m && m.verified && (!it || (V.lastMission && V.lastMission.id === inst.id))) {
         line = h("span", { class: "bn-plate__move wb-mono" }, h("b", { text: Math.round(m.verified.reclaimed || 0) + "%" }), " reclaimed");
         when = m.verified.by === "claude" ? "CHECKED BY CLAUDE" : "CHECKED BY YOU";
       }
@@ -798,7 +1223,7 @@
     }
     const bus = WB.bus;
     if (!bus) return;
-    ["store:loaded", "instrument:saved", "instrument:updated", "instrument:melted", "caps:changed", "app:ready", "session:set", "theme:changed"]
+    ["side:changed", "focus:changed", "store:loaded", "instrument:saved", "instrument:updated", "instrument:melted", "caps:changed", "app:ready", "session:set", "theme:changed"]
       .forEach((ev) => bus.on(ev, (p) => {
         if (ev === "instrument:updated" && p && p.source === "scrub") return;
         if (ev === "instrument:melted" && p && p.id) { delete V.mailNote[p.id]; delete V.enrich[p.id]; }
@@ -813,8 +1238,8 @@
   }
 
   WB.bench = {
-    init,
+    init, newProjectSheet, weekSheet, clockOut, clockIn, focusSheet,
     /* extras beyond the contract */
-    render: schedule, exportText, sinceLines: (items) => sinceLines(items || sortTiles(list())),
+    render: schedule, exportText, sinceLines: (items) => sinceLines(items || sortTiles(shown())),
   };
 })();

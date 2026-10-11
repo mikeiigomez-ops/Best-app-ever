@@ -65,9 +65,14 @@
 
   /* ------------------------------------------------------------ planning */
   function sortedSteps(inst) { return ((inst && inst.steps) || []).slice().sort((a, b) => (a.n || 0) - (b.n || 0)); }
-  function localPlan(inst) {
+  function zoneBase(name) { return String(name || "zone").replace(/^(the|a|an)\s+/i, "").replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()); }
+  function zoneFor(inst, zoneId) {
+    const zs = (inst && Array.isArray(inst.zones)) ? inst.zones : [];
+    return (zoneId && zs.find((z) => z && z.id === zoneId)) || (has("molds", "nextZone") ? safe("nextZone", () => WB.molds.nextZone(inst), null) : null) || zs.find((z) => z && z.state !== "done") || null;
+  }
+  function localPlan(inst, zoneId) {
     const base = { id: uid("msn"), instrumentId: inst.id, title: "", minutes: 0, steps: [], beforePhoto: inst.photo || null,
-      startedAt: null, endsAt: null, afterPhoto: null, verified: null, fieldNote: null };
+      startedAt: null, endsAt: null, afterPhoto: null, verified: null, fieldNote: null, zoneId: null, focus: null };
     let steps = [];
     if (inst.mold === "reset" && inst.steps && inst.steps.length) {
       const take = Math.max(1, Math.round((inst.vars && inst.vars.take && inst.vars.take.value) || inst.steps.length));
@@ -79,6 +84,15 @@
       const items = (fresh.filter((i) => i.days <= horizon).length ? fresh.filter((i) => i.days <= horizon) : fresh).slice(0, 3);
       steps = items.map((it) => ({ text: "Cook the " + it.name, minutes: 5, pin: it.pin || null }));
       base.title = "Cook tonight: " + items.map((i) => i.name).join(", ") + ".";
+    } else if (inst.mold === "zones" && zoneFor(inst, zoneId)) {
+      const z = zoneFor(inst, zoneId);
+      const own = (z.steps || []).filter((x) => x && x.text);
+      steps = own.length ? own.map((x) => ({ text: x.text, minutes: x.minutes || Math.max(1, Math.round((z.minutes || 30) / own.length)), pin: x.pin || null }))
+        : [{ text: "Pull everything out of the " + zoneBase(z.name).toLowerCase(), minutes: 10, pin: z.pin }, { text: "Sort keep / give / toss", minutes: 10, pin: z.pin },
+          { text: "Put the keeps back, labelled", minutes: 10, pin: z.pin }];
+      base.title = "Clear the " + zoneBase(z.name) + ".";
+      base.zoneId = z.id;
+      base.focus = Array.isArray(z.bbox) ? z.bbox.slice(0, 4) : null;
     } else {
       steps = [{ text: (inst.act && inst.act.why) || "Do the one thing this needs", minutes: 5, pin: null }];
       base.title = (inst.title || "One thing") + ".";
@@ -90,7 +104,7 @@
   }
   function normalize(inst, m) {
     const out = Object.assign({ id: uid("msn"), instrumentId: inst.id, title: inst.title || "Mission", minutes: 0, steps: [], beforePhoto: null,
-      startedAt: null, endsAt: null, afterPhoto: null, verified: null, fieldNote: null }, m || {});
+      startedAt: null, endsAt: null, afterPhoto: null, verified: null, fieldNote: null, zoneId: null, focus: null }, m || {});
     out.instrumentId = inst.id;
     out.steps = (out.steps || []).filter((s) => s && s.text).map((s, i) => Object.assign({}, s, { id: s.id || "m" + (i + 1), n: s.n || i + 1, done: !!s.done }));
     out.minutes = totalMinutes(out);
@@ -106,12 +120,12 @@
     if (!inst) throw { code: "unknown", message: "That instrument isn't on the bench any more." };
     let m = null;
     if (has("forge", "planMission")) {
-      try { m = await WB.forge.planMission(id, { signal: o.signal }); }
+      try { m = await WB.forge.planMission(id, { signal: o.signal, zoneId: o.zoneId }); }
       catch (e) { if ((e && e.code === "cancelled") || (o.signal && o.signal.aborted)) throw { code: "cancelled", message: "" }; m = null; }
     }
     if (o.signal && o.signal.aborted) throw { code: "cancelled", message: "" };
     const fresh = getInst(id) || inst;
-    if (!m || !Array.isArray(m.steps) || !m.steps.length) m = localPlan(fresh);
+    if (!m || !Array.isArray(m.steps) || !m.steps.length) m = localPlan(fresh, o.zoneId);
     m = normalize(fresh, m);
     update(id, (i) => { i.mission = m; });
     return m;
@@ -134,9 +148,14 @@
     const n = Math.round((inst.vars && inst.vars.cookN && inst.vars.cookN.value) || 0);
     return (inst.items || []).filter((i) => !i.cooked && i.days <= horizon).sort((a, b) => a.days - b.days).slice(0, n).map((i) => i.id);
   }
+  /* a zone turns green when the photo check says so, or when you ticked every step yourself */
+  function zoneCleared(m, v) {
+    if (v && v.zoneClear === true) return true;
+    return !!(v && v.by === "self" && (v.notDone || []).length === 0 && (m.steps || []).length > 0);
+  }
   function applyVerified(id, m) {
     const v = m.verified || selfVerified(m);
-    let mold = null;
+    let mold = null, cleared = false;
     update(id, (inst) => {
       mold = inst.mold;
       if (inst.mold === "spoil" && v.done.length) {
@@ -144,12 +163,19 @@
         (inst.items || []).forEach((it) => { if (ids.indexOf(it.id) >= 0) it.cooked = true; });
       }
       inst.mission = m;
-      if (inst.intention && inst.intention.status === "open" && v.reclaimed > 0) inst.intention.status = "held";
+      if (inst.mold === "zones" && m.zoneId) {
+        const z = (inst.zones || []).find((x) => x && x.id === m.zoneId);
+        if (z && zoneCleared(m, v)) {
+          z.state = "done"; z.doneAt = nowMs(); z.by = v.by === "claude" ? "claude" : "self";
+          z.afterThumb = (m.afterPhoto && m.afterPhoto.thumb) || null;
+          cleared = true;
+        }
+      } else if (inst.intention && inst.intention.status === "open" && v.reclaimed > 0) inst.intention.status = "held";
       const a = missionAction(inst, m);
       if (a) { a.status = "done"; a.result = Object.assign({}, a.result || {}, { reclaimed: v.reclaimed, by: v.by }); }
     });
     const inst = getInst(id);
-    if (inst && (mold === "spoil" || mold === "reset") && has("molds", "compute") && has("store", "addObservation")) {
+    if (inst && (mold === "spoil" || mold === "reset" || (mold === "zones" && cleared)) && has("molds", "compute") && has("store", "addObservation")) {
       const c = safe("compute", () => WB.molds.compute(inst, mold === "spoil" ? { cookN: 0 } : undefined), null);
       if (c && isNum(c.primary)) {
         safe("store.addObservation", () => WB.store.addObservation(id, { t: nowMs(), value: c.primary, facts: {}, source: "mission", note: m.fieldNote || null }));
@@ -159,7 +185,7 @@
   }
 
   /* ------------------------------------------------------------ view state */
-  const V = { el: null, id: null, local: {}, timer: 0, wake: null, disposers: [], urls: [], wasOver: false, lastMin: null };
+  const V = { el: null, id: null, zoneId: null, local: {}, timer: 0, wake: null, disposers: [], urls: [], wasOver: false, lastMin: null };
 
   function cleanup() {
     clearInterval(V.timer); V.timer = 0;
@@ -179,9 +205,33 @@
     revokeUrls();
     V.el = sectionEl;
     V.id = params && params.id ? String(params.id) : null;
+    V.zoneId = params && params.zoneId ? String(params.zoneId) : null;
     V.local = {};
     V.wasOver = false; V.lastMin = null;
+    const inst = V.id ? getInst(V.id) : null;
+    if (inst && inst.mold === "zones" && !hidden(inst)) {
+      const z = zoneFor(inst, V.zoneId);
+      const m = inst.mission;
+      if (z && (!m || m.verified || m.zoneId !== z.id)) {
+        const id = V.id;
+        V.local.planning = true;
+        plan(id, { zoneId: z.id }).then(() => { if (V.id === id) { V.local.planning = false; render(); } },
+          () => { if (V.id === id) { V.local.planning = false; render(); } });
+      }
+    }
     render();
+  }
+  const hidden = (inst) => has("store", "isHidden") && !!safe("isHidden", () => WB.store.isHidden(inst), false);
+  function renderLocked() {
+    return el("div", { class: "msn msn--empty msn--locked" }, topbar("MISSION"),
+      el("div", { class: "msn-empty" },
+        el("p", { class: "msn-locked wb-serif", text: "Clocked out. This one waits for Clock in." }),
+        el("button", { type: "button", class: "wb-btn wb-btn--primary wb-btn--block", "data-fk": "clockin", text: "Clock in",
+          on: { click: () => { if (WB.bench && typeof WB.bench.clockIn === "function") WB.bench.clockIn(); } } })));
+  }
+  function renderPlanning() {
+    return el("div", { class: "msn msn--empty", "aria-busy": "true" }, topbar("MISSION"),
+      el("div", { class: "msn-empty" }, el("p", { class: "msn-status", role: "status", text: "PLANNING THE MISSION…" })));
   }
   function leave() {
     if (V.local.checking && V.local.checking.ctrl) { try { V.local.checking.ctrl.abort(); } catch (e) { /* ignore */ } }
@@ -200,6 +250,8 @@
     const focusKey = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.fk : null;
     V.el.textContent = "";
     let root;
+    if (inst && hidden(inst)) { root = renderLocked(); root.dataset.phase = "locked"; V.el.appendChild(root); return; }
+    if (inst && V.local.planning) { root = renderPlanning(); root.dataset.phase = "planning"; V.el.appendChild(root); return; }
     if (!inst) root = renderMissing();
     else if (ph === "none") root = renderNone(inst);
     else if (ph === "brief") root = renderBrief(inst, m);
@@ -228,7 +280,17 @@
     img.addEventListener("error", () => { if (ref && ref.thumb && img.getAttribute("src") !== ref.thumb) img.src = ref.thumb; }, { once: true });
     return img;
   }
-  /* specimen(photo, steps, {tickable, dim, label}) */
+  /* zoneMask([x,y,w,h] 0..1): everything outside the zone dimmed, the zone outlined */
+  function zoneMask(b) {
+    const x = Math.min(1, Math.max(0, b[0])), y = Math.min(1, Math.max(0, b[1]));
+    const w = Math.min(1 - x, Math.max(0, b[2])), h = Math.min(1 - y, Math.max(0, b[3]));
+    const pc = (n) => (n * 100).toFixed(2) + "%";
+    const rect = (cls, l, t, ww, hh) => el("span", { class: "msn-zone__dim msn-zone__dim--" + cls, style: { left: pc(l), top: pc(t), width: pc(ww), height: pc(hh) } });
+    return el("span", { class: "msn-zone", "aria-hidden": "true" },
+      rect("top", 0, 0, 1, y), rect("bottom", 0, y + h, 1, 1 - y - h), rect("left", 0, y, x, h), rect("right", x + w, y, 1 - x - w, h),
+      el("span", { class: "msn-zone__box", style: { left: pc(x), top: pc(y), width: pc(w), height: pc(h) } }));
+  }
+  /* specimen(photo, steps, {tickable, dim, label, focus}) */
   function specimen(photo, steps, o) {
     o = o || {};
     const frame = el("div", { class: "msn-spec__frame", style: { "--ar": String(ratioOf(photo)) } }, photoImg(photo, o.alt || "Your photo of the spot"));
@@ -244,6 +306,7 @@
         : el("span", { class: cls, style, "aria-hidden": "true" }, el("span", { text: String(s.n) }));
       frame.appendChild(pin);
     });
+    if (Array.isArray(o.focus) && o.focus.length === 4 && o.focus.every((n) => isNum(Number(n)))) frame.appendChild(zoneMask(o.focus.map(Number)));
     // a drawn example plate already carries its own EXAMPLE stamp; only a real photo on the example bench needs one
     if (o.example && !/^data:image\/svg/.test(String(srcOf(photo) || ""))) frame.appendChild(el("span", { class: "msn-stamp wb-micro", text: "EXAMPLE" }));
     return el("figure", { class: "msn-spec" + (o.dim ? " msn-spec--dim" : "") }, frame);
@@ -307,7 +370,7 @@
     const steps = m.steps || [];
     const photo = m.beforePhoto;
     let figure;
-    if (photo && srcOf(photo)) figure = specimen(photo, steps, { example: !!inst.demo, alt: "The spot for this mission, with numbered pins" });
+    if (photo && srcOf(photo)) figure = specimen(photo, steps, { example: !!inst.demo, alt: "The spot for this mission, with numbered pins", focus: m.focus });
     else {
       figure = el("div", { class: "msn-plate" },
         el("p", { class: "msn-plate__text", text: "No photo of the spot yet. Take one first and the after photo has something to compare with." }),
@@ -409,7 +472,7 @@
     const sr = el("p", { class: "wb-sr", "aria-live": "polite" });
     const stopBtn = el("button", { type: "button", class: "msn-top__act", text: "Stop", on: { click: () => abandon() } });
 
-    const photo = m.beforePhoto && srcOf(m.beforePhoto) ? specimen(m.beforePhoto, steps, { tickable: true, dim: true, example: !!inst.demo }) : null;
+    const photo = m.beforePhoto && srcOf(m.beforePhoto) ? specimen(m.beforePhoto, steps, { tickable: true, dim: true, example: !!inst.demo, focus: m.focus }) : null;
 
     let middle;
     if (!finishing && cur) {
@@ -644,12 +707,24 @@
     const extra = before && after
       ? el("button", { type: "button", class: "wb-btn wb-btn--quiet wb-btn--block", "data-fk": "save", text: "Save the before and after", on: { click: () => saveImage(inst, before, after) } })
       : null;
+    let headline;
+    if (inst.mold === "zones" && m.zoneId) {
+      const z = (inst.zones || []).find((x) => x && x.id === m.zoneId);
+      const zs = has("molds", "zoneStats") ? safe("zoneStats", () => WB.molds.zoneStats(inst), null) : null;
+      const clear = zoneCleared(m, v);
+      const left = (v.notDone || (m.steps || []).filter((x) => !x.done).map((x) => x.id)).length;
+      headline = el("p", { class: "msn-zone-note wb-serif" + (clear ? " is-clear" : ""), role: "status",
+        text: clear ? zoneBase(z ? z.name : "the zone").replace(/^./, (c) => c.toUpperCase()) + " is clear. " + (zs ? zs.done + " of " + zs.total + " zones." : "")
+          : "Not clear yet: " + left + (left === 1 ? " step" : " steps") + " left. The map waits." });
+    } else {
+      headline = el("div", { class: "msn-reclaimed" },
+        el("span", { class: "wb-micro", text: "RECLAIMED" }),
+        el("span", { class: "msn-reclaimed__n wb-mono", text: pct + "%" }));
+    }
     const root = el("div", { class: "msn msn--reveal" }, topbar("MISSION · CHECKED"),
       el("div", { class: "msn-body" },
         figure,
-        el("div", { class: "msn-reclaimed" },
-          el("span", { class: "wb-micro", text: "RECLAIMED" }),
-          el("span", { class: "msn-reclaimed__n wb-mono", text: pct + "%" })),
+        headline,
         m.fieldNote && m.fieldNote !== "Checked by you." ? el("p", { class: "msn-note wb-serif", text: m.fieldNote }) : null,
         el("p", { class: "wb-micro msn-by", text: by }),
         stepList(m.steps || [], "reveal")),
@@ -678,6 +753,7 @@
       WB.router.go("instrument", { id }, { replace: true });
       if (already) return;
       const pct = m.verified && isNum(m.verified.reclaimed) ? Math.round(m.verified.reclaimed) : null;
+      if (inst.mold === "zones") { if (has("ui", "toast")) WB.ui.toast(zoneCleared(m, m.verified || selfVerified(m)) ? "Zone clear. The map is greener." : "Mission closed. The zone waits."); return; }
       if (has("ui", "toast")) WB.ui.toast(pct != null ? "Mission closed. " + pct + "% reclaimed." : "Mission closed.");
     }
   }
@@ -736,8 +812,9 @@
   async function open(id, opts) {
     const inst = getInst(id);
     if (!inst) return null;
-    if (!inst.mission || inst.mission.verified) { try { await plan(id, opts); } catch (e) { if (e && e.code === "cancelled") return null; } }
-    WB.router.go("mission", { id });
+    const z = inst.mold === "zones" ? zoneFor(inst, opts && opts.zoneId) : null;
+    if (!inst.mission || inst.mission.verified || (z && inst.mission.zoneId !== z.id)) { try { await plan(id, Object.assign({}, opts, { zoneId: z ? z.id : undefined })); } catch (e) { if (e && e.code === "cancelled") return null; } }
+    WB.router.go("mission", z ? { id, zoneId: z.id } : { id });
     return (getInst(id) || {}).mission || null;
   }
 

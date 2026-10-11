@@ -218,6 +218,10 @@
     const actions = [];
     if (mailOK) actions.push({ label: "Look in my mail", kind: "primary", onTap: (close) => { close(); runMail(); } });
     if (!demo) actions.push({ label: "Open the example bench", kind: mailOK ? "quiet" : "primary", onTap: (close) => { close(); openDemo(); } });
+    if (intent === "new" && typeof WB.bench !== "undefined") {
+      if (typeof WB.bench.newProjectSheet === "function") actions.push({ label: "Type a project", kind: "quiet", onTap: (close) => { close(); WB.bench.newProjectSheet({}); } });
+      if (typeof WB.bench.weekSheet === "function") actions.push({ label: "Plan my week", kind: "quiet", onTap: (close) => { close(); WB.bench.weekSheet(); } });
+    }
     actions.push({ label: "Close", kind: "quiet", onTap: (close) => close() });
     WB.ui.sheet({ title: "Reading photos needs Claude", body: el("p", { class: "wb-sheet__text", text: msg }), actions });
   }
@@ -258,6 +262,16 @@
           ? choice("mail", "Look in my mail", "Receipts, renewals and return windows. Only when you ask.", () => {
             picked = true; if (sh) sh.close(); runMail().then(resolve, resolve);
           })
+          : null,
+        intent === "new" && has("bench", "newProjectSheet")
+          ? choice("plus", "Type a project", "Name, how many, how many done. No photo needed.", () => {
+            picked = true; if (sh) sh.close(); WB.bench.newProjectSheet({}); resolve();
+          })
+          : null,
+        intent === "new" && has("bench", "weekSheet")
+          ? choice("calendar", "Plan my week", "Work hours, focus blocks, family evenings.", () => {
+            picked = true; if (sh) sh.close(); WB.bench.weekSheet(); resolve();
+          })
           : null);
       sh = WB.ui.sheet({
         title: intent === "snap" ? "Photograph it again" : "Show me something",
@@ -275,12 +289,15 @@
     bill: '<path d="M12 6h19l8 8v32H12z"/><path d="M31 6v8h8"/><path d="M17 13h9M17 17h6"/><path d="M16 36.5h19"/><path d="M18.5 36v-4M22.5 36v-7M26.5 36v-5M30.5 36v-9"/><path d="M24 41.5h10" stroke-width="2"/>',
     desk: '<path d="M4 37h44M9 37v9M43 37v9"/><path d="M11 37h9M15.5 37V23l7-7"/><path d="M20 13.5l6.5 2.5-3.5 4z"/><path d="M30 29h7v8h-7z"/><path d="M37 31h1.6a2 2 0 010 4H37"/><path d="M19 35.6l9.5-1.2M20 33.4l8-1.4"/><path d="M42 37c2.2-3-1.2-5 .8-8"/>',
   };
+  DRAW.basement = '<path d="M5 7v38M47 45H5"/><path d="M5 17h8v7h8v7h8v7h8v7"/><path d="M33 9h14M33 9v14M47 9v14M33 16h14"/><circle cx="40" cy="36" r="6.5"/><circle cx="40" cy="36" r="1"/><path d="M40 29.5v5M40 37.5v5M33.5 36h5M41.5 36h5"/>';
   const HINTS = [
     { key: "receipt", label: "RECEIPT", lead: "A receipt.", tip: " Flat, in good light, with the total in frame." },
     { key: "fridge", label: "FRIDGE", lead: "Inside your fridge.", tip: " Door open, one full shelf is plenty." },
     { key: "bill", label: "BILL", lead: "A bill.", tip: " The page with the total and the billing days." },
     { key: "desk", label: "CORNER", lead: "The corner that's bugging you.", tip: " Stand where you'd start tidying." },
   ];
+  const BASEMENT_HINT = { key: "basement", label: "BASEMENT", lead: "The whole basement.", tip: " Stand in the doorway with the whole room in frame. One photo becomes a map of zones." };
+  function focusKeys() { return has("store", "focus") ? (safe("store.focus", () => WB.store.focus()) || []) : []; }
   function drawing(key) {
     return '<svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + DRAW[key] + "</svg>";
   }
@@ -293,7 +310,49 @@
       el.textContent = "";
       const tip = u.el("p", { class: "wb-front__tip", "aria-live": "polite" }, "Tap a drawing for how to frame it.");
       const hints = u.el("ul", { class: "wb-front__hints", "aria-label": "Things you could photograph" });
-      HINTS.forEach((h, i) => {
+      this.hints = hints; this.tip = tip;
+      this.renderHints();
+      const first = isFirstRun();
+      const plate = first && WB.ui && WB.ui.chips ? this.focusPlate() : null;
+      const acts = u.el("div", { class: "wb-front__acts" + (capsKnown ? "" : " is-pending"), "aria-busy": capsKnown ? "false" : "true" });
+      el.appendChild(u.el("div", { class: "wb-front" },
+        u.el("header", { class: "wb-front__top" },
+          u.el("span", { class: "wb-micro", text: "WORKBENCH · NO. 001" }),
+          u.el("span", { class: "wb-micro wb-front__date", text: u.fmtDay(Date.now()).toUpperCase() })),
+        u.el("h1", { class: "wb-front__hero" }, "Show me anything you paid for, own, or have to deal with."),
+        u.el("p", { class: "wb-front__sub" }, "A receipt. Inside your fridge. A bill. The corner that's bugging you."),
+        hints,
+        tip,
+        plate,
+        u.el("div", { class: "wb-front__spacer" }),
+        acts,
+        u.el("p", { class: "wb-micro wb-front__foot", text: "YOUR MAIL STAYS CLOSED UNTIL YOU ASK." })));
+      this.acts = acts;
+      this.renderActs();
+    },
+    focusPlate() {
+      const u = U();
+      const c = WB.ui.chips({
+        label: "What's on your plate",
+        multi: true,
+        options: [{ key: "space", label: "Basement / garage" }, { key: "social", label: "Social media" }, { key: "design3d", label: "3D design" },
+          { key: "work", label: "Work projects" }, { key: "family", label: "Family time" }, { key: "budget", label: "Budget" }],
+        value: focusKeys(),
+        onChange: (v) => {
+          if (has("store", "setFocus")) safe("store.setFocus", () => WB.store.setFocus(v));
+          this.renderHints();
+          this.renderActs();
+        },
+      });
+      return u.el("div", { class: "wb-front__plate" }, u.el("span", { class: "wb-micro", text: "WHAT'S ON YOUR PLATE? PICK ANY. OPTIONAL." }), c.el);
+    },
+    renderHints() {
+      const u = U(), hints = this.hints, tip = this.tip;
+      if (!hints) return;
+      hints.textContent = "";
+      const list = HINTS.concat(focusKeys().indexOf("space") >= 0 ? [BASEMENT_HINT] : []);
+      hints.classList.toggle("wb-front__hints--5", list.length > 4);
+      list.forEach((h, i) => {
         const b = u.el("button", { type: "button", class: "wb-hint", "aria-label": h.lead + h.tip, "aria-pressed": "false" },
           u.el("span", { html: drawing(h.key) }),
           u.el("span", { class: "wb-micro" }, u.el("span", { class: "wb-hint__n", text: "0" + (i + 1) + " " }), h.label));
@@ -308,20 +367,6 @@
         });
         hints.appendChild(u.el("li", null, b));
       });
-      const acts = u.el("div", { class: "wb-front__acts" + (capsKnown ? "" : " is-pending"), "aria-busy": capsKnown ? "false" : "true" });
-      el.appendChild(u.el("div", { class: "wb-front" },
-        u.el("header", { class: "wb-front__top" },
-          u.el("span", { class: "wb-micro", text: "WORKBENCH · NO. 001" }),
-          u.el("span", { class: "wb-micro wb-front__date", text: u.fmtDay(Date.now()).toUpperCase() })),
-        u.el("h1", { class: "wb-front__hero" }, "Show me anything you paid for, own, or have to deal with."),
-        u.el("p", { class: "wb-front__sub" }, "A receipt. Inside your fridge. A bill. The corner that's bugging you."),
-        hints,
-        tip,
-        u.el("div", { class: "wb-front__spacer" }),
-        acts,
-        u.el("p", { class: "wb-micro wb-front__foot", text: "YOUR MAIL STAYS CLOSED UNTIL YOU ASK." })));
-      this.acts = acts;
-      this.renderActs();
     },
     renderActs() {
       const acts = this.acts;
@@ -345,13 +390,24 @@
             u.el("span", { class: "wb-btn__label", text: "Build one from my mail" })));
         }
       }
+      const fk = focusKeys();
+      const links = [];
+      const any = (a) => a.some((k) => fk.indexOf(k) >= 0);
+      if (any(["social", "design3d", "work"]) && has("bench", "newProjectSheet")) {
+        links.push(u.el("button", { type: "button", class: "wb-link", text: "Type a project instead",
+          on: { click: () => WB.bench.newProjectSheet({ side: fk.indexOf("work") >= 0 ? "work" : "home" }) } }));
+      }
+      if (fk.indexOf("family") >= 0 && has("bench", "weekSheet")) {
+        links.push(u.el("button", { type: "button", class: "wb-link", text: "Plan my week", on: { click: () => WB.bench.weekSheet() } }));
+      }
+      if (links.length) acts.appendChild(u.el("div", { class: "wb-front__more" }, links));
       if (capsKnown) {
         acts.classList.remove("is-pending");
         acts.classList.add("is-ready");
         acts.setAttribute("aria-busy", "false");
       }
     },
-    leave() { this.acts = null; },
+    leave() { this.acts = null; this.hints = null; this.tip = null; },
   };
 
   /* ------------------------------------------------------------ forging */
@@ -566,8 +622,22 @@
       const prefs = U().uiPrefs();
       const pr = profile();
       if (!prefs.theme && pr && (pr.theme === "light" || pr.theme === "dark")) applyTheme(pr.theme);
+      applySide(false);
     });
+    bus.on("side:changed", (p) => {
+      if (p && (p.side === "work" || p.side === "home") && WB.ui && WB.ui.setSide) WB.ui.setSide(p.side, { animate: true });
+    });
+    bus.on("instrument:saved", (p) => { if (p && p.isNew) { markFirstRunDone(); applySide(false); } });
+    bus.on("instrument:melted", () => applySide(false));
+    bus.on("focus:changed", () => applySide(false));
     bus.on("view:enter", (p) => { if (p.view !== "front") autoFront = false; });
+  }
+
+  function applySide(animate) {
+    if (!WB.ui || typeof WB.ui.setSide !== "function") return;
+    const on = has("store", "modesOn") && safe("store.modesOn", () => WB.store.modesOn());
+    if (!on) { WB.ui.setSide(null); return; }
+    WB.ui.setSide(has("store", "side") ? (safe("store.side", () => WB.store.side()) || "home") : "home", { animate: !!animate });
   }
 
   function applyTheme(t) {
@@ -624,6 +694,7 @@
 
     const pr = profile();
     if (!prefs.theme && pr && (pr.theme === "light" || pr.theme === "dark")) applyTheme(pr.theme);
+    applySide(false);
 
     const firstRun = isFirstRun();
     const r = WB.router.parse();
