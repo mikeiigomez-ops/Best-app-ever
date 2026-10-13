@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>The Emmaus Road</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column, a road track across the top (Jerusalem to Emmaus, 60 furlongs),
+   a running story log, choices and a command line at the bottom. The Scroll of threads opens as a sheet. */
+:root {
+  --dusk: #f3f0f7;        /* page: pale evening limestone, faint violet */
+  --panel: #e8e3ef;
+  --ink: #241f33;
+  --muted: #5e5770;
+  --rule: #cbc3d8;
+  --flame: #b0520e;       /* lamp flame */
+  --flame-soft: #f3dcc6;
+  --olive: #4c6b2f;       /* "thread found" */
+  --olive-soft: #dfe8d2;
+  --berry: #9c2f3f;       /* wrong turn */
+  --berry-soft: #f3d9dd;
+  --quote: #3e3466;
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-body: "Literata", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --step--1: 0.85rem; --step-0: 1.02rem; --step-1: 1.2rem; --step-2: 1.55rem; --step-3: 2.1rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --dusk: #17142a; --panel: #211d38; --ink: #ece6f5; --muted: #a79fbd; --rule: #3a3458;
+    --flame: #f3a35c; --flame-soft: #3d2a22; --olive: #a9cb84; --olive-soft: #24301f;
+    --berry: #f19aa6; --berry-soft: #3a2030; --quote: #cfc4ff; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --dusk: #17142a; --panel: #211d38; --ink: #ece6f5; --muted: #a79fbd; --rule: #3a3458;
+  --flame: #f3a35c; --flame-soft: #3d2a22; --olive: #a9cb84; --olive-soft: #24301f;
+  --berry: #f19aa6; --berry-soft: #3a2030; --quote: #cfc4ff; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--dusk); color: var(--ink);
+  font-family: var(--font-body); font-size: var(--step-0); line-height: 1.65;
+  padding-inline: 16px; padding-block: 0;
+}
+.wrap { max-width: 44rem; margin-inline: auto; display: flex; flex-direction: column; min-height: 100%; }
+
+header.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--dusk); padding-block: 14px 10px; border-bottom: 1px solid var(--rule);
+  display: grid; gap: 10px;
+}
+.titlebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--step-1); letter-spacing: 0.08em; margin: 0; text-wrap: balance; }
+.stats { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.chip {
+  font-family: var(--font-mono); font-size: var(--step--1); font-variant-numeric: tabular-nums;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); white-space: nowrap;
+}
+.chip.heart { color: var(--flame); border-color: var(--flame); }
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn-ghost {
+  font-family: var(--font-mono); font-size: var(--step--1); background: transparent; border: 1px solid var(--rule);
+  border-radius: 999px; padding: 3px 12px; color: var(--ink);
+}
+.btn-ghost:hover { border-color: var(--flame); }
+:focus-visible { outline: 2px solid var(--flame); outline-offset: 2px; }
+
+/* The road: Jerusalem -> Emmaus */
+.road { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px;
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+.track { position: relative; height: 14px; }
+.track::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; border-top: 2px dotted var(--rule); }
+.track .done { position: absolute; left: 0; top: 6px; height: 2px; background: var(--flame); transition: width .6s ease; }
+.track .walker { position: absolute; top: 0; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%;
+  background: var(--flame); box-shadow: 0 0 0 4px var(--flame-soft); transition: left .6s ease; }
+.track .tick { position: absolute; top: 3px; width: 1px; height: 8px; background: var(--rule); }
+
+main#log { flex: 1; padding-block: 22px 12px; display: grid; gap: 14px; align-content: start; }
+.entry { animation: rise .45s ease both; min-width: 0; }
+@keyframes rise { from { opacity: .35; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .entry { animation: none; } .track .done, .track .walker { transition: none; } }
+
+.entry p { margin: 0; max-width: 65ch; }
+.leg { font-family: var(--font-display); font-size: var(--step-2); letter-spacing: 0.06em; margin: 18px 0 0; text-wrap: balance; }
+.leg small { display: block; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.station-head { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--flame); padding-top: 10px; border-top: 1px solid var(--rule); }
+.say { padding-left: 14px; border-left: 2px solid var(--rule); }
+.say b { font-family: var(--font-display); font-weight: 500; font-size: 0.82rem; letter-spacing: 0.1em; color: var(--muted); display: block; }
+blockquote.verse { margin: 0; padding: 12px 16px; background: var(--panel); border-radius: 6px; color: var(--quote); font-style: italic; max-width: 65ch; }
+blockquote.verse cite { display: block; margin-top: 6px; font-style: normal; font-family: var(--font-mono); font-size: var(--step--1); color: var(--muted); }
+.ask { font-weight: 600; }
+.you { font-family: var(--font-mono); font-size: var(--step--1); color: var(--muted); }
+.you::before { content: "> "; color: var(--flame); }
+.verdict { padding: 12px 16px; border-radius: 6px; max-width: 65ch; }
+.verdict.good { background: var(--olive-soft); }
+.verdict.good strong { color: var(--olive); }
+.verdict.bad { background: var(--berry-soft); }
+.verdict.bad strong { color: var(--berry); }
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; margin-right: 6px; vertical-align: 2px; }
+.also { font-family: var(--font-mono); font-size: var(--step--1); color: var(--muted); }
+
+/* Controls */
+footer.controls {
+  position: sticky; bottom: 0; background: var(--dusk); border-top: 1px solid var(--rule);
+  padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 10px;
+}
+#choices { display: grid; gap: 8px; }
+.choice {
+  text-align: left; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 10px 14px; display: grid; grid-template-columns: 1.6rem 1fr; gap: 8px; align-items: baseline; line-height: 1.45;
+}
+.choice:hover:not(:disabled) { border-color: var(--flame); }
+.choice:disabled { opacity: .45; cursor: default; text-decoration: line-through; }
+.choice .key { font-family: var(--font-mono); color: var(--flame); font-weight: 600; }
+.choice span:last-child { min-width: 0; }
+form.cmd { display: flex; gap: 8px; align-items: center; }
+form.cmd label { font-family: var(--font-mono); color: var(--flame); }
+#cmd {
+  flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--step--1); background: transparent; color: var(--ink);
+  border: none; border-bottom: 1px solid var(--rule); padding: 6px 2px;
+}
+#cmd:focus { outline: none; border-bottom-color: var(--flame); }
+.hintline { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+
+/* Scroll sheet */
+#sheet { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--dusk) 55%, transparent); display: flex; justify-content: flex-end; }
+#sheet .paper {
+  width: min(30rem, 100%); height: 100%; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--rule);
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 20px calc(18px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 14px; align-content: start;
+}
+#sheet h2 { font-family: var(--font-display); font-size: var(--step-2); margin: 0; letter-spacing: .05em; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.thread { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding-block: 10px; border-top: 1px solid var(--rule); }
+.thread .ref { font-family: var(--font-mono); font-size: var(--step--1); }
+.thread .ref b { display: block; font-family: var(--font-body); font-weight: 600; font-size: var(--step-0); }
+.thread .ref.nt { text-align: right; }
+.thread .knot { color: var(--flame); font-family: var(--font-mono); }
+.thread.locked { color: var(--muted); opacity: .6; }
+.legend { font-size: var(--step--1); color: var(--muted); display: grid; gap: 4px; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="titlebar">
+      <h1>The Emmaus Road</h1>
+      <div class="stats">
+        <span class="chip heart" id="embers" title="Embers: how warm your heart is">♥ 0 embers</span>
+        <span class="chip" id="threads">0/14 threads</span>
+        <button class="btn-ghost" id="openScroll" type="button">Scroll</button>
+      </div>
+    </div>
+    <div class="road" aria-label="Distance walked">
+      <span>Jerusalem</span>
+      <div class="track" id="track"><div class="done" id="done"></div><div class="walker" id="walker"></div></div>
+      <span id="furlongs">0 / 60 furlongs</span>
+    </div>
+  </header>
+
+  <main id="log" aria-live="polite"></main>
+
+  <footer class="controls">
+    <div id="choices"></div>
+    <form class="cmd" id="cmdForm" autocomplete="off">
+      <label for="cmd">&gt;</label>
+      <input id="cmd" type="text" placeholder="type a number, or: look · scroll · help · restart" spellcheck="false">
+    </form>
+  </footer>
+</div>
+
+<div id="sheet" hidden>
+  <div class="paper" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head">
+      <h2 id="sheetTitle">The Scroll</h2>
+      <button class="btn-ghost" id="closeScroll" type="button">Close</button>
+    </div>
+    <div class="legend">
+      <div><span class="tag">Promise</span>a prophet says what God will do</div>
+      <div><span class="tag">Pattern</span>an event that foreshadows a later one</div>
+      <div><span class="tag">Quotation</span>the New Testament quotes the Old directly</div>
+    </div>
+    <div id="threadList"></div>
+  </div>
+</div>
+
+<script>
+// Scripture quotations are from the King James Version (public domain).
+const LEGS = {
+  law: { name: "The Law of Moses", sub: "Genesis to Deuteronomy" },
+  prophets: { name: "The Prophets", sub: "Samuel, Isaiah, Jonah, Zechariah" },
+  psalms: { name: "The Psalms", sub: "The songs of Israel" },
+  table: { name: "At the Table", sub: "Emmaus, toward evening" },
+};
+
+const STATIONS = [
+  {
+    leg: "law", title: "The First Promise", ot: "Genesis 3:15", kind: "Promise",
+    scene: [
+      "The road leaves the city wall behind. The Stranger walks between you and Cleopas, looking at the dust.",
+      ["The Stranger", "Begin at the beginning. A garden, a serpent, and a man and woman hiding among the trees. Even then, before the gate closed, God spoke a promise."],
+    ],
+    otText: "And I will put enmity between thee and the woman, and between thy seed and her seed; it shall bruise thy head, and thou shalt bruise his heel.",
+    ask: "A child of the woman will be wounded, yet crush the serpent. Where does the New Testament see that happen?",
+    options: [
+      "Jesus is born of a woman and, through his death, breaks the devil's power.",
+      "Peter is freed from prison by an angel.",
+      "Paul shakes a viper off his hand on Malta.",
+      "Jesus calms a storm on the Sea of Galilee.",
+    ],
+    answer: 0,
+    hint: "Look for two things together: a man born of a woman, and a wound that ends up defeating the enemy.",
+    ntRef: "Hebrews 2:14",
+    ntText: "Forasmuch then as the children are partakers of flesh and blood, he also himself likewise took part of the same; that through death he might destroy him that had the power of death, that is, the devil.",
+    thread: "Christians have long called Genesis 3:15 the first gospel. The heel is struck, but the head is crushed: a wound that wins. Paul writes that God sent his Son \"made of a woman\" (Galatians 4:4) and that God \"shall bruise Satan under your feet shortly\" (Romans 16:20).",
+    also: ["Galatians 4:4", "Romans 16:20", "Revelation 12:9"],
+  },
+  {
+    leg: "law", title: "The Lamb on the Mountain", ot: "Genesis 22:8", kind: "Pattern",
+    scene: [
+      "You pass a shepherd driving a few sheep toward the city for the feast.",
+      ["The Stranger", "Abraham once climbed Mount Moriah with his only son. The boy carried the wood on his back and asked, \"Where is the lamb?\""],
+    ],
+    otText: "And Abraham said, My son, God will provide himself a lamb for a burnt offering.",
+    ask: "A father offers his beloved son. The son carries the wood uphill. Which New Testament moment does this foreshadow?",
+    options: [
+      "Joseph and Mary bring the infant Jesus to the temple.",
+      "The Father gives his only Son, and Jesus carries his cross out of the city.",
+      "The prodigal son returns home to his father.",
+      "Jesus is baptized in the Jordan.",
+    ],
+    answer: 1,
+    hint: "Isaac was spared at the last moment, and a ram died in his place. Which father in the New Testament did not spare his son?",
+    ntRef: "John 1:29",
+    ntText: "The next day John seeth Jesus coming unto him, and saith, Behold the Lamb of God, which taketh away the sin of the world.",
+    thread: "Abraham said God would provide a lamb, and John the Baptist points to Jesus as that Lamb. Paul seems to echo Genesis 22 directly: \"He that spared not his own Son, but delivered him up for us all\" (Romans 8:32). Hebrews adds that Abraham received Isaac back from death \"in a figure\" (Hebrews 11:19).",
+    also: ["Romans 8:32", "Hebrews 11:17-19", "John 19:17"],
+  },
+  {
+    leg: "law", title: "Blood on the Doorposts", ot: "Exodus 12", kind: "Pattern",
+    scene: [
+      "Cleopas mentions the Passover crowds still filling Jerusalem.",
+      ["The Stranger", "Do you remember why we keep this feast? In Egypt each household killed a lamb without blemish and marked the door with its blood. And there was one strict rule about the lamb's body."],
+    ],
+    otText: "And when I see the blood, I will pass over you... neither shall ye break a bone thereof.",
+    ask: "Which detail from Friday's crucifixion does John tie to this Passover rule?",
+    options: [
+      "The sky goes dark at noon.",
+      "Pilate writes \"King of the Jews\" over the cross.",
+      "The soldiers break the legs of the two thieves but not of Jesus.",
+      "The women watch from a distance.",
+    ],
+    answer: 2,
+    hint: "The rule was about the lamb's bones.",
+    ntRef: "John 19:36",
+    ntText: "For these things were done, that the scripture should be fulfilled, A bone of him shall not be broken.",
+    thread: "Jesus died at Passover. John notes that his bones were left unbroken, like the Passover lamb's. Paul draws the same line: \"For even Christ our passover is sacrificed for us\" (1 Corinthians 5:7). The blood that saved Israel from death becomes a picture of the blood of Jesus.",
+    also: ["1 Corinthians 5:7", "1 Peter 1:19", "Exodus 12:46"],
+  },
+  {
+    leg: "law", title: "Bread from Heaven", ot: "Exodus 16:15", kind: "Pattern",
+    scene: [
+      "Cleopas takes a heel of bread from his bag and breaks it three ways. The Stranger holds his piece for a moment before eating.",
+      ["The Stranger", "In the wilderness, Israel woke to find something small and white on the ground. They asked, \"What is it?\" That is what manna means."],
+    ],
+    otText: "And Moses said unto them, This is the bread which the LORD hath given you to eat.",
+    ask: "Where in the New Testament does Jesus claim to be the true bread from heaven?",
+    options: [
+      "In the synagogue at Capernaum, the day after he feeds the five thousand.",
+      "At the wedding in Cana.",
+      "In the Sermon on the Mount, teaching the Lord's Prayer.",
+      "In the house of Simon the Pharisee.",
+    ],
+    answer: 0,
+    hint: "The crowd had just been fed miraculously, and they asked him for a sign like the manna.",
+    ntRef: "John 6:35",
+    ntText: "And Jesus said unto them, I am the bread of life: he that cometh to me shall never hunger; and he that believeth on me shall never thirst.",
+    thread: "The crowd cites the manna and Jesus answers, \"Moses gave you not that bread from heaven; but my Father giveth you the true bread from heaven\" (John 6:32). Manna kept Israel alive for a day at a time. Jesus offers life that does not run out.",
+    also: ["John 6:31-33", "John 6:49-51", "1 Corinthians 10:3-4"],
+  },
+  {
+    leg: "law", title: "Behind the Veil", ot: "Leviticus 16", kind: "Pattern",
+    scene: [
+      ["The Stranger", "Once a year, on the Day of Atonement, the high priest went behind the great curtain into the Most Holy Place, carrying blood for the sins of the people. No one else could pass that veil."],
+      "Cleopas stops walking. \"The veil,\" he says quietly. \"Did you hear what the priests are saying about the veil?\"",
+    ],
+    otText: "Speak unto Aaron thy brother, that he come not at all times into the holy place within the vail... to make an atonement for the children of Israel for all their sins once a year.",
+    ask: "What happened to the temple veil when Jesus died, and how does Hebrews explain it?",
+    options: [
+      "It caught fire, and Hebrews calls it a judgment on the priests.",
+      "It was taken down for cleaning before the Sabbath.",
+      "Pilate's soldiers took it as plunder.",
+      "It was torn in two from top to bottom: Christ entered the true holy place once, with his own blood.",
+    ],
+    answer: 3,
+    hint: "Matthew says it happened from top to bottom, as if from God's side.",
+    ntRef: "Hebrews 9:12",
+    ntText: "Neither by the blood of goats and calves, but by his own blood he entered in once into the holy place, having obtained eternal redemption for us.",
+    thread: "Matthew records that \"the veil of the temple was rent in twain from the top to the bottom\" (Matthew 27:51). Hebrews reads the whole Day of Atonement as a shadow: the priest entered every year, Jesus entered once, and now believers may enter \"by a new and living way... through the veil, that is to say, his flesh\" (Hebrews 10:20).",
+    also: ["Matthew 27:51", "Hebrews 10:19-20", "Hebrews 9:7"],
+  },
+  {
+    leg: "law", title: "The Serpent on the Pole", ot: "Numbers 21:8-9", kind: "Pattern",
+    scene: [
+      "A lizard darts across the road and Cleopas flinches.",
+      ["The Stranger", "In the desert, venomous snakes bit the people and many died. God gave Moses a strange cure. Nobody had to fight the snakes or make medicine. They only had to look."],
+    ],
+    otText: "Make thee a fiery serpent, and set it upon a pole: and it shall come to pass, that every one that is bitten, when he looketh upon it, shall live.",
+    ask: "Who does Jesus say must be \"lifted up\" just as Moses lifted up the serpent?",
+    options: [
+      "The temple, which will be rebuilt in three days.",
+      "The Son of man, so that whoever believes in him will have eternal life.",
+      "John the Baptist, before Herod's court.",
+      "The lost sheep, carried home on the shepherd's shoulders.",
+    ],
+    answer: 1,
+    hint: "He said it at night to a Pharisee named Nicodemus.",
+    ntRef: "John 3:14-15",
+    ntText: "And as Moses lifted up the serpent in the wilderness, even so must the Son of man be lifted up: That whosoever believeth in him should not perish, but have eternal life.",
+    thread: "Jesus himself made this connection, in the conversation that leads into John 3:16. The dying Israelites were healed by looking at the thing lifted on a pole. In John's Gospel \"lifted up\" means the cross (John 12:32-33).",
+    also: ["John 12:32-33", "John 8:28"],
+  },
+  {
+    leg: "prophets", title: "A Throne Forever", ot: "2 Samuel 7:12-16", kind: "Promise",
+    scene: [
+      "The road climbs. From the ridge you can see back toward the city of David.",
+      ["Cleopas", "We hoped he was the one. The son of David who would redeem Israel."],
+      ["The Stranger", "Then listen to what God actually promised David, through the prophet Nathan."],
+    ],
+    otText: "I will set up thy seed after thee... and I will stablish the throne of his kingdom for ever.",
+    ask: "Where in the New Testament is this promise to David repeated about Jesus before he is even born?",
+    options: [
+      "In the angel Gabriel's message to Mary.",
+      "In the shepherds' visit to Bethlehem.",
+      "In Herod's question to the wise men.",
+      "In Zechariah's vision in the temple.",
+    ],
+    answer: 0,
+    hint: "The announcement went to a young woman in Nazareth who was engaged to a man of David's house.",
+    ntRef: "Luke 1:32-33",
+    ntText: "He shall be great, and shall be called the Son of the Highest: and the Lord God shall give unto him the throne of his father David: And he shall reign over the house of Jacob for ever; and of his kingdom there shall be no end.",
+    thread: "God promised David a descendant whose kingdom would never end. Gabriel uses the same language for Mary's child: David's throne, a reign forever. Matthew opens his Gospel with \"Jesus Christ, the son of David\" (Matthew 1:1).",
+    also: ["Matthew 1:1", "Romans 1:3", "Acts 2:30"],
+  },
+  {
+    leg: "prophets", title: "The Servant Who Suffers", ot: "Isaiah 53", kind: "Promise",
+    scene: [
+      ["The Stranger", "O fools, and slow of heart to believe all that the prophets have spoken! Ought not Christ to have suffered these things, and to enter into his glory?"],
+      "Neither of you answers. You had thought the Messiah would not suffer at all.",
+      ["The Stranger", "Hear Isaiah, then."],
+    ],
+    otText: "But he was wounded for our transgressions, he was bruised for our iniquities: the chastisement of our peace was upon him; and with his stripes we are healed.",
+    ask: "In Acts, someone is reading this very chapter aloud and asks, \"Of whom speaketh the prophet this?\" Who?",
+    options: [
+      "A Roman centurion named Cornelius, in Caesarea.",
+      "The Pharisee Gamaliel, before the council.",
+      "An Ethiopian official in his chariot, and Philip tells him about Jesus.",
+      "Lydia, a seller of purple cloth in Philippi.",
+    ],
+    answer: 2,
+    hint: "He was riding home on the desert road from Jerusalem to Gaza.",
+    ntRef: "Acts 8:35",
+    ntText: "Then Philip opened his mouth, and began at the same scripture, and preached unto him Jesus.",
+    thread: "Isaiah 53 describes a servant who is despised, \"brought as a lamb to the slaughter\", and dies for the sins of others. Philip starts from this passage to tell the Ethiopian about Jesus, and Peter quotes it: \"by whose stripes ye were healed\" (1 Peter 2:24).",
+    also: ["1 Peter 2:22-25", "Matthew 8:17", "Luke 22:37"],
+  },
+  {
+    leg: "prophets", title: "The Sign of Jonah", ot: "Jonah 1:17", kind: "Pattern",
+    scene: [
+      ["Cleopas", "Some of the women went to the tomb this morning. They say it was empty. They say angels told them he is alive. It has been three days."],
+      ["The Stranger", "Three days. Who else spent three days where no one comes back from?"],
+    ],
+    otText: "Now the LORD had prepared a great fish to swallow up Jonah. And Jonah was in the belly of the fish three days and three nights.",
+    ask: "When people asked Jesus for a sign, what did he say about Jonah?",
+    options: [
+      "That Jonah's anger at Nineveh was a warning to the disciples.",
+      "That as Jonah was in the fish three days, the Son of man would be three days in the heart of the earth.",
+      "That Jonah's gourd was a parable of the kingdom.",
+      "That Jonah fled to Tarshish just as Peter would deny him.",
+    ],
+    answer: 1,
+    hint: "Jesus said Jonah's sign was the only sign that generation would get, and it was about where Jonah spent those days.",
+    ntRef: "Matthew 12:40",
+    ntText: "For as Jonas was three days and three nights in the whale's belly; so shall the Son of man be three days and three nights in the heart of the earth.",
+    thread: "Jesus named this pattern himself before he died. Jonah went down into the deep and came back up, and then a great city repented. On this road it is the third day, and the women's report of an empty tomb is the sign Jesus promised.",
+    also: ["Matthew 12:39-41", "Luke 11:29-30", "1 Corinthians 15:4"],
+  },
+  {
+    leg: "prophets", title: "The King on a Donkey", ot: "Zechariah 9:9", kind: "Quotation",
+    scene: [
+      "A farmer passes, leading a young donkey that is still learning to carry a load.",
+      ["Cleopas", "Only a week ago the crowds were shouting \"Hosanna\" for him."],
+      ["The Stranger", "And what did Zechariah say the king would ride?"],
+    ],
+    otText: "Rejoice greatly, O daughter of Zion... behold, thy King cometh unto thee: he is just, and having salvation; lowly, and riding upon an ass, and upon a colt the foal of an ass.",
+    ask: "Which event do Matthew and John say fulfilled this prophecy?",
+    options: [
+      "Jesus' flight into Egypt as an infant.",
+      "Jesus' arrival in Bethany to raise Lazarus.",
+      "Jesus riding into Jerusalem as the crowds spread their cloaks and palm branches.",
+      "Jesus crossing the Jordan into Perea.",
+    ],
+    answer: 2,
+    hint: "You were there a week ago, at the start of the feast.",
+    ntRef: "Matthew 21:5",
+    ntText: "Tell ye the daughter of Sion, Behold, thy King cometh unto thee, meek, and sitting upon an ass, and a colt the foal of an ass.",
+    thread: "Kings rode warhorses. Zechariah's king comes humble, on a donkey's colt, and the prophecy goes on to promise peace to the nations. Matthew and John quote it word for word for Palm Sunday (John 12:14-15). John admits the disciples only understood the connection later.",
+    also: ["John 12:14-16", "Mark 11:1-10"],
+  },
+  {
+    leg: "psalms", title: "My God, My God", ot: "Psalm 22", kind: "Quotation",
+    scene: [
+      "The sun is lower now. Your shadow runs ahead of you down the road.",
+      ["Cleopas", "On the cross he cried out. Something about being forsaken. I could not bear to listen."],
+      ["The Stranger", "He was praying a psalm of David. You know how it begins. Do you know what else it says?"],
+    ],
+    otText: "My God, my God, why hast thou forsaken me?... They part my garments among them, and cast lots upon my vesture.",
+    ask: "Which detail of the crucifixion does John say fulfilled the second line of this psalm?",
+    options: [
+      "The soldiers divided his clothes and cast lots for his seamless coat.",
+      "Simon of Cyrene carried the cross.",
+      "Joseph of Arimathea asked for the body.",
+      "The crowd offered him vinegar on a sponge.",
+    ],
+    answer: 0,
+    hint: "The psalm mentions garments and lots.",
+    ntRef: "John 19:24",
+    ntText: "They said therefore among themselves, Let us not rend it, but cast lots for it, whose it shall be: that the scripture might be fulfilled, which saith, They parted my raiment among them, and for my vesture they did cast lots.",
+    thread: "Jesus cried out the psalm's first line from the cross: \"Eli, Eli, lama sabachthani?\" (Matthew 27:46). Psalm 22 also mentions mocking crowds, pierced hands and feet, and divided clothing. It does not end in despair. Its second half is praise that \"all the ends of the world\" will turn to the Lord (Psalm 22:27).",
+    also: ["Matthew 27:46", "Matthew 27:39-43", "Hebrews 2:12"],
+  },
+  {
+    leg: "psalms", title: "The Rejected Stone", ot: "Psalm 118:22", kind: "Quotation",
+    scene: [
+      "Builders are repairing a wall by the roadside. A cracked stone lies in the weeds where they threw it.",
+      ["The Stranger", "The pilgrims sang this psalm as they came up to the feast. \"Blessed be he that cometh in the name of the LORD.\" Remember the line before that."],
+    ],
+    otText: "The stone which the builders refused is become the head stone of the corner.",
+    ask: "Who quoted this verse about a rejected stone, and when?",
+    options: [
+      "Nicodemus, when he helped bury Jesus.",
+      "Jesus, to the chief priests in the temple after the parable of the wicked tenants.",
+      "Pilate, when he washed his hands.",
+      "The thief on the cross, asking to be remembered.",
+    ],
+    answer: 1,
+    hint: "It was said in the temple, to the very people who were planning to reject him.",
+    ntRef: "Matthew 21:42",
+    ntText: "Jesus saith unto them, Did ye never read in the scriptures, The stone which the builders rejected, the same is become the head of the corner: this is the Lord's doing, and it is marvellous in our eyes?",
+    thread: "Jesus applied the verse to himself days before he died. After the resurrection Peter told the same council, \"This is the stone which was set at nought of you builders\" (Acts 4:11). The one the leaders threw away becomes the stone the whole building rests on.",
+    also: ["Acts 4:11", "1 Peter 2:7", "Ephesians 2:20"],
+  },
+  {
+    leg: "psalms", title: "At the Right Hand", ot: "Psalm 110:1", kind: "Promise",
+    scene: [
+      "Emmaus is in sight: a cluster of houses and the smoke of evening fires.",
+      ["The Stranger", "One more psalm. In it, David hears God speak to someone David calls \"my Lord\". Who could be greater than David?"],
+    ],
+    otText: "The LORD said unto my Lord, Sit thou at my right hand, until I make thine enemies thy footstool.",
+    ask: "How do the apostles use this verse after the resurrection?",
+    options: [
+      "To name Moses as Israel's greatest prophet.",
+      "To argue that David's line had ended.",
+      "To explain why the temple must be rebuilt.",
+      "To proclaim that the risen Jesus is exalted to God's right hand, as both Lord and Christ.",
+    ],
+    answer: 3,
+    hint: "Peter preached it at Pentecost, fifty days from now.",
+    ntRef: "Acts 2:34-36",
+    ntText: "For David is not ascended into the heavens: but he saith himself, The LORD said unto my Lord, Sit thou on my right hand, Until I make thy foes thy footstool. Therefore let all the house of Israel know assuredly, that God hath made that same Jesus, whom ye have crucified, both Lord and Christ.",
+    thread: "This is one of the Old Testament verses the New Testament quotes and alludes to most often. Jesus used it to ask how the Messiah could be both David's son and David's Lord (Matthew 22:41-45). Peter, Paul and Hebrews use it to say where the risen Jesus is now.",
+    also: ["Matthew 22:41-45", "Hebrews 1:13", "1 Corinthians 15:25"],
+  },
+  {
+    leg: "table", title: "A New Covenant", ot: "Jeremiah 31:31-34", kind: "Promise",
+    scene: [
+      "You reach the village. The Stranger makes as if to walk on, but you both press him: \"Abide with us: for it is toward evening, and the day is far spent.\"",
+      "Inside, the lamp is lit and bread is set on the table. The guest takes the bread, blesses it, and breaks it.",
+      "You have seen hands break bread exactly like that before.",
+      ["The Stranger", "Jeremiah saw a day when God would make a new covenant, written on the heart."],
+    ],
+    otText: "Behold, the days come, saith the LORD, that I will make a new covenant with the house of Israel, and with the house of Judah... I will put my law in their inward parts, and write it in their hearts.",
+    ask: "\"Testament\" means covenant. On which night did Jesus say the new covenant had come?",
+    options: [
+      "At the Last Supper: \"This cup is the new testament in my blood.\"",
+      "On the Mount of Transfiguration.",
+      "At the feeding of the four thousand.",
+      "At the wedding feast in Cana.",
+    ],
+    answer: 0,
+    hint: "It was a Passover meal, with bread and a cup, on the night he was betrayed.",
+    ntRef: "Luke 22:20",
+    ntText: "Likewise also the cup after supper, saying, This cup is the new testament in my blood, which is shed for you.",
+    thread: "This is where the names Old Testament and New Testament come from. Jeremiah promised a new covenant, and Jesus said his blood sealed it. Hebrews quotes all of Jeremiah 31:31-34 (Hebrews 8:8-12), the longest Old Testament quotation in the New Testament.",
+    also: ["Hebrews 8:8-13", "1 Corinthians 11:25", "2 Corinthians 3:6"],
+  },
+];
+
+const TOTAL = STATIONS.length;
+const MAX_EMBERS = TOTAL * 3;
+const KEY = "emmaus-road-v1";
+
+// ---------- state ----------
+const fresh = () => ({ phase: "intro", i: 0, tries: [], embers: 0, found: [], legShown: {} });
+let S = load() || fresh();
+function load() { try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch { return null; } }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage unavailable: play continues */ } }
+
+// ---------- DOM helpers ----------
+const $ = (id) => document.getElementById(id);
+const log = $("log"), choicesEl = $("choices");
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function add(node) { node.classList.add("entry"); log.appendChild(node); requestAnimationFrame(() => node.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })); return node; }
+function para(text) { return add(el("p", null, esc(text))); }
+function say(who, text) { return add(el("div", "say", "<b>" + esc(who) + "</b><p>" + esc(text) + "</p>")); }
+function verse(text, ref) { return add(el("blockquote", "verse", esc(text) + "<cite>" + esc(ref) + " (KJV)</cite>")); }
+function you(text) { return add(el("div", "you", esc(text))); }
+function lines(arr) { for (const l of arr) Array.isArray(l) ? say(l[0], l[1]) : para(l); }
+
+let current = []; // [{label, run}]
+function setChoices(list) {
+  current = list;
+  choicesEl.innerHTML = "";
+  list.forEach((c, n) => {
+    const b = el("button", "choice", '<span class="key">' + (n + 1) + '</span><span>' + esc(c.label) + "</span>");
+    b.type = "button"; b.id = "choice-" + n; b.disabled = !!c.disabled;
+    b.addEventListener("click", () => pick(n));
+    choicesEl.appendChild(b);
+  });
+}
+function pick(n) { const c = current[n]; if (!c || c.disabled) return; c.run(); }
+
+// ---------- HUD ----------
+function hud() {
+  $("embers").textContent = "♥ " + S.embers + " ember" + (S.embers === 1 ? "" : "s");
+  $("threads").textContent = S.found.length + "/" + TOTAL + " threads";
+  const walked = S.phase === "end" ? 60 : Math.round((Math.min(S.found.length, TOTAL - 1) / (TOTAL - 1)) * 60);
+  const pct = (walked / 60) * 100;
+  $("done").style.width = pct + "%"; $("walker").style.left = pct + "%";
+  $("furlongs").textContent = walked + " / 60 furlongs";
+}
+(function ticks() { const t = $("track"); for (let k = 1; k < 3; k++) { const d = el("div", "tick"); d.style.left = (k * 100 / 3) + "%"; t.appendChild(d); } })();
+
+// ---------- story ----------
+function intro() {
+  add(el("h2", "leg", "<small>Luke 24:13</small>The First Day of the Week"));
+  para("It is Sunday afternoon, three days after the crucifixion. You and Cleopas are walking from Jerusalem to Emmaus, a village about sixty furlongs away (seven miles). Neither of you has much to say.");
+  para("A stranger falls into step beside you.");
+  say("The Stranger", "What manner of communications are these that ye have one to another, as ye walk, and are sad?");
+  say("Cleopas", "Art thou only a stranger in Jerusalem, and hast not known the things which are come to pass there in these days?");
+  para("And beginning at Moses and all the prophets, he expounded unto them in all the scriptures the things concerning himself. (Luke 24:27)");
+  add(el("p", "hintline", "How to play: at each stop the Stranger opens an Old Testament passage. Pick the New Testament moment it points to. Right on the first try earns 3 embers, then 2, then 1. Each answer adds a thread to your Scroll."));
+  setChoices([
+    { label: "Walk with him and listen", run: () => { you("Walk with him and listen"); S.phase = "station"; save(); station(); } },
+    { label: "How does this work?", run: help },
+  ]);
+}
+
+function station() {
+  const s = STATIONS[S.i];
+  if (!S.legShown[s.leg]) {
+    S.legShown[s.leg] = true; save();
+    const L = LEGS[s.leg];
+    add(el("h2", "leg", "<small>" + esc(L.sub) + "</small>" + esc(L.name)));
+  }
+  add(el("div", "station-head", (S.i + 1) + " of " + TOTAL + " · " + esc(s.title)));
+  lines(s.scene);
+  verse(s.otText, s.ot);
+  ask();
+}
+
+function ask() {
+  const s = STATIONS[S.i];
+  const tried = S.tries[S.i] || [];
+  add(el("p", "ask", esc(s.ask)));
+  setChoices(s.options.map((o, n) => ({ label: o, disabled: tried.includes(n), run: () => answer(n) })));
+}
+
+function answer(n) {
+  const s = STATIONS[S.i];
+  const tried = (S.tries[S.i] = S.tries[S.i] || []);
+  you(s.options[n]);
+  if (n !== s.answer) {
+    tried.push(n); save();
+    add(el("div", "verdict bad", "<strong>Not this one.</strong> <p>" + esc(s.hint) + "</p>"));
+    setChoices(s.options.map((o, k) => ({ label: o, disabled: tried.includes(k), run: () => answer(k) })));
+    return;
+  }
+  const gained = Math.max(1, 3 - tried.length);
+  S.embers += gained;
+  if (!S.found.includes(S.i)) S.found.push(S.i);
+  save(); hud();
+  add(el("div", "verdict good", "<strong>+" + gained + " ember" + (gained === 1 ? "" : "s") + ".</strong> " +
+    '<span class="tag">' + esc(s.kind) + "</span>" + esc(s.ot) + " → " + esc(s.ntRef)));
+  verse(s.ntText, s.ntRef);
+  para(s.thread);
+  add(el("p", "also", "Also read: " + s.also.map(esc).join(" · ")));
+  const last = S.i === TOTAL - 1;
+  setChoices([
+    { label: last ? "Look at the guest" : "Walk on", run: () => { you(last ? "Look at the guest" : "Walk on"); if (last) ending(); else { S.i++; save(); station(); } } },
+    { label: "Open the Scroll", run: openScroll },
+  ]);
+}
+
+function ending() {
+  S.phase = "end"; save(); hud();
+  add(el("h2", "leg", "<small>Luke 24:31-32</small>Eyes Opened"));
+  para("And their eyes were opened, and they knew him; and he vanished out of their sight.");
+  para("The bread lies broken on the table. Cleopas is already on his feet.");
+  say("Cleopas", "Did not our heart burn within us, while he talked with us by the way, and while he opened to us the scriptures?");
+  const r = S.embers / MAX_EMBERS;
+  const rank = r >= 0.85 ? ["Burning heart", "You saw nearly every thread before he named it."]
+    : r >= 0.55 ? ["Kindled heart", "Most of the threads were plain to you, and the rest are on your Scroll."]
+    : ["Warming heart", "The two on the road were slow of heart too, and they still got up and ran back to Jerusalem that same hour."];
+  add(el("div", "verdict good", "<strong>" + esc(rank[0]) + " · " + S.embers + " of " + MAX_EMBERS + " embers.</strong> <p>" + esc(rank[1]) + "</p>"));
+  para("You found " + S.found.length + " threads that tie the Old Testament to the New. Augustine summed it up: the New is hidden in the Old, and the Old is made plain in the New.");
+  setChoices([
+    { label: "Read the Scroll", run: openScroll },
+    { label: "Run back to Jerusalem (play again)", run: restart },
+  ]);
+}
+
+function help() {
+  you("help");
+  add(el("div", "verdict good",
+    "<strong>How to play.</strong><p>Choose with the buttons, or type a number (1-4) in the command line. " +
+    "Other commands: <b>look</b> repeats the current passage, <b>scroll</b> shows the threads you have found, <b>restart</b> starts a new walk.</p>" +
+    "<p>The New Testament ties back to the Old in three main ways. A <b>promise</b> is a prophecy that is fulfilled. A <b>pattern</b> is an earlier event that foreshadows a later one. A <b>quotation</b> is when a New Testament writer cites the passage directly. Every link in this game is one the New Testament itself makes.</p>"));
+}
+
+function look() {
+  you("look");
+  if (S.phase !== "station") return para("You are on the road. Nothing to look at yet.");
+  const s = STATIONS[S.i];
+  verse(s.otText, s.ot);
+  add(el("p", "ask", esc(s.ask)));
+}
+
+let armed = false;
+function restart() {
+  if (!armed) {
+    armed = true; you("restart");
+    para("Start a new walk? Your embers and Scroll will be cleared. Type restart again, or choose below.");
+    const keep = current;
+    setChoices([
+      { label: "Yes, start over", run: () => { armed = false; S = fresh(); save(); log.innerHTML = ""; hud(); intro(); } },
+      { label: "No, keep walking", run: () => { armed = false; you("keep walking"); setChoices(keep); } },
+    ]);
+    return;
+  }
+  armed = false; S = fresh(); save(); log.innerHTML = ""; hud(); intro();
+}
+
+// ---------- Scroll sheet ----------
+function openScroll() {
+  const list = $("threadList"); list.innerHTML = "";
+  STATIONS.forEach((s, n) => {
+    const got = S.found.includes(n);
+    const row = el("div", "thread" + (got ? "" : " locked"));
+    row.innerHTML = got
+      ? '<div class="ref"><b>' + esc(s.title) + "</b>" + esc(s.ot) + '</div><div class="knot">⟷</div><div class="ref nt"><span class="tag">' + esc(s.kind) + "</span><br>" + esc(s.ntRef) + "</div>"
+      : '<div class="ref"><b>· · ·</b>' + esc(s.ot) + '</div><div class="knot">·</div><div class="ref nt">not yet found</div>';
+    list.appendChild(row);
+  });
+  $("sheet").hidden = false; $("closeScroll").focus();
+}
+function closeScroll() { $("sheet").hidden = true; $("cmd").focus({ preventScroll: true }); }
+$("openScroll").addEventListener("click", openScroll);
+$("closeScroll").addEventListener("click", closeScroll);
+$("sheet").addEventListener("click", (e) => { if (e.target.id === "sheet") closeScroll(); });
+
+// ---------- command line ----------
+$("cmdForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const raw = $("cmd").value.trim().toLowerCase(); $("cmd").value = "";
+  if (!raw) return;
+  const num = /^[1-9]$/.test(raw) ? +raw - 1 : /^[a-d]$/.test(raw) ? raw.charCodeAt(0) - 97 : -1;
+  if (num >= 0) { if (current[num] && !current[num].disabled) pick(num); else { you(raw); para("That choice is not open right now."); } return; }
+  if (raw === "help" || raw === "?" || raw === "h") return help();
+  if (raw === "look" || raw === "l") return look();
+  if (raw === "scroll" || raw === "s") { you("scroll"); return openScroll(); }
+  if (raw === "restart") return restart();
+  you(raw); para("The Stranger smiles but does not answer. Try a number, or: look, scroll, help, restart.");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("sheet").hidden) closeScroll();
+  if (e.target.id === "cmd" || !$("sheet").hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (/^[1-4]$/.test(e.key)) pick(+e.key - 1);
+});
+
+// ---------- boot ----------
+hud();
+if (S.phase === "intro") intro();
+else if (S.phase === "end") { para("You are back at the table in Emmaus."); ending(); }
+else {
+  para("You rejoin the road where you left off, with " + S.embers + " embers and " + S.found.length + " threads on your Scroll.");
+  if (S.found.includes(S.i)) { S.i = Math.min(S.i + 1, TOTAL - 1); }
+  if (S.found.includes(S.i)) ending(); else station();
+}
+</script>
+
+</body>
+</html>
