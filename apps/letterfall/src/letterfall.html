@@ -33,6 +33,7 @@
   --wild: #2fbf9d;        /* wild tile */
   --wild-edge: #1d8a70;
   --blast: #ff8a5c;       /* line clear / bomb */
+  --t1: #5b8def; --t2: #3dbb72; --t3: #f2c230; --t4: #f28c28; --t5: #e5484d; /* points per move, low to high (matches 🟦🟩🟨🟧🟥) */
   --step--1: 0.8rem; --step-0: 0.95rem; --step-1: 1.15rem; --step-2: 1.6rem; --step-3: 2.4rem;
 }
 @media (prefers-color-scheme: dark) {
@@ -224,6 +225,18 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 .kv b { font-family: var(--font-display); font-weight: 400; font-size: var(--step-1); font-variant-numeric: tabular-nums; text-transform: uppercase; overflow-wrap: anywhere; }
 .share-box { white-space: pre-wrap; font-size: 1rem; line-height: 1.3; background: var(--bg); border-radius: 12px; padding: 12px; margin: 0; font-family: var(--font-body); user-select: all; -webkit-user-select: all; }
 .legend { font-size: var(--step--1); color: var(--muted); }
+.r-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.r-top .icon-btn { display: grid; place-items: center; }
+#result .big { font-size: 3.8rem; }
+.chart { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.bars { position: relative; height: 96px; display: flex; align-items: flex-end; gap: 3px; padding-top: 22px; }
+.bars i { position: relative; flex: 1; min-height: 4px; border-radius: 3px 3px 1px 1px; }
+.bars i em { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); font-style: normal; font-size: 0.7rem; font-weight: 700; color: var(--ink); text-transform: uppercase; white-space: nowrap; }
+.axis { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); }
+.t1 { background: var(--t1); } .t2 { background: var(--t2); } .t3 { background: var(--t3); } .t4 { background: var(--t4); } .t5 { background: var(--t5); }
+.sq { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 2px; vertical-align: -0.05em; }
+.preview summary { cursor: pointer; font-size: var(--step--1); color: var(--muted); }
+.preview .share-box { margin-top: 8px; }
 .rules { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
 .demo { display: flex; gap: 4px; }
 .demo i { font-style: normal; width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center; background: var(--tile); color: var(--tile-ink); font-family: var(--font-display); font-size: 1.2rem; box-shadow: inset 0 -3px 0 var(--tile-edge); }
@@ -334,22 +347,35 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 
 <dialog id="result" aria-labelledby="result-title">
   <div class="sheet">
-    <h2 id="result-title">Puzzle done</h2>
-    <div><span class="label">Score</span><div id="r-score" class="big">0</div></div>
+    <div class="r-top">
+      <div>
+        <p id="result-kicker" class="label">Daily #1</p>
+        <h2 id="result-title">Great game!</h2>
+      </div>
+      <button id="r-close" class="icon-btn" type="button" aria-label="Back to board">✕</button>
+    </div>
+    <div>
+      <div id="r-score" class="big">0</div>
+      <p id="r-breakdown" class="legend">points</p>
+    </div>
     <div class="kv">
       <div><span class="label">Best word</span><b id="r-word">-</b></div>
       <div><span class="label">Words</span><b id="r-words">0</b></div>
-      <div><span class="label">Streak</span><b id="r-streak">1</b></div>
+      <div><span class="label">Day streak</span><b id="r-streak">1</b></div>
     </div>
-    <p id="r-cash" class="legend" hidden></p>
-    <pre id="r-share" class="share-box"></pre>
-    <p class="legend">🟨 one word · 🟧 two · 🟥 three or more · 🟪 made a multiplier</p>
-    <div class="actions">
-      <button id="copy-btn" class="btn primary" type="button">Copy result</button>
-      <button id="r-practice" class="btn" type="button">Practice</button>
-    </div>
+    <figure class="chart">
+      <figcaption class="label">Points per move</figcaption>
+      <div id="r-bars" class="bars" role="img"></div>
+      <div class="axis"><span>Move 1</span><span id="r-last">Move 20</span></div>
+    </figure>
+    <button id="copy-btn" class="btn primary" type="button">Share result</button>
+    <p class="legend">Copies your score with one square per move, from <span class="sq t1"></span> fewer points to <span class="sq t5"></span> more.</p>
+    <details class="preview">
+      <summary>Preview what you'll share</summary>
+      <pre id="r-share" class="share-box"></pre>
+    </details>
+    <button id="r-practice" class="btn" type="button">Play a practice board</button>
     <p id="r-next" class="legend"></p>
-    <button id="r-close" class="btn" type="button">Back to board</button>
   </div>
 </dialog>
 
@@ -364,7 +390,7 @@ var WORDS = "/*@WORDS*/";
   var L = Letterfall;
   L.setWords(WORDS);
   var SIZE = L.SIZE;
-  var EPOCH = Date.UTC(2026, 9, 15); // Puzzle #1
+  var EPOCH = Date.UTC(2026, 9, 14); // Puzzle #1
   var POWER_NAMES = { shuffle: "Shuffle", line: "Line clear", bomb: "Bomb", wild: "Wild" };
 
   var $ = function (id) { return document.getElementById(id); };
@@ -811,14 +837,21 @@ var WORDS = "/*@WORDS*/";
   });
 
   // ---- results and sharing ----------------------------------------------
+  // Points per move on one scale, shared by the chart and the share squares.
+  var TIER_EMOJI = ["🟦", "🟩", "🟨", "🟧", "🟥"];
+  function tier(p) { return p >= 800 ? 4 : p >= 400 ? 3 : p >= 200 ? 2 : p >= 100 ? 1 : 0; }
+  function verdict(score) {
+    return score >= 9000 ? "Legendary!" : score >= 6000 ? "Brilliant!" : score >= 4000 ? "Great game!" : score >= 2500 ? "Good game!" : "Nice start!";
+  }
+
   function shareText() {
     var g = S.game, best = g.bestWord();
-    var sq = g.moveLog().map(function (m) { return m.special ? "🟪" : m.words >= 3 ? "🟥" : m.words === 2 ? "🟧" : "🟨"; });
+    var sq = g.moveLog().map(function (m) { return TIER_EMOJI[tier(m.points)]; });
     var lines = [];
     for (var i = 0; i < sq.length; i += 10) lines.push(sq.slice(i, i + 10).join(""));
     var used = S.moves.filter(function (m) { return !Array.isArray(m); }).length;
     var head = S.mode === "daily" ? "Letterfall #" + puzzleNo(S.day) : "Letterfall practice";
-    return head + " · " + fmt(g.score) + "\n" + lines.join("\n") +
+    return head + ": " + fmt(g.score) + " points\n" + lines.join("\n") +
       (best ? "\nBest word: " + best.word.toUpperCase() : "") +
       (used ? "\nPowerups used: " + used : "") +
       (S.hints ? "\n" + S.hints + " hint" + (S.hints > 1 ? "s" : "") : "");
@@ -837,16 +870,37 @@ var WORDS = "/*@WORDS*/";
   function finish(justNow) {
     var g = S.game, best = g.bestWord();
     var words = g.log.reduce(function (s, m) { return s + m.words; }, 0);
-    $("result-title").textContent = S.mode === "daily" ? "Daily #" + puzzleNo(S.day) + " done" : "Practice board done";
+    $("result-kicker").textContent = S.mode === "daily" ? "Daily #" + puzzleNo(S.day) : "Practice";
+    $("result-title").textContent = verdict(g.score);
     $("r-score").textContent = fmt(g.score);
+    $("r-breakdown").textContent = g.cashIn ? "points, including " + fmt(g.cashIn) + " for powerups you didn't use" : "points";
     $("r-word").textContent = best ? best.word : "-";
     $("r-words").textContent = words;
-    $("r-cash").hidden = !g.cashIn;
-    $("r-cash").textContent = g.cashIn ? "Includes " + fmt(g.cashIn) + " for unused powerups." : "";
+    // One bar per move; the best move is labelled with its word.
+    var log = g.moveLog(), max = Math.max.apply(null, log.map(function (m) { return m.points; }).concat([1]));
+    var bestAt = log.reduce(function (b, m, k) { return m.points > log[b].points ? k : b; }, 0);
+    var bars = $("r-bars");
+    bars.textContent = "";
+    log.forEach(function (m, k) {
+      var bar = document.createElement("i");
+      bar.className = "t" + (tier(m.points) + 1);
+      bar.style.height = Math.max(4, 100 * m.points / max) + "%";
+      if (k === bestAt && m.best) {
+        var em = document.createElement("em");
+        em.textContent = m.best;
+        // Keep the label inside the chart near either edge.
+        if (k < 3) em.style.cssText = "left:0;transform:none";
+        else if (k > log.length - 4) em.style.cssText = "left:auto;right:0;transform:none";
+        bar.appendChild(em);
+      }
+      bars.appendChild(bar);
+    });
+    bars.setAttribute("aria-label", "Points for each of your " + log.length + " moves. Best move: " + fmt(log.length ? log[bestAt].points : 0) + " points.");
+    $("r-last").textContent = "Move " + log.length;
     var st = S.mode === "daily" ? updateStats() : load("lf:stats", { streak: 0 });
     $("r-streak").textContent = st.streak || 0;
     $("r-share").textContent = shareText();
-    $("r-practice").textContent = S.mode === "daily" ? "Practice" : "New board";
+    $("r-practice").textContent = S.mode === "daily" ? "Play a practice board" : "Play another board";
     var now = new Date(), mid = new Date(now); mid.setHours(24, 0, 0, 0);
     var mins = Math.round((mid - now) / 60000);
     $("r-next").textContent = S.mode === "daily" ? "Next daily board in " + Math.floor(mins / 60) + " h " + (mins % 60) + " min." : "";
