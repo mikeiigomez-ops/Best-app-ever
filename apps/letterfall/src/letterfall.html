@@ -3,7 +3,7 @@
 <meta name="description" content="Swap letters to spell words, set off chain reactions, and share your daily score.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Lexend:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Lilita+One&family=Lexend:wght@400;500;700&display=swap">
 <style>
 /* Layout: one phone-width column. Score and moves on top, the board as a deep cobalt well of ivory
    letter tiles (each with its point value, like a tile from a word game), the words you just spelled
@@ -27,22 +27,31 @@
   --bad: #c03a3a;
   --font-display: "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
   --font-body: "Lexend", "Segoe UI", system-ui, sans-serif;
+  --font-tile: "Atkinson Hyperlegible", "Verdana", "Segoe UI", sans-serif; /* built so I/l/1, O/0, M/W never blur */
+  --tile-vowel: #dfeafd;  /* soft blue on vowels */
+  --tile-vowel-edge: #b4c6e6;
+  --wild: #2fbf9d;        /* wild tile */
+  --wild-edge: #1d8a70;
+  --blast: #ff8a5c;       /* line clear / bomb */
   --step--1: 0.8rem; --step-0: 0.95rem; --step-1: 1.15rem; --step-2: 1.6rem; --step-3: 2.4rem;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1328; --panel: #171f3c; --ink: #e8ecf8; --muted: #9ba6c6; --rule: #2b3561;
     --well: #080d20; --well-line: #19234a; --tile: #efe8d8; --tile-edge: #b9ad90;
-    --accent: #7c9bff; --accent-ink: #0b1230; --good: #5fd39c; --bad: #ff8a8a; color-scheme: dark;
+    --accent: #7c9bff; --accent-ink: #0b1230; --good: #5fd39c; --bad: #ff8a8a;
+    --tile-vowel: #cfdcf5; --tile-vowel-edge: #93a8cf; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1328; --panel: #171f3c; --ink: #e8ecf8; --muted: #9ba6c6; --rule: #2b3561;
   --well: #080d20; --well-line: #19234a; --tile: #efe8d8; --tile-edge: #b9ad90;
-  --accent: #7c9bff; --accent-ink: #0b1230; --good: #5fd39c; --bad: #ff8a8a; color-scheme: dark;
+  --accent: #7c9bff; --accent-ink: #0b1230; --good: #5fd39c; --bad: #ff8a8a;
+    --tile-vowel: #cfdcf5; --tile-vowel-edge: #93a8cf; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
@@ -64,6 +73,7 @@ button { font: inherit; color: inherit; }
 .top { display: flex; align-items: center; gap: 10px; }
 .brand { font-family: var(--font-display); font-size: var(--step-2); letter-spacing: 0.01em; line-height: 1; margin: 0; }
 .brand span { color: var(--accent); }
+.top .icon-btn { display: grid; place-items: center; }
 .modes { margin-left: auto; display: flex; background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 3px; }
 .modes button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-size: var(--step--1); font-weight: 500; color: var(--muted); cursor: pointer; }
 .modes button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
@@ -105,11 +115,16 @@ button { font: inherit; color: inherit; }
   position: relative; display: grid; place-items: center; width: 100%; height: 100%;
   background: var(--tile); color: var(--tile-ink); border-radius: 10px;
   box-shadow: inset 0 -4px 0 var(--tile-edge), 0 2px 0 rgba(0,0,0,0.25);
-  font-family: var(--font-display); font-size: clamp(1.4rem, 7.5vw, 2.1rem); line-height: 1;
+  font-family: var(--font-tile); font-weight: 700; font-size: clamp(1.5rem, 8vw, 2.2rem); line-height: 1;
   text-transform: uppercase; padding-bottom: 3px;
   transition: transform 140ms ease, background-color 140ms ease;
 }
-.face .v { position: absolute; right: 6px; bottom: 6px; font-family: var(--font-body); font-size: 0.6rem; font-weight: 700; opacity: 0.6; }
+.face .v { position: absolute; right: 6px; bottom: 6px; font-family: var(--font-body); font-size: 0.55rem; font-weight: 500; opacity: 0.45; }
+.no-values .face .v { display: none; }
+.tile[data-vowel="1"] .face { background: var(--tile-vowel); box-shadow: inset 0 -4px 0 var(--tile-vowel-edge), 0 2px 0 rgba(0,0,0,0.25); }
+.no-tint { --tile-vowel: var(--tile); --tile-vowel-edge: var(--tile-edge); }
+.big-letters .face { font-size: clamp(1.8rem, 10vw, 2.6rem); }
+.tile[data-wild="1"] .face { background: var(--wild); color: #fff; box-shadow: inset 0 -4px 0 var(--wild-edge), 0 0 0 2px rgba(47,191,157,0.5), 0 2px 0 rgba(0,0,0,0.25); }
 .face .m { position: absolute; left: 4px; top: 4px; font-family: var(--font-body); font-size: 0.62rem; font-weight: 700; padding: 1px 5px; border-radius: 6px; color: #1b1300; }
 .tile[data-mult="2"] .face { background: var(--gold); box-shadow: inset 0 -4px 0 #c78a12, 0 0 0 2px rgba(242,178,51,0.45), 0 2px 0 rgba(0,0,0,0.25); }
 .tile[data-mult="3"] .face { background: var(--rose); color: #fff; box-shadow: inset 0 -4px 0 #a92a5a, 0 0 0 2px rgba(226,69,124,0.5), 0 2px 0 rgba(0,0,0,0.25); }
@@ -119,6 +134,9 @@ button { font: inherit; color: inherit; }
 .tile.word .face { background: #ffe58a; color: #241a00; transform: scale(1.08); }
 .tile.word.chain2 .face { background: #ffc46b; }
 .tile.word.chain3 .face { background: #ff9c8a; }
+.tile.target .face { box-shadow: inset 0 -4px 0 var(--tile-edge), 0 0 0 3px var(--blast); transform: scale(0.94); }
+.tile.blast .face { background: var(--blast); color: #2a0d00; transform: scale(1.1); }
+.aiming .tile { cursor: crosshair; }
 .tile.gone { transition: opacity 180ms ease, transform 180ms ease; opacity: 0; }
 .tile.gone .face { transform: scale(0.3) rotate(-8deg); }
 .tile.shake .face { animation: shake 0.32s ease; }
@@ -142,9 +160,48 @@ button { font: inherit; color: inherit; }
 .chip b { font-family: var(--font-display); font-weight: 400; font-size: var(--step-1); text-transform: uppercase; letter-spacing: 0.03em; }
 .chip span { font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip .x { color: var(--good); font-weight: 700; }
+.chip.blast-chip { border-color: var(--blast); }
+.chip.earn-chip { border-color: var(--wild); }
 .hint-text { color: var(--muted); font-size: var(--step--1); margin: 0; }
 
 .actions { display: flex; gap: 10px; }
+
+/* Powerups */
+.power { display: flex; flex-direction: column; gap: 8px; }
+.meter-row { display: flex; align-items: center; gap: 10px; }
+.meter { flex: 1; height: 10px; border-radius: 999px; background: var(--rule); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--wild)); transition: width 400ms ease; }
+.meter-label { font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tray { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pw {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 4px 7px; border-radius: 12px; border: 1px solid var(--rule); background: var(--panel); cursor: pointer;
+  font-size: 0.72rem; font-weight: 500;
+}
+.pw svg { width: 26px; height: 26px; }
+.pw .n {
+  position: absolute; top: -7px; right: -5px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 0.75rem; display: grid; place-items: center;
+}
+.pw:disabled { cursor: default; opacity: 0.42; }
+.pw:disabled .n { display: none; }
+.pw[aria-pressed="true"] { border-color: var(--blast); box-shadow: 0 0 0 2px var(--blast); }
+.pw.earned { animation: earned 0.8s ease 2; }
+@keyframes earned { 50% { transform: translateY(-5px) scale(1.06); box-shadow: 0 0 0 3px var(--gold); } }
+.pw[data-k="shuffle"] svg { color: var(--accent); }
+.pw[data-k="line"] svg, .pw[data-k="bomb"] svg { color: var(--blast); }
+.pw[data-k="wild"] svg { color: var(--wild); }
+.aim-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--blast); border-radius: 12px; padding: 8px 10px; }
+.aim-bar p { margin: 0; flex: 1 1 160px; font-size: var(--step--1); font-weight: 500; }
+.aim-bar button { border: 1px solid var(--rule); background: var(--bg); border-radius: 999px; padding: 5px 12px; font-size: var(--step--1); cursor: pointer; }
+.aim-bar button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* Settings */
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.toggle:last-of-type { border-bottom: 0; }
+.toggle span { display: flex; flex-direction: column; }
+.toggle small { color: var(--muted); font-size: var(--step--1); }
+.toggle input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 .btn {
   flex: 1; border: 1px solid var(--rule); background: var(--panel); border-radius: 12px; padding: 11px 14px;
   font-weight: 500; cursor: pointer;
@@ -192,6 +249,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <button id="mode-practice" type="button" aria-pressed="false">Practice</button>
     </div>
     <button id="help-btn" class="icon-btn" type="button" aria-label="How to play">?</button>
+    <button id="settings-btn" class="icon-btn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </header>
 
   <section class="hud" aria-label="Score">
@@ -206,6 +264,29 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <div id="tiles" class="tiles"></div>
     </div>
     <div id="callout" class="callout" aria-hidden="true"></div>
+  </div>
+
+  <section class="power" aria-label="Powerups">
+    <div class="meter-row">
+      <span class="label">Power</span>
+      <div class="meter" role="progressbar" aria-label="Power meter" aria-valuemin="0" id="meter"><i id="meter-fill"></i></div>
+      <span id="meter-label" class="meter-label">0 / 30</span>
+    </div>
+    <div class="tray">
+      <button class="pw" type="button" data-k="shuffle" id="pw-shuffle" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h3.5c2 0 3.2 1 4.3 2.7l2.4 4.6c1.1 1.7 2.3 2.7 4.3 2.7H21"/><path d="M3 17h3.5c1.4 0 2.4-.5 3.2-1.4M14.3 8.4C15.1 7.5 16.1 7 17.5 7H21"/><path d="M18 4l3 3-3 3M18 14l3 3-3 3"/></svg>Shuffle<span class="n">0</span></button>
+      <button class="pw" type="button" data-k="line" id="pw-line" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18"/><path d="M6 8l-4 4 4 4M18 8l4 4-4 4"/><path d="M12 3v3M12 18v3" opacity=".5"/></svg>Line clear<span class="n">0</span></button>
+      <button class="pw" type="button" data-k="bomb" id="pw-bomb" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="14" r="7"/><path d="M16 9l2-2"/><path d="M19 3v1.5M22 6h-1.5M21 3.5l-1 1"/></svg>Bomb<span class="n">0</span></button>
+      <button class="pw" type="button" data-k="wild" id="pw-wild" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z"/></svg>Wild<span class="n">0</span></button>
+    </div>
+  </section>
+
+  <div id="aim-bar" class="aim-bar" hidden>
+    <p id="aim-text">Tap a tile to clear its row.</p>
+    <span id="aim-dir" role="group" aria-label="Direction">
+      <button id="aim-row" type="button" aria-pressed="true">Row</button>
+      <button id="aim-col" type="button" aria-pressed="false">Column</button>
+    </span>
+    <button id="aim-cancel" type="button">Cancel</button>
   </div>
 
   <section class="feed" aria-live="polite">
@@ -229,10 +310,25 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <li>Words clear and the letters above fall. If the fall spells more words, they score again with a chain bonus.</li>
       <li>Longer words score far more. A 5-letter word leaves a <b>×2</b> tile and a 6-letter word a <b>×3</b>. Use them in a word to multiply it, and two together multiply each other.
         <div class="demo" aria-hidden="true"><i class="g">E</i><i class="r">A</i></div></li>
-      <li>You get 20 moves. A swap that spells nothing bounces back and costs nothing.</li>
+      <li>When an across word and a down word share a letter, that's a <b>crossing</b>: both score double and your power meter jumps.</li>
+      <li>Every letter you clear charges the <b>power meter</b>. Each time it fills you earn a powerup. Using one costs no move:
+        <b>Shuffle</b> mixes up the board, <b>Line clear</b> wipes out a row or column, <b>Bomb</b> clears a 3×3 square, and <b>Wild</b> turns a tile into a ★ that stands for any letter.</li>
+      <li>You get 20 moves. A swap that spells nothing bounces back and costs nothing. Powerups you haven't used when the moves run out are worth 150 points each.</li>
       <li>Everyone gets the same Daily board. Practice boards are endless.</li>
     </ol>
     <button id="help-close" class="btn primary" type="button">Play</button>
+  </div>
+</dialog>
+
+<dialog id="settings" aria-labelledby="settings-title">
+  <div class="sheet">
+    <h2 id="settings-title">Settings</h2>
+    <div>
+      <label class="toggle" for="set-tint"><span>Tint vowels<small>A soft blue on A, E, I, O and U makes words easier to spot.</small></span><input type="checkbox" id="set-tint"></label>
+      <label class="toggle" for="set-values"><span>Show letter points<small>The small number on each tile.</small></span><input type="checkbox" id="set-values"></label>
+      <label class="toggle" for="set-big"><span>Bigger letters<small>Larger type on the tiles.</small></span><input type="checkbox" id="set-big"></label>
+    </div>
+    <button id="settings-close" class="btn primary" type="button">Done</button>
   </div>
 </dialog>
 
@@ -245,6 +341,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <div><span class="label">Words</span><b id="r-words">0</b></div>
       <div><span class="label">Streak</span><b id="r-streak">1</b></div>
     </div>
+    <p id="r-cash" class="legend" hidden></p>
     <pre id="r-share" class="share-box"></pre>
     <p class="legend">🟨 one word · 🟧 two · 🟥 three or more · 🟪 made a multiplier</p>
     <div class="actions">
@@ -268,6 +365,7 @@ var WORDS = "/*@WORDS*/";
   L.setWords(WORDS);
   var SIZE = L.SIZE;
   var EPOCH = Date.UTC(2026, 9, 15); // Puzzle #1
+  var POWER_NAMES = { shuffle: "Shuffle", line: "Line clear", bomb: "Bomb", wild: "Wild" };
 
   var $ = function (id) { return document.getElementById(id); };
   var tilesEl = $("tiles");
@@ -281,24 +379,42 @@ var WORDS = "/*@WORDS*/";
   function dayStr(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
   function puzzleNo(ds) { var p = ds.split("-").map(Number); return Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - EPOCH) / 864e5) + 1; }
   function fmt(n) { return n.toLocaleString("en-US"); }
+  function same(a, b) { return a && b && a[0] === b[0] && a[1] === b[1]; }
+
+  // ---- settings ---------------------------------------------------------
+  var prefs = Object.assign({ tint: true, values: true, big: false }, load("lf:prefs", {}));
+  function applyPrefs() {
+    document.body.classList.toggle("no-tint", !prefs.tint);
+    document.body.classList.toggle("no-values", !prefs.values);
+    document.body.classList.toggle("big-letters", prefs.big);
+    $("set-tint").checked = prefs.tint;
+    $("set-values").checked = prefs.values;
+    $("set-big").checked = prefs.big;
+  }
+  [["set-tint", "tint"], ["set-values", "values"], ["set-big", "big"]].forEach(function (p) {
+    $(p[0]).addEventListener("change", function (e) { prefs[p[1]] = e.target.checked; save("lf:prefs", prefs); applyPrefs(); });
+  });
 
   // ---- game state -------------------------------------------------------
-  var S = { mode: "daily", day: null, seed: null, game: null, moves: [], hints: 0, busy: false, sel: null, els: {} };
+  // moves holds every action in order: [a, b] for a swap, {p, cell, dir} for a powerup.
+  function setBusy(v) { S.busy = v; $("board").dataset.busy = v ? 1 : 0; }
+  var S = { mode: "daily", day: null, seed: null, game: null, moves: [], hints: 0, busy: false, sel: null, els: {}, aim: null };
 
   function storageKey() { return S.mode === "daily" ? "lf:daily:" + S.day : "lf:practice"; }
   function persist() { save(storageKey(), { seed: S.seed, moves: S.moves, hints: S.hints }); }
 
   function start(mode, fresh) {
-    S.mode = mode; S.sel = null; S.busy = false;
+    S.mode = mode; S.sel = null; setBusy(false);
+    endAim();
     S.day = dayStr(new Date());
     var saved = fresh ? null : load(mode === "daily" ? "lf:daily:" + S.day : "lf:practice", null);
     S.seed = mode === "daily" ? "daily-" + S.day : (saved && saved.seed) || "p-" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
     S.game = new L.Game(S.seed);
     S.moves = []; S.hints = (saved && saved.hints) || 0;
-    // Replaying the saved moves rebuilds the exact game: the rules are deterministic.
+    // Replaying the saved actions rebuilds the exact game: the rules are deterministic.
     if (saved && saved.moves) {
       for (var i = 0; i < saved.moves.length; i++) {
-        if (!S.game.tryMove(saved.moves[i][0], saved.moves[i][1])) break;
+        if (!S.game.apply(saved.moves[i])) break;
         S.moves.push(saved.moves[i]);
       }
     }
@@ -324,13 +440,16 @@ var WORDS = "/*@WORDS*/";
     return b;
   }
   function paint(el, t, r, c) {
-    el.querySelector(".ch").textContent = t.ch;
-    el.querySelector(".v").textContent = L.VALUES[t.ch];
+    var wild = t.ch === L.WILD;
+    el.querySelector(".ch").textContent = wild ? "★" : t.ch;
+    el.querySelector(".v").textContent = wild ? "" : L.VALUES[t.ch];
     var m = el.querySelector(".m");
     m.hidden = t.mult === 1; m.textContent = "×" + t.mult;
     el.dataset.mult = t.mult;
+    el.dataset.vowel = "aeiou".indexOf(t.ch) >= 0 ? 1 : 0;
+    el.dataset.wild = wild ? 1 : 0;
     el.dataset.r = r; el.dataset.c = c;
-    el.setAttribute("aria-label", t.ch.toUpperCase() + ", row " + (r + 1) + " column " + (c + 1) + (t.mult > 1 ? ", times " + t.mult : ""));
+    el.setAttribute("aria-label", (wild ? "Wild" : t.ch.toUpperCase()) + ", row " + (r + 1) + " column " + (c + 1) + (t.mult > 1 ? ", times " + t.mult : ""));
   }
   function place(el, r, c) { el.style.setProperty("--r", r); el.style.setProperty("--c", c); }
 
@@ -350,7 +469,7 @@ var WORDS = "/*@WORDS*/";
       }
       paint(el, t, r2, c2);
       el.classList.toggle("falling", !opt.instant);
-      if (!fresh.includes(el)) place(el, r2, c2);
+      if (fresh.indexOf(el) < 0) place(el, r2, c2);
       el.tabIndex = -1;
     }
     for (var id in S.els) if (!seen[id]) { S.els[id].remove(); delete S.els[id]; }
@@ -390,6 +509,17 @@ var WORDS = "/*@WORDS*/";
     $("hint-btn").hidden = over;
     $("result-btn").hidden = !over;
     $("new-btn").hidden = !(over && S.mode === "practice");
+    // Power meter and tray.
+    $("meter-fill").style.width = (100 * g.power / L.POWER_AT) + "%";
+    $("meter").setAttribute("aria-valuemax", L.POWER_AT);
+    $("meter").setAttribute("aria-valuenow", g.power);
+    $("meter-label").textContent = g.power + " / " + L.POWER_AT;
+    L.POWERS.forEach(function (k) {
+      var b = $("pw-" + k);
+      b.disabled = over || !g.inv[k];
+      b.querySelector(".n").textContent = g.inv[k];
+      b.setAttribute("aria-label", POWER_NAMES[k] + ", " + g.inv[k] + " left");
+    });
   }
 
   function callout(text) {
@@ -400,7 +530,87 @@ var WORDS = "/*@WORDS*/";
 
   function toast(msg) {
     var el = $("toast"); el.textContent = msg; el.classList.add("show");
-    clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove("show"); }, 1800);
+    clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove("show"); }, 2200);
+  }
+
+  function chip(cls, word, detail) {
+    var c = document.createElement("span");
+    c.className = "chip " + cls;
+    c.innerHTML = "<b></b><span></span>";
+    c.querySelector("b").textContent = word;
+    c.querySelector("span").innerHTML = detail;
+    $("feed-row").appendChild(c);
+  }
+
+  // ---- animating a result from the rules ----------------------------------
+  var WORD_CLASSES = ["word", "chain1", "chain2", "chain3", "blast"];
+  async function animate(res) {
+    $("feed-row").textContent = "";
+    $("feed-hint").hidden = true;
+    var chain = 0;
+    for (var i = 0; i < res.steps.length; i++) {
+      var st = res.steps[i];
+      if (st.wild) {
+        var we = cellEl(st.wild[0], st.wild[1]);
+        if (we) { paint(we, { ch: L.WILD, mult: +we.dataset.mult }, st.wild[0], st.wild[1]); we.classList.add("made"); }
+        callout("Wild!");
+        await wait(450);
+        if (we) we.classList.remove("made");
+        continue;
+      }
+      if (st.shuffle) {
+        callout("Shuffle!");
+        draw(st.layout);
+        await wait(450);
+        continue;
+      }
+      if (st.blast) {
+        st.blast.cells.forEach(function (cl) { var el = cellEl(cl[0], cl[1]); if (el) el.classList.add("blast"); });
+        chip("blast-chip", POWER_NAMES[st.blast.kind], "+" + fmt(st.blast.points));
+        callout(st.blast.kind === "bomb" ? "Boom!" : "Zap!");
+        await wait(320);
+      } else {
+        chain++;
+        var c = chain;
+        st.words.forEach(function (w) {
+          w.cells.forEach(function (cl) {
+            var el = cellEl(cl[0], cl[1]);
+            if (el) el.classList.add("word", c >= 3 ? "chain3" : c === 2 ? "chain2" : "chain1");
+          });
+          chip("", w.word, "+" + fmt(w.points) +
+            (w.mult > 1 ? ' <span class="x">×' + w.mult + "</span>" : "") +
+            (w.cross ? ' <span class="x">crossing ×2</span>' : "") +
+            (c > 1 ? ' <span class="x">chain ' + c + "</span>" : ""));
+        });
+        if (st.words.some(function (w) { return w.cross; })) callout("Crossing!");
+        else if (c >= 2) callout(c === 2 ? "Chain!" : c === 3 ? "Triple chain!" : "Chain ×" + c + "!");
+        else if (st.words.some(function (w) { return w.word.length >= 6; })) callout("Huge word!");
+        else if (st.words.length >= 2) callout("Double!");
+        await wait(380);
+      }
+      st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) el.classList.add("gone"); });
+      st.made.forEach(function (m) { var el = S.els[m.id]; if (el) WORD_CLASSES.forEach(function (k) { el.classList.remove(k); }); });
+      await wait(190);
+      st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) { el.remove(); delete S.els[cl.id]; } });
+      draw(st.layout);
+      st.made.forEach(function (m) { var el = S.els[m.id]; if (el) { el.classList.add("made"); setTimeout(function () { el.classList.remove("made"); }, 650); } });
+      hud();
+      await wait(380);
+      tilesEl.querySelectorAll(".word,.blast").forEach(function (el) { WORD_CLASSES.forEach(function (k) { el.classList.remove(k); }); });
+    }
+    if (res.shuffled) toast("No moves left, so the letters were shuffled");
+    draw(L.snapshot(S.game.board));
+    hud();
+    if (res.earned && res.earned.length) {
+      res.earned.forEach(function (e) {
+        chip("earn-chip", POWER_NAMES[e.kind], "earned");
+        var b = $("pw-" + e.kind);
+        b.classList.remove("earned"); void b.offsetWidth; b.classList.add("earned");
+      });
+      callout(res.earned.length > 1 ? res.earned.length + " powerups!" : "+ " + POWER_NAMES[res.earned[0].kind] + "!");
+      await wait(500);
+    }
+    if (res.cashIn) toast("Unused powerups cashed in: +" + fmt(res.cashIn));
   }
 
   // ---- moves ------------------------------------------------------------
@@ -417,9 +627,9 @@ var WORDS = "/*@WORDS*/";
   }
 
   async function play(a, b) {
-    if (S.busy || S.game.over()) return;
+    if (S.busy || S.game.over() || S.aim) return;
     if (b[0] < 0 || b[1] < 0 || b[0] >= SIZE || b[1] >= SIZE) return;
-    S.busy = true;
+    setBusy(true);
     clearSel();
     clearHint();
     var ea = cellEl(a[0], a[1]), eb = cellEl(b[0], b[1]);
@@ -434,7 +644,7 @@ var WORDS = "/*@WORDS*/";
       ea.classList.add("shake"); eb.classList.add("shake");
       await wait(320);
       ea.classList.remove("shake"); eb.classList.remove("shake");
-      S.busy = false;
+      setBusy(false);
       return;
     }
     S.moves.push([a, b]);
@@ -442,48 +652,69 @@ var WORDS = "/*@WORDS*/";
     $("moves").textContent = S.game.movesLeft;
     ea.dataset.r = b[0]; ea.dataset.c = b[1]; eb.dataset.r = a[0]; eb.dataset.c = a[1];
     focusCell = b;
-
-    var row = $("feed-row");
-    row.textContent = "";
-    $("feed-hint").hidden = true;
-    for (var i = 0; i < res.steps.length; i++) {
-      var st = res.steps[i], chain = i + 1;
-      st.words.forEach(function (w) {
-        w.cells.forEach(function (cl) {
-          var el = cellEl(cl[0], cl[1]);
-          if (el) el.classList.add("word", chain >= 3 ? "chain3" : chain === 2 ? "chain2" : "chain1");
-        });
-        var chip = document.createElement("span");
-        chip.className = "chip";
-        chip.innerHTML = "<b></b><span></span>";
-        chip.querySelector("b").textContent = w.word;
-        chip.querySelector("span").innerHTML = "+" + fmt(w.points) +
-          (w.mult > 1 ? ' <span class="x">×' + w.mult + "</span>" : "") +
-          (chain > 1 ? ' <span class="x">chain ' + chain + "</span>" : "");
-        row.appendChild(chip);
-      });
-      if (chain >= 2) callout(chain === 2 ? "Chain!" : chain === 3 ? "Triple chain!" : "Chain ×" + chain + "!");
-      else if (st.words.some(function (w) { return w.word.length >= 6; })) callout("Huge word!");
-      else if (st.words.length >= 2) callout("Double!");
-      await wait(380);
-      st.cleared.forEach(function (c) { var el = S.els[c.id]; if (el) el.classList.add("gone"); });
-      st.made.forEach(function (m) { var el = S.els[m.id]; if (el) el.classList.remove("word", "chain1", "chain2", "chain3"); });
-      await wait(190);
-      st.cleared.forEach(function (c) { var el = S.els[c.id]; if (el) { el.remove(); delete S.els[c.id]; } });
-      draw(st.layout);
-      st.made.forEach(function (m) { var el = S.els[m.id]; if (el) { el.classList.add("made"); setTimeout(function () { el.classList.remove("made"); }, 650); } });
-      hud();
-      await wait(380);
-      tilesEl.querySelectorAll(".word").forEach(function (el) { el.classList.remove("word", "chain1", "chain2", "chain3"); });
-    }
-    if (res.shuffled) {
-      toast("No moves left, so the letters were shuffled");
-      tilesEl.textContent = ""; S.els = {};
-      draw(L.snapshot(S.game.board), { instant: true });
-    }
-    hud();
-    S.busy = false;
+    await animate(res);
+    setBusy(false);
     if (S.game.over()) { await wait(500); finish(true); }
+  }
+
+  // ---- powerups ---------------------------------------------------------
+  var AIM_TEXT = {
+    line: function () { return "Tap a tile to clear its " + (S.aim.dir === "col" ? "column." : "row."); },
+    bomb: function () { return "Tap a tile to clear it and the 8 around it."; },
+    wild: function () { return "Tap a tile to turn it into a wild ★ that stands for any letter."; }
+  };
+  function startAim(kind) {
+    if (S.busy || S.game.over() || !S.game.inv[kind]) return;
+    if (S.aim && S.aim.kind === kind) { endAim(); return; }
+    clearSel(); clearHint();
+    if (kind === "shuffle") { endAim(); usePower("shuffle", {}); return; }
+    S.aim = { kind: kind, dir: (S.aim && S.aim.dir) || "row" };
+    $("aim-bar").hidden = false;
+    $("aim-dir").hidden = kind !== "line";
+    $("aim-row").setAttribute("aria-pressed", S.aim.dir === "row");
+    $("aim-col").setAttribute("aria-pressed", S.aim.dir === "col");
+    $("aim-text").textContent = AIM_TEXT[kind]();
+    $("board").classList.add("aiming");
+    L.POWERS.forEach(function (k) { $("pw-" + k).setAttribute("aria-pressed", k === kind); });
+    preview(focusCell);
+  }
+  function endAim() {
+    S.aim = null;
+    $("aim-bar").hidden = true;
+    $("board").classList.remove("aiming");
+    L.POWERS.forEach(function (k) { $("pw-" + k).setAttribute("aria-pressed", false); });
+    preview(null);
+  }
+  function preview(cell) {
+    tilesEl.querySelectorAll(".target").forEach(function (el) { el.classList.remove("target"); });
+    if (!S.aim || !cell) return;
+    var cells = S.aim.kind === "wild" ? [cell] : L.blastCells(S.aim.kind, cell, S.aim.dir);
+    cells.forEach(function (c) { var el = cellEl(c[0], c[1]); if (el) el.classList.add("target"); });
+  }
+  async function usePower(kind, opts) {
+    if (S.busy) return;
+    var act = { p: kind };
+    if (opts.cell) act.cell = opts.cell;
+    if (kind === "line") act.dir = opts.dir;
+    var res = S.game.usePower(kind, act);
+    if (!res) { if (kind === "wild") toast("That tile is already wild."); return; }
+    setBusy(true);
+    endAim();
+    S.moves.push(act);
+    persist();
+    await animate(res);
+    setBusy(false);
+    if (S.game.over()) { await wait(500); finish(true); }
+  }
+  L.POWERS.forEach(function (k) { $("pw-" + k).addEventListener("click", function () { startAim(k); }); });
+  $("aim-cancel").addEventListener("click", endAim);
+  $("aim-row").addEventListener("click", function () { if (S.aim) { S.aim.dir = "row"; refreshAim(); } });
+  $("aim-col").addEventListener("click", function () { if (S.aim) { S.aim.dir = "col"; refreshAim(); } });
+  function refreshAim() {
+    $("aim-row").setAttribute("aria-pressed", S.aim.dir === "row");
+    $("aim-col").setAttribute("aria-pressed", S.aim.dir === "col");
+    $("aim-text").textContent = AIM_TEXT[S.aim.kind]();
+    preview(focusCell);
   }
 
   var hintTimer = null;
@@ -493,6 +724,7 @@ var WORDS = "/*@WORDS*/";
   }
   function showHint() {
     if (S.busy || S.game.over()) return;
+    endAim();
     var m = S.game.hint();
     if (!m) return;
     S.hints++; persist();
@@ -507,9 +739,17 @@ var WORDS = "/*@WORDS*/";
     var el = e.target.closest(".tile");
     if (!el || S.busy) return;
     drag = { x: e.clientX, y: e.clientY, cell: [+el.dataset.r, +el.dataset.c], moved: false, id: e.pointerId };
+    if (S.aim) preview(drag.cell);
     try { tilesEl.setPointerCapture(e.pointerId); } catch (err) {}
   });
   tilesEl.addEventListener("pointermove", function (e) {
+    if (S.aim) {
+      // Aiming: the target follows the finger or mouse.
+      var box = tilesEl.getBoundingClientRect();
+      var cell = [Math.floor((e.clientY - box.top) / box.height * SIZE), Math.floor((e.clientX - box.left) / box.width * SIZE)];
+      if (cell[0] >= 0 && cell[1] >= 0 && cell[0] < SIZE && cell[1] < SIZE) { preview(cell); if (drag) drag.cell = cell; }
+      return;
+    }
     if (!drag || drag.moved || e.pointerId !== drag.id) return;
     var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     var min = tilesEl.clientWidth / SIZE * 0.35;
@@ -522,13 +762,16 @@ var WORDS = "/*@WORDS*/";
   tilesEl.addEventListener("pointerup", function (e) {
     if (!drag || e.pointerId !== drag.id) return;
     var d = drag; drag = null;
-    if (d.moved || S.busy) return;
+    if (S.busy) return;
+    if (S.aim) { usePower(S.aim.kind, { cell: d.cell, dir: S.aim.dir }); return; }
+    if (d.moved) return;
     var a = S.sel, c = d.cell;
     if (a && Math.abs(a[0] - c[0]) + Math.abs(a[1] - c[1]) === 1) play(a, c);
-    else if (a && a[0] === c[0] && a[1] === c[1]) clearSel();
+    else if (same(a, c)) clearSel();
     else select(c);
   });
   tilesEl.addEventListener("pointercancel", function () { drag = null; });
+  tilesEl.addEventListener("pointerleave", function () { if (S.aim && !drag) preview(null); });
 
   var focusCell = [0, 0];
   var DIRS = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
@@ -538,16 +781,18 @@ var WORDS = "/*@WORDS*/";
     var cell = [+el.dataset.r, +el.dataset.c];
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (S.sel && S.sel[0] === cell[0] && S.sel[1] === cell[1]) clearSel(); else select(cell);
+      if (S.aim) { usePower(S.aim.kind, { cell: cell, dir: S.aim.dir }); return; }
+      if (same(S.sel, cell)) clearSel(); else select(cell);
       return;
     }
     var d = DIRS[e.key];
-    if (!d) { if (e.key === "Escape") clearSel(); return; }
+    if (!d) { if (e.key === "Escape") { clearSel(); endAim(); } return; }
     e.preventDefault();
     var next = [cell[0] + d[0], cell[1] + d[1]];
     if (next[0] < 0 || next[1] < 0 || next[0] >= SIZE || next[1] >= SIZE) return;
-    if (S.sel) { play(S.sel, next); return; }
+    if (S.sel && !S.aim) { play(S.sel, next); return; }
     focusTo(next);
+    if (S.aim) preview(next);
   });
   tilesEl.addEventListener("click", function (e) {
     // Keyboard "click" (Enter/Space) is handled in keydown; pointer taps in pointerup.
@@ -568,12 +813,15 @@ var WORDS = "/*@WORDS*/";
   // ---- results and sharing ----------------------------------------------
   function shareText() {
     var g = S.game, best = g.bestWord();
-    var sq = g.log.map(function (m) { return m.special ? "🟪" : m.words >= 3 ? "🟥" : m.words === 2 ? "🟧" : "🟨"; });
+    var sq = g.moveLog().map(function (m) { return m.special ? "🟪" : m.words >= 3 ? "🟥" : m.words === 2 ? "🟧" : "🟨"; });
     var lines = [];
     for (var i = 0; i < sq.length; i += 10) lines.push(sq.slice(i, i + 10).join(""));
+    var used = S.moves.filter(function (m) { return !Array.isArray(m); }).length;
     var head = S.mode === "daily" ? "Letterfall #" + puzzleNo(S.day) : "Letterfall practice";
     return head + " · " + fmt(g.score) + "\n" + lines.join("\n") +
-      (best ? "\nBest word: " + best.word.toUpperCase() : "") + (S.hints ? "\n" + S.hints + " hint" + (S.hints > 1 ? "s" : "") : "");
+      (best ? "\nBest word: " + best.word.toUpperCase() : "") +
+      (used ? "\nPowerups used: " + used : "") +
+      (S.hints ? "\n" + S.hints + " hint" + (S.hints > 1 ? "s" : "") : "");
   }
 
   function updateStats() {
@@ -593,6 +841,8 @@ var WORDS = "/*@WORDS*/";
     $("r-score").textContent = fmt(g.score);
     $("r-word").textContent = best ? best.word : "-";
     $("r-words").textContent = words;
+    $("r-cash").hidden = !g.cashIn;
+    $("r-cash").textContent = g.cashIn ? "Includes " + fmt(g.cashIn) + " for unused powerups." : "";
     var st = S.mode === "daily" ? updateStats() : load("lf:stats", { streak: 0 });
     $("r-streak").textContent = st.streak || 0;
     $("r-share").textContent = shareText();
@@ -625,10 +875,13 @@ var WORDS = "/*@WORDS*/";
   $("help-btn").addEventListener("click", function () { $("help").showModal(); });
   $("help-close").addEventListener("click", function () { $("help").close(); save("lf:seen-help", true); });
   $("help").addEventListener("close", function () { save("lf:seen-help", true); });
+  $("settings-btn").addEventListener("click", function () { $("settings").showModal(); });
+  $("settings-close").addEventListener("click", function () { $("settings").close(); });
 
   // ---- boot -------------------------------------------------------------
   var lines = document.querySelector(".grid-lines");
   for (var i = 0; i < SIZE * SIZE; i++) lines.appendChild(document.createElement("i"));
+  applyPrefs();
   start("daily");
   if (!load("lf:seen-help", false)) {
     try { $("help").showModal(); } catch (e) {}
