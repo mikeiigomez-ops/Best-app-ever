@@ -99,6 +99,18 @@ button { font: inherit; color: inherit; }
 .pip { width: 8px; height: 8px; border-radius: 2px; background: var(--rule); }
 .pip.on { background: var(--accent); }
 
+/* Level goal */
+.goal { display: flex; flex-direction: column; gap: 4px; margin-top: -4px; }
+.goal-bar { position: relative; height: 14px; border-radius: 999px; background: var(--rule); margin-right: 10px; }
+.goal-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--t3), var(--t4)); transition: width 500ms ease; }
+.goal-bar .star {
+  position: absolute; top: 50%; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 15px; line-height: 1; background: var(--panel); color: var(--rule);
+  border: 2px solid var(--rule); transition: background-color 200ms ease, color 200ms ease, transform 200ms ease;
+}
+.goal-bar .star.on { background: var(--gold); color: #5a3d00; border-color: #c78a12; transform: translate(-50%, -50%) scale(1.15); }
+.goal-text { margin: 0; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* Board */
 .board-wrap { position: relative; }
 .board {
@@ -160,6 +172,17 @@ button { font: inherit; color: inherit; }
 }
 .callout.show { animation: callout 0.9s ease forwards; }
 @keyframes callout { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); } 25% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -80%) scale(1); } }
+
+.pops { position: absolute; inset: 6px; pointer-events: none; }
+.pop {
+  position: absolute; transform: translate(-50%, -50%); font-family: var(--font-display); font-size: 1.6rem; color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.45), 0 0 12px rgba(0,0,0,0.4); white-space: nowrap; animation: pop 0.95s ease-out forwards;
+}
+.pop.big { font-size: 2.1rem; color: var(--gold); }
+@keyframes pop { 0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); } 20% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -160%) scale(1); } }
+.r-stars { display: flex; gap: 6px; margin-top: 8px; font-size: 2.2rem; line-height: 1; }
+.r-stars span { color: var(--rule); }
+.r-stars span.on { color: var(--gold); text-shadow: 0 2px 0 #c78a12; }
 
 /* Words just spelled */
 .feed { min-height: 64px; display: flex; flex-direction: column; gap: 6px; }
@@ -256,7 +279,8 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 
 @media (prefers-reduced-motion: reduce) {
   .tile, .tile.falling, .tile.gone, .face { transition-duration: 1ms !important; }
-  .tile.hint .face, .tile.shake .face, .tile.made .face, .callout.show { animation: none !important; }
+  .tile.hint .face, .tile.shake .face, .tile.made .face, .callout.show, .pop { animation: none !important; }
+  .pop { display: none; }
   .callout.show { opacity: 1; }
 }
 </style>
@@ -265,8 +289,8 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
   <header class="top">
     <h1 class="brand">Letter<span>fall</span></h1>
     <div class="modes" role="group" aria-label="Game mode">
-      <button id="mode-daily" type="button" aria-pressed="true">Daily</button>
-      <button id="mode-practice" type="button" aria-pressed="false">Practice</button>
+      <button id="mode-level" type="button" aria-pressed="true">Levels</button>
+      <button id="mode-daily" type="button" aria-pressed="false">Daily</button>
     </div>
     <button id="help-btn" class="icon-btn" type="button" aria-label="How to play">?</button>
     <button id="settings-btn" class="icon-btn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
@@ -278,11 +302,22 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
     <div class="stat"><span class="label">Moves</span><span id="moves" class="num moves-num">20</span></div>
   </section>
 
+  <div id="goal" class="goal" hidden>
+    <div class="goal-bar" role="progressbar" aria-label="Level goal" id="goal-bar" aria-valuemin="0">
+      <i id="goal-fill"></i>
+      <span class="star" id="star-0" style="left:50%">★</span>
+      <span class="star" id="star-1" style="left:75%">★</span>
+      <span class="star" id="star-2" style="left:100%">★</span>
+    </div>
+    <p id="goal-text" class="goal-text">Score 12,000 for one star</p>
+  </div>
+
   <div class="board-wrap">
     <div id="board" class="board" role="grid" aria-label="Letter board. Swap two neighbouring letters to spell a word.">
       <div class="grid-lines" aria-hidden="true"></div>
       <div id="tiles" class="tiles"></div>
     </div>
+    <div id="pops" class="pops" aria-hidden="true"></div>
     <div id="callout" class="callout" aria-hidden="true"></div>
   </div>
 
@@ -316,7 +351,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 
   <div class="actions">
     <button id="hint-btn" class="btn" type="button">Show a move</button>
-    <button id="new-btn" class="btn" type="button" hidden>New practice board</button>
+    <button id="new-btn" class="btn primary" type="button" hidden>Next level</button>
     <button id="result-btn" class="btn primary" type="button" hidden>See result</button>
   </div>
 </div>
@@ -333,8 +368,9 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <li>When an across word and a down word share a letter, that's a <b>crossing</b>: both score double and your power meter jumps.</li>
       <li>Every letter you clear charges the <b>power meter</b>. Each time it fills you earn a powerup. Using one costs no move:
         <b>Shuffle</b> mixes up the board, <b>Line clear</b> wipes out a row or column, <b>Bomb</b> clears a 3×3 square, and <b>Wild</b> turns a tile into a ★ that stands for any letter.</li>
-      <li>You get 20 moves. A swap that spells nothing bounces back and costs nothing. Powerups you haven't used when the moves run out are worth 150 points each.</li>
-      <li>Everyone gets the same Daily board. Practice boards are endless.</li>
+      <li>A swap that spells nothing bounces back and costs nothing. Powerups you haven't used when the moves run out are worth 1,500 points each.</li>
+      <li><b>Levels:</b> beat the target score for a star, and hit the higher marks for two and three. Each level is a little tougher than the last.</li>
+      <li><b>Daily:</b> everyone gets the same board and 20 moves. Share your score.</li>
     </ol>
     <button id="help-close" class="btn primary" type="button">Play</button>
   </div>
@@ -346,6 +382,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
     <div>
       <label class="toggle" for="set-tint"><span>Tint vowels<small>A soft blue on A, E, I, O and U makes words easier to spot.</small></span><input type="checkbox" id="set-tint"></label>
       <label class="toggle" for="set-values"><span>Show letter points<small>The small number on each tile.</small></span><input type="checkbox" id="set-values"></label>
+      <label class="toggle" for="set-sound"><span>Sound<small>Pops and chimes when you score.</small></span><input type="checkbox" id="set-sound"></label>
       <label class="toggle" for="set-big"><span>Bigger letters<small>Larger type on the tiles.</small></span><input type="checkbox" id="set-big"></label>
     </div>
     <button id="settings-close" class="btn primary" type="button">Done</button>
@@ -358,6 +395,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <div>
         <p id="result-kicker" class="label">Daily #1</p>
         <h2 id="result-title">Great game!</h2>
+        <div id="r-stars" class="r-stars" hidden></div>
       </div>
       <button id="r-close" class="icon-btn" type="button" aria-label="Back to board">✕</button>
     </div>
@@ -368,20 +406,21 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
     <div class="kv">
       <div><span class="label">Best word</span><b id="r-word">-</b></div>
       <div><span class="label">Words</span><b id="r-words">0</b></div>
-      <div><span class="label">Day streak</span><b id="r-streak">1</b></div>
+      <div><span class="label" id="r-streak-label">Day streak</span><b id="r-streak">1</b></div>
     </div>
     <figure class="chart">
       <figcaption class="label">Points per move</figcaption>
       <div id="r-bars" class="bars" role="img"></div>
       <div class="axis"><span>Move 1</span><span id="r-last">Move 20</span></div>
     </figure>
+    <button id="r-level-btn" class="btn primary" type="button" hidden>Next level</button>
     <button id="copy-btn" class="btn primary" type="button">Share result</button>
-    <p class="legend">Copies your score with one square per move, from <span class="sq t1"></span> fewer points to <span class="sq t5"></span> more.</p>
+    <p class="legend" id="share-legend">Copies your score with one square per move, from <span class="sq t1"></span> fewer points to <span class="sq t5"></span> more.</p>
     <details class="preview">
       <summary>Preview what you'll share</summary>
       <pre id="r-share" class="share-box"></pre>
     </details>
-    <button id="r-practice" class="btn" type="button">Play a practice board</button>
+    <button id="r-practice" class="btn" type="button">Play levels</button>
     <p id="r-next" class="legend"></p>
   </div>
 </dialog>
@@ -411,7 +450,8 @@ var Letterfall = (function () {
   var MIN = 3, MAX = 6;
   var WILD = "?";
   var POWER_AT = 30;        // letters cleared per powerup
-  var CASH_IN = 150;        // points per unused powerup at the end
+  var UNIT = 100;           // points per letter value
+  var CASH_IN = 1500;       // points per unused powerup at the end
   var CROSS_CHARGE = 15;    // a crossing fills half the meter
   var POWERS = ["shuffle", "line", "bomb", "wild"];
   var POWER_WEIGHTS = { shuffle: 2, line: 3, bomb: 2.5, wild: 2.5 };
@@ -476,6 +516,10 @@ var Letterfall = (function () {
 
   var LETTERS = Object.keys(WEIGHTS);
   var VOWEL_LIST = VOWELS.split("");
+  var NORMAL_BAG = { letters: LETTERS, weights: WEIGHTS, minVowels: 0.33, maxVowels: 0.48 };
+  // Easy letters: the ones most short words are made of, and a few more vowels.
+  var EASY_WEIGHTS = { e: 13, a: 11, i: 7, o: 9, u: 3, n: 6, r: 6, t: 7, l: 5, s: 7, d: 4, g: 2, b: 2, c: 2.5, m: 3, p: 3, h: 3, w: 1.5, y: 1.5, f: 1 };
+  var EASY_BAG = { letters: Object.keys(EASY_WEIGHTS), weights: EASY_WEIGHTS, minVowels: 0.38, maxVowels: 0.5 };
 
   function vowelShare(g) {
     var v = 0, n = 0;
@@ -486,11 +530,13 @@ var Letterfall = (function () {
   }
 
   // Keep roughly 35-45% vowels on the board so there is always something to spell.
-  function drawLetter(g, rng) {
+  // A bag is the letter mix: the normal one, or an easy one with only friendly letters.
+  function drawLetter(g, rng, bag) {
+    bag = bag || NORMAL_BAG;
     var share = vowelShare(g);
-    if (share < 0.33) return weighted(rng, VOWEL_LIST, WEIGHTS);
-    var ch = weighted(rng, LETTERS, WEIGHTS);
-    if (share > 0.48 && VOWELS.indexOf(ch) >= 0) ch = weighted(rng, LETTERS, WEIGHTS);
+    if (share < bag.minVowels) return weighted(rng, VOWEL_LIST, bag.weights);
+    var ch = weighted(rng, bag.letters, bag.weights);
+    if (share > bag.maxVowels && VOWELS.indexOf(ch) >= 0) ch = weighted(rng, bag.letters, bag.weights);
     return ch;
   }
 
@@ -584,13 +630,13 @@ var Letterfall = (function () {
   // Fill empty cells top-down. A new letter that would spell a word on landing is rerolled
   // REFILL_REROLLS times; what survives becomes a free chain. Tuned with test/sim.mjs.
   var REFILL_REROLLS = 1;
-  function refill(g, rng, rerolls) {
+  function refill(g, rng, rerolls, bag) {
     var dropped = [];
     for (var c = 0; c < SIZE; c++) {
       for (var r = 0; r < SIZE; r++) {
         if (g[r][c]) continue;
-        g[r][c] = tile(drawLetter(g, rng));
-        for (var k = 0; k < rerolls && makesWordAt(g, r, c); k++) g[r][c].ch = drawLetter(g, rng);
+        g[r][c] = tile(drawLetter(g, rng, bag));
+        for (var k = 0; k < rerolls && makesWordAt(g, r, c); k++) g[r][c].ch = drawLetter(g, rng, bag);
         dropped.push([r, c]);
       }
     }
@@ -606,14 +652,14 @@ var Letterfall = (function () {
   }
 
   // A fresh board with no words on it and at least one move to make.
-  function newBoard(rng) {
+  function newBoard(rng, bag) {
     var g;
     for (var attempt = 0; attempt < 50; attempt++) {
       g = [];
       for (var r = 0; r < SIZE; r++) g.push(new Array(SIZE).fill(null));
       for (var r2 = 0; r2 < SIZE; r2++) for (var c2 = 0; c2 < SIZE; c2++) {
-        g[r2][c2] = tile(drawLetter(g, rng));
-        for (var k = 0; k < 30 && makesWordAt(g, r2, c2); k++) g[r2][c2].ch = drawLetter(g, rng);
+        g[r2][c2] = tile(drawLetter(g, rng, bag));
+        for (var k = 0; k < 30 && makesWordAt(g, r2, c2); k++) g[r2][c2].ch = drawLetter(g, rng, bag);
       }
       if (findWords(g).length === 0 && validMoves(g).length >= 3) return g;
     }
@@ -622,7 +668,7 @@ var Letterfall = (function () {
 
   // Shuffle tiles in place (multipliers and wilds travel with their tiles) until the board is
   // quiet and playable again.
-  function shuffle(g, rng) {
+  function shuffle(g, rng, bag) {
     var tiles = [];
     for (var r = 0; r < SIZE; r++) for (var c = 0; c < SIZE; c++) tiles.push(g[r][c]);
     for (var attempt = 0; attempt < 200; attempt++) {
@@ -634,7 +680,7 @@ var Letterfall = (function () {
       if (findWords(g).length === 0 && validMoves(g).length > 0) return;
     }
     // Hopeless letters: deal a new board (multipliers are lost; this almost never happens).
-    var fresh = newBoard(rng);
+    var fresh = newBoard(rng, bag);
     for (var r3 = 0; r3 < SIZE; r3++) for (var c3 = 0; c3 < SIZE; c3++) g[r3][c3] = fresh[r3][c3];
   }
 
@@ -663,11 +709,14 @@ var Letterfall = (function () {
     this.seed = seed;
     this.rng = makeRng(seed);
     this.prng = makeRng(seed + "#power");
-    this.board = newBoard(this.rng);
+    this.bag = opts.easy ? EASY_BAG : NORMAL_BAG;
+    this.board = newBoard(this.rng, this.bag);
     this.movesLeft = opts.moves || MOVES;
     this.score = 0;
     this.power = 0;
     this.inv = { shuffle: 0, line: 0, bomb: 0, wild: 0 };
+    for (var ik in opts.inv || {}) this.inv[ik] = opts.inv[ik];
+    this.powerAt = opts.powerAt || POWER_AT;
     this.cashIn = 0;
     this.log = []; // per move: {words, chain, points, best, bestPoints, special, cross}
     this.rerolls = opts.rerolls == null ? REFILL_REROLLS : opts.rerolls;
@@ -694,13 +743,13 @@ var Letterfall = (function () {
       var bc = [], pts = 0;
       for (var b = 0; b < first.cells.length; b++) {
         var c0 = first.cells[b], t0 = g[c0[0]][c0[1]];
-        pts += VALUES[t0.ch] * 10 * t0.mult;
+        pts += VALUES[t0.ch] * UNIT * t0.mult;
         bc.push({ cell: c0, id: t0.id });
         g[c0[0]][c0[1]] = null;
       }
       this.score += pts;
       gravity(g);
-      var d0 = refill(g, this.rng, this.rerolls);
+      var d0 = refill(g, this.rng, this.rerolls, this.bag);
       steps.push({ words: [], blast: { kind: first.kind, cells: first.cells, points: pts }, cleared: bc, made: [], dropped: d0, layout: snapshot(g) });
     }
     for (;;) {
@@ -722,7 +771,7 @@ var Letterfall = (function () {
           base += VALUES[tt.ch];
           mult *= tt.mult;
         }
-        var points = base * 10 * LEN_FACTOR[w.word.length] * chain * mult * (w.cross ? 2 : 1);
+        var points = base * UNIT * LEN_FACTOR[w.word.length] * chain * mult * (w.cross ? 2 : 1);
         this.score += points;
         if (w.cross) stepCross = true;
         var rec = { word: w.word, cells: w.cells, points: points, mult: mult, chain: chain, cross: !!w.cross };
@@ -758,10 +807,10 @@ var Letterfall = (function () {
         g[cc[0]][cc[1]] = null;
       }
       this.power += cleared.length;
-      while (this.power >= POWER_AT) { this.power -= POWER_AT; this._earn("meter", earned); }
+      while (this.power >= this.powerAt) { this.power -= this.powerAt; this._earn("meter", earned); }
       gravity(g);
       // Long chains are fun up to a point; after a few links the drop stops spelling words.
-      var dropped = refill(g, this.rng, chain >= 6 ? 40 : this.rerolls);
+      var dropped = refill(g, this.rng, chain >= 6 ? 40 : this.rerolls, this.bag);
       steps.push({ words: scored, cleared: cleared, made: madeCells, dropped: dropped, layout: snapshot(g) });
       focus = [];
     }
@@ -778,7 +827,7 @@ var Letterfall = (function () {
       this.score += res.cashIn;
       for (var k in this.inv) this.inv[k] = 0;
     } else if (validMoves(this.board).length === 0) {
-      shuffle(this.board, this.rng);
+      shuffle(this.board, this.rng, this.bag);
       res.shuffled = true;
     }
     return res;
@@ -809,7 +858,7 @@ var Letterfall = (function () {
     if (this.over() || !this.inv[kind]) return null;
     var g = this.board, res;
     if (kind === "shuffle") {
-      shuffle(g, this.rng);
+      shuffle(g, this.rng, this.bag);
       res = { steps: [{ words: [], shuffle: true, cleared: [], made: [], layout: snapshot(g) }], words: [], chain: 0, earned: [] };
     } else {
       if (!inside(opts.cell)) return null;
@@ -854,10 +903,32 @@ var Letterfall = (function () {
     return this.log.filter(function (m) { return !m.power; });
   };
 
+  // Levels: generous at first (easy letters, free chains, a powerup to start, low targets), then a
+  // slow climb. Targets are set from test/calibrate.mjs; `assist` makes a possible move glow when
+  // the player is stuck.
+  function level(n) {
+    n = Math.max(1, Math.floor(n));
+    var cfg = { n: n, moves: 15, rerolls: 1, easy: false, powerAt: POWER_AT, inv: {}, assist: 0 };
+    if (n <= 5) { cfg.moves = 12; cfg.easy = true; cfg.rerolls = 1; cfg.powerAt = 18; cfg.inv = { line: 1 }; cfg.assist = 4; }
+    else if (n <= 10) { cfg.easy = true; cfg.rerolls = 1; cfg.powerAt = 24; cfg.inv = { wild: 1 }; cfg.assist = 8; }
+    else if (n <= 20) { cfg.powerAt = 28; }
+    else { cfg.moves = Math.max(13, 15 - Math.floor((n - 20) / 10)); cfg.rerolls = n > 30 ? 2 : 1; }
+    // One-star target, then two and three stars at 1.5x and 2x.
+    var base = n <= TARGETS.length ? TARGETS[n - 1] : LATE_TARGET;
+    cfg.targets = [base, Math.round(base * 1.5 / 500) * 500, base * 2];
+    return cfg;
+  }
+  // Early targets sit low on purpose (most players three-star levels 1-5); levels 11+ use the
+  // normal letters, so their targets restart lower and climb again.
+  var TARGETS = [12000, 13500, 15000, 17000, 19000, 25000, 26000, 27000, 28500, 30000,
+    22000, 22500, 23000, 24000, 25000, 26000, 27000, 28000, 29000, 30000,
+    30000, 30500, 31000, 31500, 32000, 32500, 33000, 33500, 34000, 34000];
+  var LATE_TARGET = 30000; // fewer moves and fewer free chains keep later levels getting harder
+
   return {
     SIZE: SIZE, MOVES: MOVES, VALUES: VALUES, LEN_FACTOR: LEN_FACTOR, WILD: WILD,
-    POWER_AT: POWER_AT, CASH_IN: CASH_IN, CROSS_CHARGE: CROSS_CHARGE, POWERS: POWERS,
-    setWords: setWords, isWord: isWord, matchWord: matchWord, makeRng: makeRng, Game: Game,
+    POWER_AT: POWER_AT, UNIT: UNIT, CASH_IN: CASH_IN, CROSS_CHARGE: CROSS_CHARGE, POWERS: POWERS,
+    setWords: setWords, level: level, isWord: isWord, matchWord: matchWord, makeRng: makeRng, Game: Game,
     findWords: findWords, validMoves: validMoves, snapshot: snapshot, blastCells: blastCells
   };
 })();
@@ -887,7 +958,7 @@ if (typeof module !== "undefined") module.exports = Letterfall;
   function same(a, b) { return a && b && a[0] === b[0] && a[1] === b[1]; }
 
   // ---- settings ---------------------------------------------------------
-  var prefs = Object.assign({ tint: true, values: true, big: false }, load("lf:prefs", {}));
+  var prefs = Object.assign({ tint: true, values: true, big: false, sound: true }, load("lf:prefs", {}));
   function applyPrefs() {
     document.body.classList.toggle("no-tint", !prefs.tint);
     document.body.classList.toggle("no-values", !prefs.values);
@@ -895,26 +966,61 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     $("set-tint").checked = prefs.tint;
     $("set-values").checked = prefs.values;
     $("set-big").checked = prefs.big;
+    $("set-sound").checked = prefs.sound;
   }
-  [["set-tint", "tint"], ["set-values", "values"], ["set-big", "big"]].forEach(function (p) {
+  [["set-tint", "tint"], ["set-values", "values"], ["set-big", "big"], ["set-sound", "sound"]].forEach(function (p) {
     $(p[0]).addEventListener("change", function (e) { prefs[p[1]] = e.target.checked; save("lf:prefs", prefs); applyPrefs(); });
   });
+
+  // ---- sound: tiny synth, starts on the first tap ------------------------
+  var audio = null;
+  function tone(freq, dur, type, vol, delay) {
+    if (!prefs.sound) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      var t = audio.currentTime + (delay || 0);
+      var o = audio.createOscillator(), g = audio.createGain();
+      o.type = type || "triangle"; o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(vol || 0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+      o.connect(g); g.connect(audio.destination);
+      o.start(t); o.stop(t + dur + 0.02);
+    } catch (e) {}
+  }
+  // Each word in a chain pops a little higher.
+  function popSound(chain, k) { tone(440 * Math.pow(2, ((chain - 1) * 4 + k * 2) / 12), 0.2, "triangle", 0.13); }
+  function boomSound() { tone(90, 0.4, "sawtooth", 0.14); tone(60, 0.5, "sine", 0.18); }
+  function chimeSound(n) { for (var k = 0; k < n; k++) tone(660 * Math.pow(2, k * 4 / 12), 0.35, "sine", 0.12, k * 0.09); }
+  function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 
   // ---- game state -------------------------------------------------------
   // moves holds every action in order: [a, b] for a swap, {p, cell, dir} for a powerup.
   function setBusy(v) { S.busy = v; $("board").dataset.busy = v ? 1 : 0; }
-  var S = { mode: "daily", day: null, seed: null, game: null, moves: [], hints: 0, busy: false, sel: null, els: {}, aim: null };
+  var S = { mode: "level", day: null, seed: null, game: null, moves: [], hints: 0, busy: false, sel: null, els: {}, aim: null, level: null, starsShown: 0 };
 
-  function storageKey() { return S.mode === "daily" ? "lf:daily:" + S.day : "lf:practice"; }
-  function persist() { save(storageKey(), { seed: S.seed, moves: S.moves, hints: S.hints }); }
+  // Level progress: the next level to play, and the best stars on each.
+  function progress() { return Object.assign({ current: 1, stars: {} }, load("lf:levels", {})); }
+  function storageKey() { return S.mode === "daily" ? "lf:daily:" + S.day : "lf:level-game"; }
+  function persist() { save(storageKey(), { seed: S.seed, moves: S.moves, hints: S.hints, n: S.level && S.level.n }); }
+  function starsFor(score) { return S.level ? S.level.targets.filter(function (t) { return score >= t; }).length : 0; }
 
   function start(mode, fresh) {
     S.mode = mode; S.sel = null; setBusy(false);
+    save("lf:mode", mode);
     endAim();
     S.day = dayStr(new Date());
-    var saved = fresh ? null : load(mode === "daily" ? "lf:daily:" + S.day : "lf:practice", null);
-    S.seed = mode === "daily" ? "daily-" + S.day : (saved && saved.seed) || "p-" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-    S.game = new L.Game(S.seed);
+    var saved = null;
+    if (mode === "daily") {
+      S.level = null;
+      saved = fresh ? null : load("lf:daily:" + S.day, null);
+      S.seed = "daily-" + S.day;
+    } else {
+      S.level = L.level(progress().current);
+      saved = fresh ? null : load("lf:level-game", null);
+      if (saved && saved.n !== S.level.n) saved = null;
+      S.seed = (saved && saved.seed) || "lv" + S.level.n + "-" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+    }
+    S.game = new L.Game(S.seed, S.level || undefined);
     S.moves = []; S.hints = (saved && saved.hints) || 0;
     // Replaying the saved actions rebuilds the exact game: the rules are deterministic.
     if (saved && saved.moves) {
@@ -927,12 +1033,15 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     tilesEl.textContent = ""; S.els = {};
     draw(L.snapshot(S.game.board), { instant: true });
     $("mode-daily").setAttribute("aria-pressed", mode === "daily");
-    $("mode-practice").setAttribute("aria-pressed", mode === "practice");
-    $("puzzle").textContent = mode === "daily" ? "Daily #" + puzzleNo(S.day) : "Practice";
+    $("mode-level").setAttribute("aria-pressed", mode === "level");
+    $("puzzle").textContent = mode === "daily" ? "Daily #" + puzzleNo(S.day) : "Level " + S.level.n;
+    $("goal").hidden = mode !== "level";
+    S.starsShown = starsFor(S.game.score);
     $("feed-row").textContent = "";
     $("feed-hint").hidden = false;
     hud(true);
     if (S.game.over()) finish(false);
+    else idle();
   }
 
   // ---- drawing ----------------------------------------------------------
@@ -1013,12 +1122,22 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     var over = g.over();
     $("hint-btn").hidden = over;
     $("result-btn").hidden = !over;
-    $("new-btn").hidden = !(over && S.mode === "practice");
+    $("new-btn").hidden = !(over && S.mode === "level");
+    if (S.level) {
+      var top = S.level.targets[2], n = starsFor(g.score);
+      $("goal-fill").style.width = Math.min(100, 100 * g.score / top) + "%";
+      $("goal-bar").setAttribute("aria-valuemax", top);
+      $("goal-bar").setAttribute("aria-valuenow", g.score);
+      for (var k = 0; k < 3; k++) $("star-" + k).classList.toggle("on", k < n);
+      $("goal-text").textContent = n === 3 ? "Three stars! Keep going for a high score." :
+        "Score " + fmt(S.level.targets[n]) + " for " + (n === 0 ? "one star" : n === 1 ? "two stars" : "three stars");
+      $("new-btn").textContent = n ? "Next level" : "Try again";
+    }
     // Power meter and tray.
-    $("meter-fill").style.width = (100 * g.power / L.POWER_AT) + "%";
-    $("meter").setAttribute("aria-valuemax", L.POWER_AT);
+    $("meter-fill").style.width = (100 * g.power / g.powerAt) + "%";
+    $("meter").setAttribute("aria-valuemax", g.powerAt);
     $("meter").setAttribute("aria-valuenow", g.power);
-    $("meter-label").textContent = g.power + " / " + L.POWER_AT;
+    $("meter-label").textContent = g.power + " / " + g.powerAt;
     L.POWERS.forEach(function (k) {
       var b = $("pw-" + k);
       b.disabled = over || !g.inv[k];
@@ -1073,11 +1192,15 @@ if (typeof module !== "undefined") module.exports = Letterfall;
         st.blast.cells.forEach(function (cl) { var el = cellEl(cl[0], cl[1]); if (el) el.classList.add("blast"); });
         chip("blast-chip", POWER_NAMES[st.blast.kind], "+" + fmt(st.blast.points));
         callout(st.blast.kind === "bomb" ? "Boom!" : "Zap!");
+        boomSound(); buzz(40);
+        popAt(st.blast.cells, st.blast.points, true);
         await wait(320);
       } else {
         chain++;
         var c = chain;
-        st.words.forEach(function (w) {
+        st.words.forEach(function (w, k) {
+          popSound(c, k);
+          popAt(w.cells, w.points, w.points >= 5000);
           w.cells.forEach(function (cl) {
             var el = cellEl(cl[0], cl[1]);
             if (el) el.classList.add("word", c >= 3 ? "chain3" : c === 2 ? "chain2" : "chain1");
@@ -1100,6 +1223,7 @@ if (typeof module !== "undefined") module.exports = Letterfall;
       draw(st.layout);
       st.made.forEach(function (m) { var el = S.els[m.id]; if (el) { el.classList.add("made"); setTimeout(function () { el.classList.remove("made"); }, 650); } });
       hud();
+      starCheck();
       await wait(380);
       tilesEl.querySelectorAll(".word,.blast").forEach(function (el) { WORD_CLASSES.forEach(function (k) { el.classList.remove(k); }); });
     }
@@ -1115,7 +1239,36 @@ if (typeof module !== "undefined") module.exports = Letterfall;
       callout(res.earned.length > 1 ? res.earned.length + " powerups!" : "+ " + POWER_NAMES[res.earned[0].kind] + "!");
       await wait(500);
     }
+    // Praise the whole move by its points.
+    var total = res.words.reduce(function (s, w) { return s + w.points; }, 0);
+    var praise = total >= 40000 ? "Unstoppable!" : total >= 20000 ? "Incredible!" : total >= 10000 ? "Amazing!" : total >= 5000 ? "Great!" : total >= 2500 ? "Nice!" : "";
+    if (praise && !(res.earned && res.earned.length)) { callout(praise); if (total >= 10000) buzz(30); await wait(300); }
+    starCheck();
     if (res.cashIn) toast("Unused powerups cashed in: +" + fmt(res.cashIn));
+  }
+
+  // Floating points where the word was.
+  function popAt(cells, points, big) {
+    var r = 0, c = 0;
+    cells.forEach(function (cl) { r += cl[0]; c += cl[1]; });
+    var el = document.createElement("div");
+    el.className = "pop" + (big ? " big" : "");
+    el.textContent = "+" + fmt(points);
+    el.style.left = ((c / cells.length + 0.5) * 100 / SIZE) + "%";
+    el.style.top = ((r / cells.length + 0.5) * 100 / SIZE) + "%";
+    $("pops").appendChild(el);
+    setTimeout(function () { el.remove(); }, 1000);
+  }
+
+  // Celebrate each star as the score passes it.
+  function starCheck() {
+    if (!S.level) return;
+    var n = starsFor(S.game.score);
+    if (n > S.starsShown) {
+      S.starsShown = n;
+      callout(n === 1 ? "★ Level passed!" : n === 2 ? "★★ Two stars!" : "★★★ Three stars!");
+      chimeSound(n + 1); buzz(50);
+    }
   }
 
   // ---- moves ------------------------------------------------------------
@@ -1159,6 +1312,7 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     focusCell = b;
     await animate(res);
     setBusy(false);
+    idle();
     if (S.game.over()) { await wait(500); finish(true); }
   }
 
@@ -1209,6 +1363,7 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     persist();
     await animate(res);
     setBusy(false);
+    idle();
     if (S.game.over()) { await wait(500); finish(true); }
   }
   L.POWERS.forEach(function (k) { $("pw-" + k).addEventListener("click", function () { startAim(k); }); });
@@ -1222,20 +1377,27 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     preview(focusCell);
   }
 
+  // Early levels: if the player is stuck for a few seconds, a possible move glows.
+  var idleTimer = null;
+  function idle() {
+    clearTimeout(idleTimer);
+    if (!S.level || !S.level.assist || S.game.over()) return;
+    idleTimer = setTimeout(function () { if (!S.busy && !S.aim && !S.sel) showHint(true); }, S.level.assist * 1000);
+  }
+
   var hintTimer = null;
   function clearHint() {
     clearTimeout(hintTimer);
     tilesEl.querySelectorAll(".hint").forEach(function (el) { el.classList.remove("hint"); });
   }
-  function showHint() {
+  function showHint(auto) {
     if (S.busy || S.game.over()) return;
-    endAim();
+    if (auto !== true) { endAim(); S.hints++; persist(); }
     var m = S.game.hint();
     if (!m) return;
-    S.hints++; persist();
     clearHint();
     m.forEach(function (c) { var el = cellEl(c[0], c[1]); if (el) el.classList.add("hint"); });
-    hintTimer = setTimeout(clearHint, 2800);
+    hintTimer = setTimeout(function () { clearHint(); idle(); }, 2800);
   }
 
   // ---- input: drag, tap-tap, keyboard -------------------------------------
@@ -1318,9 +1480,9 @@ if (typeof module !== "undefined") module.exports = Letterfall;
   // ---- results and sharing ----------------------------------------------
   // Points per move on one scale, shared by the chart and the share squares.
   var TIER_EMOJI = ["🟦", "🟩", "🟨", "🟧", "🟥"];
-  function tier(p) { return p >= 800 ? 4 : p >= 400 ? 3 : p >= 200 ? 2 : p >= 100 ? 1 : 0; }
+  function tier(p) { return p >= 8000 ? 4 : p >= 4000 ? 3 : p >= 2000 ? 2 : p >= 1000 ? 1 : 0; }
   function verdict(score) {
-    return score >= 9000 ? "Legendary!" : score >= 6000 ? "Brilliant!" : score >= 4000 ? "Great game!" : score >= 2500 ? "Good game!" : "Nice start!";
+    return score >= 90000 ? "Legendary!" : score >= 60000 ? "Brilliant!" : score >= 40000 ? "Great game!" : score >= 25000 ? "Good game!" : "Nice start!";
   }
 
   function shareText() {
@@ -1329,7 +1491,8 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     var lines = [];
     for (var i = 0; i < sq.length; i += 10) lines.push(sq.slice(i, i + 10).join(""));
     var used = S.moves.filter(function (m) { return !Array.isArray(m); }).length;
-    var head = S.mode === "daily" ? "Letterfall #" + puzzleNo(S.day) : "Letterfall practice";
+    var stars = starsFor(g.score);
+    var head = S.mode === "daily" ? "Letterfall #" + puzzleNo(S.day) : "Letterfall level " + S.level.n + " " + "★★★".slice(0, stars) + "☆☆☆".slice(stars);
     return head + ": " + fmt(g.score) + " points\n" + lines.join("\n") +
       (best ? "\nBest word: " + best.word.toUpperCase() : "") +
       (used ? "\nPowerups used: " + used : "") +
@@ -1349,13 +1512,17 @@ if (typeof module !== "undefined") module.exports = Letterfall;
   function finish(justNow) {
     var g = S.game, best = g.bestWord();
     var words = g.log.reduce(function (s, m) { return s + m.words; }, 0);
-    $("result-kicker").textContent = S.mode === "daily" ? "Daily #" + puzzleNo(S.day) : "Practice";
-    $("result-title").textContent = verdict(g.score);
+    var lvl = S.mode === "level", stars = starsFor(g.score);
+    $("result-kicker").textContent = lvl ? "Level " + S.level.n : "Daily #" + puzzleNo(S.day);
+    $("result-title").textContent = lvl ? ["So close!", "Level complete!", "Great job!", "Perfect!"][stars] : verdict(g.score);
+    $("r-stars").hidden = !lvl;
+    $("r-stars").innerHTML = lvl ? [0, 1, 2].map(function (k) { return '<span class="' + (k < stars ? "on" : "") + '">★</span>'; }).join("") : "";
+    $("r-stars").setAttribute("aria-label", stars + " of 3 stars");
     $("r-score").textContent = fmt(g.score);
     $("r-breakdown").textContent = g.cashIn ? "points, including " + fmt(g.cashIn) + " for powerups you didn't use" : "points";
     $("r-word").textContent = best ? best.word : "-";
     $("r-words").textContent = words;
-    // One bar per move; the best move is labelled with its word.
+    // One bar per move; the best move is labelled with its points.
     var log = g.moveLog(), max = Math.max.apply(null, log.map(function (m) { return m.points; }).concat([1]));
     var bestAt = log.reduce(function (b, m, k) { return m.points > log[b].points ? k : b; }, 0);
     var bars = $("r-bars");
@@ -1364,9 +1531,9 @@ if (typeof module !== "undefined") module.exports = Letterfall;
       var bar = document.createElement("i");
       bar.className = "t" + (tier(m.points) + 1);
       bar.style.height = Math.max(4, 100 * m.points / max) + "%";
-      if (k === bestAt && m.best) {
+      if (k === bestAt && m.points) {
         var em = document.createElement("em");
-        em.textContent = m.best;
+        em.textContent = "+" + fmt(m.points);
         // Keep the label inside the chart near either edge.
         if (k < 3) em.style.cssText = "left:0;transform:none";
         else if (k > log.length - 4) em.style.cssText = "left:auto;right:0;transform:none";
@@ -1376,16 +1543,38 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     });
     bars.setAttribute("aria-label", "Points for each of your " + log.length + " moves. Best move: " + fmt(log.length ? log[bestAt].points : 0) + " points.");
     $("r-last").textContent = "Move " + log.length;
-    var st = S.mode === "daily" ? updateStats() : load("lf:stats", { streak: 0 });
-    $("r-streak").textContent = st.streak || 0;
+    if (lvl) {
+      // Save the stars and unlock the next level.
+      var pr = progress();
+      pr.stars[S.level.n] = Math.max(pr.stars[S.level.n] || 0, stars);
+      if (stars && pr.current === S.level.n) pr.current = S.level.n + 1;
+      save("lf:levels", pr);
+      var total = 0;
+      for (var key in pr.stars) total += pr.stars[key];
+      $("r-streak-label").textContent = "Total stars";
+      $("r-streak").textContent = total;
+      $("r-breakdown").textContent = stars ? $("r-breakdown").textContent :
+        "points. You needed " + fmt(S.level.targets[0]) + " for a star. Try again with a new board.";
+    } else {
+      var st = updateStats();
+      $("r-streak-label").textContent = "Day streak";
+      $("r-streak").textContent = st.streak || 0;
+    }
     $("r-share").textContent = shareText();
-    $("r-practice").textContent = S.mode === "daily" ? "Play a practice board" : "Play another board";
+    $("r-level-btn").hidden = !lvl;
+    $("r-level-btn").textContent = stars ? "Next level" : "Try again";
+    $("copy-btn").className = lvl ? "btn" : "btn primary";
+    $("share-legend").hidden = lvl;
+    $("r-practice").hidden = lvl;
     var now = new Date(), mid = new Date(now); mid.setHours(24, 0, 0, 0);
     var mins = Math.round((mid - now) / 60000);
     $("r-next").textContent = S.mode === "daily" ? "Next daily board in " + Math.floor(mins / 60) + " h " + (mins % 60) + " min." : "";
     $("r-next").hidden = S.mode !== "daily";
     hud(true);
-    if (justNow) $("result").showModal();
+    if (justNow) {
+      $("result").showModal();
+      if (lvl && stars) chimeSound(stars + 2);
+    }
   }
 
   $("copy-btn").addEventListener("click", function () {
@@ -1398,13 +1587,14 @@ if (typeof module !== "undefined") module.exports = Letterfall;
     };
     try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
   });
-  $("r-practice").addEventListener("click", function () { $("result").close(); start("practice", true); });
+  $("r-practice").addEventListener("click", function () { $("result").close(); start("level"); });
+  $("r-level-btn").addEventListener("click", function () { $("result").close(); start("level", true); });
   $("r-close").addEventListener("click", function () { $("result").close(); });
   $("result-btn").addEventListener("click", function () { finish(false); $("result").showModal(); });
-  $("new-btn").addEventListener("click", function () { start("practice", true); });
-  $("hint-btn").addEventListener("click", showHint);
+  $("new-btn").addEventListener("click", function () { start("level", true); });
+  $("hint-btn").addEventListener("click", function () { showHint(false); });
   $("mode-daily").addEventListener("click", function () { if (S.mode !== "daily" && !S.busy) start("daily"); });
-  $("mode-practice").addEventListener("click", function () { if (S.mode !== "practice" && !S.busy) start("practice"); });
+  $("mode-level").addEventListener("click", function () { if (S.mode !== "level" && !S.busy) start("level"); });
   $("help-btn").addEventListener("click", function () { $("help").showModal(); });
   $("help-close").addEventListener("click", function () { $("help").close(); save("lf:seen-help", true); });
   $("help").addEventListener("close", function () { save("lf:seen-help", true); });
@@ -1415,7 +1605,7 @@ if (typeof module !== "undefined") module.exports = Letterfall;
   var lines = document.querySelector(".grid-lines");
   for (var i = 0; i < SIZE * SIZE; i++) lines.appendChild(document.createElement("i"));
   applyPrefs();
-  start("daily");
+  start(load("lf:mode", "level") === "daily" ? "daily" : "level");
   if (!load("lf:seen-help", false)) {
     try { $("help").showModal(); } catch (e) {}
   }

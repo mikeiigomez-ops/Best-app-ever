@@ -19,7 +19,8 @@ var Letterfall = (function () {
   var MIN = 3, MAX = 6;
   var WILD = "?";
   var POWER_AT = 30;        // letters cleared per powerup
-  var CASH_IN = 150;        // points per unused powerup at the end
+  var UNIT = 100;           // points per letter value
+  var CASH_IN = 1500;       // points per unused powerup at the end
   var CROSS_CHARGE = 15;    // a crossing fills half the meter
   var POWERS = ["shuffle", "line", "bomb", "wild"];
   var POWER_WEIGHTS = { shuffle: 2, line: 3, bomb: 2.5, wild: 2.5 };
@@ -84,6 +85,10 @@ var Letterfall = (function () {
 
   var LETTERS = Object.keys(WEIGHTS);
   var VOWEL_LIST = VOWELS.split("");
+  var NORMAL_BAG = { letters: LETTERS, weights: WEIGHTS, minVowels: 0.33, maxVowels: 0.48 };
+  // Easy letters: the ones most short words are made of, and a few more vowels.
+  var EASY_WEIGHTS = { e: 13, a: 11, i: 7, o: 9, u: 3, n: 6, r: 6, t: 7, l: 5, s: 7, d: 4, g: 2, b: 2, c: 2.5, m: 3, p: 3, h: 3, w: 1.5, y: 1.5, f: 1 };
+  var EASY_BAG = { letters: Object.keys(EASY_WEIGHTS), weights: EASY_WEIGHTS, minVowels: 0.38, maxVowels: 0.5 };
 
   function vowelShare(g) {
     var v = 0, n = 0;
@@ -94,11 +99,13 @@ var Letterfall = (function () {
   }
 
   // Keep roughly 35-45% vowels on the board so there is always something to spell.
-  function drawLetter(g, rng) {
+  // A bag is the letter mix: the normal one, or an easy one with only friendly letters.
+  function drawLetter(g, rng, bag) {
+    bag = bag || NORMAL_BAG;
     var share = vowelShare(g);
-    if (share < 0.33) return weighted(rng, VOWEL_LIST, WEIGHTS);
-    var ch = weighted(rng, LETTERS, WEIGHTS);
-    if (share > 0.48 && VOWELS.indexOf(ch) >= 0) ch = weighted(rng, LETTERS, WEIGHTS);
+    if (share < bag.minVowels) return weighted(rng, VOWEL_LIST, bag.weights);
+    var ch = weighted(rng, bag.letters, bag.weights);
+    if (share > bag.maxVowels && VOWELS.indexOf(ch) >= 0) ch = weighted(rng, bag.letters, bag.weights);
     return ch;
   }
 
@@ -192,13 +199,13 @@ var Letterfall = (function () {
   // Fill empty cells top-down. A new letter that would spell a word on landing is rerolled
   // REFILL_REROLLS times; what survives becomes a free chain. Tuned with test/sim.mjs.
   var REFILL_REROLLS = 1;
-  function refill(g, rng, rerolls) {
+  function refill(g, rng, rerolls, bag) {
     var dropped = [];
     for (var c = 0; c < SIZE; c++) {
       for (var r = 0; r < SIZE; r++) {
         if (g[r][c]) continue;
-        g[r][c] = tile(drawLetter(g, rng));
-        for (var k = 0; k < rerolls && makesWordAt(g, r, c); k++) g[r][c].ch = drawLetter(g, rng);
+        g[r][c] = tile(drawLetter(g, rng, bag));
+        for (var k = 0; k < rerolls && makesWordAt(g, r, c); k++) g[r][c].ch = drawLetter(g, rng, bag);
         dropped.push([r, c]);
       }
     }
@@ -214,14 +221,14 @@ var Letterfall = (function () {
   }
 
   // A fresh board with no words on it and at least one move to make.
-  function newBoard(rng) {
+  function newBoard(rng, bag) {
     var g;
     for (var attempt = 0; attempt < 50; attempt++) {
       g = [];
       for (var r = 0; r < SIZE; r++) g.push(new Array(SIZE).fill(null));
       for (var r2 = 0; r2 < SIZE; r2++) for (var c2 = 0; c2 < SIZE; c2++) {
-        g[r2][c2] = tile(drawLetter(g, rng));
-        for (var k = 0; k < 30 && makesWordAt(g, r2, c2); k++) g[r2][c2].ch = drawLetter(g, rng);
+        g[r2][c2] = tile(drawLetter(g, rng, bag));
+        for (var k = 0; k < 30 && makesWordAt(g, r2, c2); k++) g[r2][c2].ch = drawLetter(g, rng, bag);
       }
       if (findWords(g).length === 0 && validMoves(g).length >= 3) return g;
     }
@@ -230,7 +237,7 @@ var Letterfall = (function () {
 
   // Shuffle tiles in place (multipliers and wilds travel with their tiles) until the board is
   // quiet and playable again.
-  function shuffle(g, rng) {
+  function shuffle(g, rng, bag) {
     var tiles = [];
     for (var r = 0; r < SIZE; r++) for (var c = 0; c < SIZE; c++) tiles.push(g[r][c]);
     for (var attempt = 0; attempt < 200; attempt++) {
@@ -242,7 +249,7 @@ var Letterfall = (function () {
       if (findWords(g).length === 0 && validMoves(g).length > 0) return;
     }
     // Hopeless letters: deal a new board (multipliers are lost; this almost never happens).
-    var fresh = newBoard(rng);
+    var fresh = newBoard(rng, bag);
     for (var r3 = 0; r3 < SIZE; r3++) for (var c3 = 0; c3 < SIZE; c3++) g[r3][c3] = fresh[r3][c3];
   }
 
@@ -271,11 +278,14 @@ var Letterfall = (function () {
     this.seed = seed;
     this.rng = makeRng(seed);
     this.prng = makeRng(seed + "#power");
-    this.board = newBoard(this.rng);
+    this.bag = opts.easy ? EASY_BAG : NORMAL_BAG;
+    this.board = newBoard(this.rng, this.bag);
     this.movesLeft = opts.moves || MOVES;
     this.score = 0;
     this.power = 0;
     this.inv = { shuffle: 0, line: 0, bomb: 0, wild: 0 };
+    for (var ik in opts.inv || {}) this.inv[ik] = opts.inv[ik];
+    this.powerAt = opts.powerAt || POWER_AT;
     this.cashIn = 0;
     this.log = []; // per move: {words, chain, points, best, bestPoints, special, cross}
     this.rerolls = opts.rerolls == null ? REFILL_REROLLS : opts.rerolls;
@@ -302,13 +312,13 @@ var Letterfall = (function () {
       var bc = [], pts = 0;
       for (var b = 0; b < first.cells.length; b++) {
         var c0 = first.cells[b], t0 = g[c0[0]][c0[1]];
-        pts += VALUES[t0.ch] * 10 * t0.mult;
+        pts += VALUES[t0.ch] * UNIT * t0.mult;
         bc.push({ cell: c0, id: t0.id });
         g[c0[0]][c0[1]] = null;
       }
       this.score += pts;
       gravity(g);
-      var d0 = refill(g, this.rng, this.rerolls);
+      var d0 = refill(g, this.rng, this.rerolls, this.bag);
       steps.push({ words: [], blast: { kind: first.kind, cells: first.cells, points: pts }, cleared: bc, made: [], dropped: d0, layout: snapshot(g) });
     }
     for (;;) {
@@ -330,7 +340,7 @@ var Letterfall = (function () {
           base += VALUES[tt.ch];
           mult *= tt.mult;
         }
-        var points = base * 10 * LEN_FACTOR[w.word.length] * chain * mult * (w.cross ? 2 : 1);
+        var points = base * UNIT * LEN_FACTOR[w.word.length] * chain * mult * (w.cross ? 2 : 1);
         this.score += points;
         if (w.cross) stepCross = true;
         var rec = { word: w.word, cells: w.cells, points: points, mult: mult, chain: chain, cross: !!w.cross };
@@ -366,10 +376,10 @@ var Letterfall = (function () {
         g[cc[0]][cc[1]] = null;
       }
       this.power += cleared.length;
-      while (this.power >= POWER_AT) { this.power -= POWER_AT; this._earn("meter", earned); }
+      while (this.power >= this.powerAt) { this.power -= this.powerAt; this._earn("meter", earned); }
       gravity(g);
       // Long chains are fun up to a point; after a few links the drop stops spelling words.
-      var dropped = refill(g, this.rng, chain >= 6 ? 40 : this.rerolls);
+      var dropped = refill(g, this.rng, chain >= 6 ? 40 : this.rerolls, this.bag);
       steps.push({ words: scored, cleared: cleared, made: madeCells, dropped: dropped, layout: snapshot(g) });
       focus = [];
     }
@@ -386,7 +396,7 @@ var Letterfall = (function () {
       this.score += res.cashIn;
       for (var k in this.inv) this.inv[k] = 0;
     } else if (validMoves(this.board).length === 0) {
-      shuffle(this.board, this.rng);
+      shuffle(this.board, this.rng, this.bag);
       res.shuffled = true;
     }
     return res;
@@ -417,7 +427,7 @@ var Letterfall = (function () {
     if (this.over() || !this.inv[kind]) return null;
     var g = this.board, res;
     if (kind === "shuffle") {
-      shuffle(g, this.rng);
+      shuffle(g, this.rng, this.bag);
       res = { steps: [{ words: [], shuffle: true, cleared: [], made: [], layout: snapshot(g) }], words: [], chain: 0, earned: [] };
     } else {
       if (!inside(opts.cell)) return null;
@@ -462,10 +472,32 @@ var Letterfall = (function () {
     return this.log.filter(function (m) { return !m.power; });
   };
 
+  // Levels: generous at first (easy letters, free chains, a powerup to start, low targets), then a
+  // slow climb. Targets are set from test/calibrate.mjs; `assist` makes a possible move glow when
+  // the player is stuck.
+  function level(n) {
+    n = Math.max(1, Math.floor(n));
+    var cfg = { n: n, moves: 15, rerolls: 1, easy: false, powerAt: POWER_AT, inv: {}, assist: 0 };
+    if (n <= 5) { cfg.moves = 12; cfg.easy = true; cfg.rerolls = 1; cfg.powerAt = 18; cfg.inv = { line: 1 }; cfg.assist = 4; }
+    else if (n <= 10) { cfg.easy = true; cfg.rerolls = 1; cfg.powerAt = 24; cfg.inv = { wild: 1 }; cfg.assist = 8; }
+    else if (n <= 20) { cfg.powerAt = 28; }
+    else { cfg.moves = Math.max(13, 15 - Math.floor((n - 20) / 10)); cfg.rerolls = n > 30 ? 2 : 1; }
+    // One-star target, then two and three stars at 1.5x and 2x.
+    var base = n <= TARGETS.length ? TARGETS[n - 1] : LATE_TARGET;
+    cfg.targets = [base, Math.round(base * 1.5 / 500) * 500, base * 2];
+    return cfg;
+  }
+  // Early targets sit low on purpose (most players three-star levels 1-5); levels 11+ use the
+  // normal letters, so their targets restart lower and climb again.
+  var TARGETS = [12000, 13500, 15000, 17000, 19000, 25000, 26000, 27000, 28500, 30000,
+    22000, 22500, 23000, 24000, 25000, 26000, 27000, 28000, 29000, 30000,
+    30000, 30500, 31000, 31500, 32000, 32500, 33000, 33500, 34000, 34000];
+  var LATE_TARGET = 30000; // fewer moves and fewer free chains keep later levels getting harder
+
   return {
     SIZE: SIZE, MOVES: MOVES, VALUES: VALUES, LEN_FACTOR: LEN_FACTOR, WILD: WILD,
-    POWER_AT: POWER_AT, CASH_IN: CASH_IN, CROSS_CHARGE: CROSS_CHARGE, POWERS: POWERS,
-    setWords: setWords, isWord: isWord, matchWord: matchWord, makeRng: makeRng, Game: Game,
+    POWER_AT: POWER_AT, UNIT: UNIT, CASH_IN: CASH_IN, CROSS_CHARGE: CROSS_CHARGE, POWERS: POWERS,
+    setWords: setWords, level: level, isWord: isWord, matchWord: matchWord, makeRng: makeRng, Game: Game,
     findWords: findWords, validMoves: validMoves, snapshot: snapshot, blastCells: blastCells
   };
 })();
