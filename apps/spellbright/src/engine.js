@@ -8,6 +8,13 @@
 // word it clears the 3x3 around it, and bombs set each other off), 7+ a wild that stands for any
 // letter. Words of 4+ letters in a row build a combo multiplier (up to x3); a 3-letter word resets it.
 //
+// Story levels can also have a goal: fill letter orders, light every dim bulb (cells that light up
+// when a word or blast passes over them), or bring loaves down to the bottom row (loaves are not
+// letters; they fall when the tiles under them clear, and a word touching one nudges it down a
+// row). Finishing the goal ends the level; each move
+// left over is worth an encore bonus, and stars depend on how many moves were left. Theme words
+// (from a per-chapter list) score double the first time.
+//
 // Every letter cleared charges the power meter; a full meter earns a powerup (shuffle, line clear,
 // bomb, wild). Powerups cost no move; any left when the moves run out are cashed in for points.
 //
@@ -115,7 +122,8 @@ var Spellbright = (function () {
   }
 
   var nextId = 1;
-  function tile(ch) { return { id: nextId++, ch: ch, mult: 1, bomb: false }; }
+  function tile(ch) { return { id: nextId++, ch: ch, mult: 1, bomb: false, bread: false }; }
+  var ENCORE = 1000; // points per move left when a goal is finished early
 
   function inside(c) { return Array.isArray(c) && c[0] >= 0 && c[1] >= 0 && c[0] < SIZE && c[1] < SIZE; }
   function touching(a, b) { return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])) === 1; }
@@ -127,6 +135,7 @@ var Spellbright = (function () {
     var list = [], found = {}, seen = {}, path = [];
     function dfs(r, c, prefix, wilds) {
       var t = g[r][c], chars = t.ch;
+      if (t.bread) return; // loaves aren't letters
       if (t.ch === WILD) {
         if (wilds >= 2) return; // matchWord allows two wilds per word
         chars = ALPHABET; wilds++;
@@ -182,25 +191,26 @@ var Spellbright = (function () {
   }
 
   // Shuffle tiles in place (specials travel with their tiles) until there is plenty to find.
+  // Loaves stay where they are.
   function shuffle(g, rng, bag) {
-    var tiles = [];
-    for (var r = 0; r < SIZE; r++) for (var c = 0; c < SIZE; c++) tiles.push(g[r][c]);
+    var tiles = [], cells = [];
+    for (var r = 0; r < SIZE; r++) for (var c = 0; c < SIZE; c++) if (!g[r][c].bread) { tiles.push(g[r][c]); cells.push([r, c]); }
     for (var attempt = 0; attempt < 40; attempt++) {
       for (var i = tiles.length - 1; i > 0; i--) {
         var j = Math.floor(rng() * (i + 1));
         var t = tiles[i]; tiles[i] = tiles[j]; tiles[j] = t;
       }
-      for (var n = 0; n < tiles.length; n++) g[Math.floor(n / SIZE)][n % SIZE] = tiles[n];
+      for (var n = 0; n < tiles.length; n++) g[cells[n][0]][cells[n][1]] = tiles[n];
       if (solve(g).length >= MIN_WORDS) return;
     }
-    // Hopeless letters: deal a new board (specials are lost; this almost never happens).
+    // Hopeless letters: new letters on every non-loaf tile (specials are lost; this almost never happens).
     var fresh = newBoard(rng, bag);
-    for (var r3 = 0; r3 < SIZE; r3++) for (var c3 = 0; c3 < SIZE; c3++) g[r3][c3] = fresh[r3][c3];
+    for (var k = 0; k < cells.length; k++) g[cells[k][0]][cells[k][1]] = fresh[cells[k][0]][cells[k][1]];
   }
 
   // Board as plain data, for drawing.
   function snapshot(g) {
-    return g.map(function (row) { return row.map(function (t) { return { id: t.id, ch: t.ch, mult: t.mult, bomb: t.bomb }; }); });
+    return g.map(function (row) { return row.map(function (t) { return { id: t.id, ch: t.ch, mult: t.mult, bomb: t.bomb, bread: t.bread }; }); });
   }
 
   // Cells a line clear or a bomb hits.
@@ -250,7 +260,79 @@ var Spellbright = (function () {
     this.cashIn = 0;
     this.powerPoints = 0;
     this.log = []; // per action: {words, points, best, bestPoints, special, combo, power?}
+    this.targets = opts.targets || null;
+    // Goals.
+    var goal = opts.goal || null;
+    this.goal = goal;
+    this.starMoves = opts.starMoves || [3, 6];
+    this.goalDone = false;
+    this.finishLeft = 0;
+    this.encore = 0;
+    var grng = makeRng(seed + "#goal");
+    if (goal && goal.orders) {
+      this.need = {}; this.got = {};
+      for (var ok in goal.orders) { this.need[ok] = goal.orders[ok]; this.got[ok] = 0; }
+    }
+    // Dim bulbs: cells (not tiles) that light up when cleared. Spread over the board.
+    this.dark = null;
+    if (goal && goal.bulbs) {
+      this.dark = [];
+      for (var dr = 0; dr < SIZE; dr++) this.dark.push(new Array(SIZE).fill(false));
+      var spots = [];
+      for (var sr = 0; sr < SIZE; sr++) for (var sc = 0; sc < SIZE; sc++) spots.push([sr, sc]);
+      for (var si = spots.length - 1; si > 0; si--) { var sj = Math.floor(grng() * (si + 1)); var tmp = spots[si]; spots[si] = spots[sj]; spots[sj] = tmp; }
+      for (var bi = 0; bi < Math.min(goal.bulbs, spots.length); bi++) this.dark[spots[bi][0]][spots[bi][1]] = true;
+    }
+    // Loaves start in one row (goal.row, default the second), in different columns.
+    this.baked = 0;
+    if (goal && goal.bread) {
+      var cols = [0, 1, 2, 3, 4, 5];
+      for (var ci = cols.length - 1; ci > 0; ci--) { var cj = Math.floor(grng() * (ci + 1)); var ct = cols[ci]; cols[ci] = cols[cj]; cols[cj] = ct; }
+      for (var li = 0; li < Math.min(goal.bread, SIZE); li++) {
+        var loaf = tile(""); loaf.bread = true;
+        this.board[goal.row == null ? 1 : goal.row][cols[li]] = loaf;
+      }
+    }
+    // Theme words score double the first time.
+    this.theme = new Set((opts.theme || []).filter(function (w) { return dict.has(w); }));
+    this.themeFound = {};
   }
+
+  // Goal progress, for drawing: {orders: [{ch, got, need}], bulbs: {lit, total}, bread: {baked, total}}.
+  Game.prototype.goalState = function () {
+    if (!this.goal) return null;
+    var out = {};
+    if (this.need) out.orders = Object.keys(this.need).map(function (k) { return { ch: k, got: this.got[k], need: this.need[k] }; }, this);
+    if (this.dark) {
+      var left = 0;
+      this.dark.forEach(function (row) { row.forEach(function (d) { if (d) left++; }); });
+      out.bulbs = { lit: this.goal.bulbs - left, total: this.goal.bulbs };
+    }
+    if (this.goal.bread) out.bread = { baked: this.baked, total: this.goal.bread };
+    return out;
+  };
+  Game.prototype._goalMet = function () {
+    if (!this.goal) return false;
+    for (var k in this.need || {}) if (this.got[k] < this.need[k]) return false;
+    if (this.dark) for (var r = 0; r < SIZE; r++) for (var c = 0; c < SIZE; c++) if (this.dark[r][c]) return false;
+    if (this.goal.bread && this.baked < this.goal.bread) return false;
+    return true;
+  };
+  // Stars: goal levels by moves left at the finish, score levels by score.
+  Game.prototype.stars = function () {
+    if (this.goal) {
+      if (!this.goalDone) return 0;
+      return 1 + (this.finishLeft >= this.starMoves[0] ? 1 : 0) + (this.finishLeft >= this.starMoves[1] ? 1 : 0);
+    }
+    var sc = this.score;
+    return this.targets ? this.targets.filter(function (t) { return sc >= t; }).length : 0;
+  };
+  // Letters still wanted by an order.
+  Game.prototype.wanted = function () {
+    var w = {};
+    for (var k in this.need || {}) if (this.got[k] < this.need[k]) w[k] = true;
+    return w;
+  };
 
   Game.prototype.over = function () { return this.movesLeft <= 0; };
   Game.prototype.powerCount = function () {
@@ -265,6 +347,7 @@ var Spellbright = (function () {
   Game.prototype.wordAt = function (path) {
     if (!validPath(path)) return null;
     var g = this.board;
+    if (path.some(function (c) { return g[c[0]][c[1]].bread; })) return null;
     return matchWord(path.map(function (c) { return g[c[0]][c[1]].ch; }).join(""));
   };
 
@@ -283,14 +366,14 @@ var Spellbright = (function () {
   Game.prototype._clear = function (cells, keep, earned) {
     var g = this.board, clear = {}, queue = cells.slice(), blast = [], pts = 0;
     var keepKey = keep ? key(keep) : null;
-    for (var i = 0; i < cells.length; i++) clear[key(cells[i])] = true;
+    for (var i = 0; i < cells.length; i++) if (!g[cells[i][0]][cells[i][1]].bread) clear[key(cells[i])] = true;
     // Bombs among the cleared tiles go off, and can set off other bombs.
     while (queue.length) {
       var c = queue.shift(), t = g[c[0]][c[1]];
       if (!t.bomb) continue;
       blastCells("bomb", c).forEach(function (b) {
         var k = key(b);
-        if (clear[k] || k === keepKey) return;
+        if (clear[k] || k === keepKey || g[b[0]][b[1]].bread) return;
         clear[k] = true; blast.push(b); queue.push(b);
       });
     }
@@ -305,16 +388,60 @@ var Spellbright = (function () {
       cleared.push({ cell: p, id: g[p[0]][p[1]].id });
       g[p[0]][p[1]] = null;
     }
+    // Every cell a word or blast touched lights up, the kept tile's too.
+    var lit = [];
+    if (this.dark) {
+      for (var lk in clear) {
+        var lp = lk.split(",").map(Number);
+        if (this.dark[lp[0]][lp[1]]) { this.dark[lp[0]][lp[1]] = false; lit.push(lp); }
+      }
+    }
+    // Loaves touching anything cleared get nudged down a row after the fall.
+    var nudge = {};
+    for (var nk in clear) {
+      var np = nk.split(",").map(Number);
+      for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+        var nr = np[0] + dr, nc = np[1] + dc;
+        if (nr >= 0 && nc >= 0 && nr < SIZE && nc < SIZE && g[nr][nc] && g[nr][nc].bread) nudge[g[nr][nc].id] = true;
+      }
+    }
     this._charge(cleared.length, earned);
     gravity(g);
+    for (var ur = SIZE - 2; ur >= 0; ur--) for (var uc = 0; uc < SIZE; uc++) {
+      var ut = g[ur][uc];
+      if (ut && ut.bread && nudge[ut.id] && g[ur + 1][uc] && !g[ur + 1][uc].bread) {
+        g[ur][uc] = g[ur + 1][uc]; g[ur + 1][uc] = ut; delete nudge[ut.id];
+      }
+    }
+    // Loaves that reach the bottom row are baked: they leave, and the column falls again.
+    var baked = [];
+    for (;;) {
+      var hit = false;
+      for (var bc = 0; bc < SIZE; bc++) {
+        var bt2 = g[SIZE - 1][bc];
+        if (bt2 && bt2.bread) { baked.push({ id: bt2.id, col: bc }); g[SIZE - 1][bc] = null; this.baked++; hit = true; }
+      }
+      if (!hit) break;
+      gravity(g);
+    }
     var dropped = refill(g, this.rng, this.bag);
-    return { cleared: cleared, blast: blast.length ? { kind: "bomb", cells: blast, points: pts } : null, dropped: dropped, points: pts };
+    return { cleared: cleared, blast: blast.length ? { kind: "bomb", cells: blast, points: pts } : null, dropped: dropped, points: pts, lit: lit, baked: baked };
   };
 
   // After any action: never leave the player stuck, and cash in powerups when the game ends.
   Game.prototype._finish = function (res) {
     res.shuffled = false;
     res.cashIn = 0;
+    res.encore = 0;
+    if (!this.goalDone && this._goalMet()) {
+      // Goal finished: moves left over become an encore bonus, and the level ends.
+      this.goalDone = true;
+      res.goalDone = true;
+      this.finishLeft = this.movesLeft;
+      this.encore = res.encore = this.movesLeft * ENCORE;
+      this.score += this.encore;
+      this.movesLeft = 0;
+    }
     if (this.over()) {
       res.cashIn = this.powerCount() * CASH_IN;
       this.cashIn += res.cashIn;
@@ -338,7 +465,17 @@ var Spellbright = (function () {
     var combo = word.length >= 4 ? comboFor(this.streak) : 1;
     var base = 0, mult = 1;
     path.forEach(function (c) { var t = g[c[0]][c[1]]; base += VALUES[t.ch]; mult *= t.mult; });
-    var points = Math.round(base * UNIT * LEN_FACTOR[word.length] * mult * combo);
+    var theme = this.theme.has(word) && !this.themeFound[word];
+    if (theme) this.themeFound[word] = true;
+    var points = Math.round(base * UNIT * LEN_FACTOR[word.length] * mult * combo * (theme ? 2 : 1));
+    // Orders take the word's letters (a wild counts as the letter it stood for).
+    var filled = {};
+    if (this.need) {
+      for (var wi = 0; wi < word.length; wi++) {
+        var wc = word[wi];
+        if (this.need[wc] && this.got[wc] < this.need[wc]) { this.got[wc]++; filled[wc] = (filled[wc] || 0) + 1; }
+      }
+    }
     // A long word leaves a special tile where it ended: that tile stays and changes.
     var keep = word.length >= 5 ? path[path.length - 1] : null;
     var kt = keep ? g[keep[0]][keep[1]] : null;
@@ -353,10 +490,10 @@ var Spellbright = (function () {
     }
     var total = points + cl.points;
     this.score += total;
-    var rec = { word: word, cells: path, points: points, mult: mult, combo: combo };
+    var rec = { word: word, cells: path, points: points, mult: mult, combo: combo, theme: theme, filled: filled };
     this.log.push({ words: 1, points: total, best: word, bestPoints: points, special: made.length > 0, combo: combo });
     return this._finish({
-      steps: [{ words: [rec], blast: cl.blast, cleared: cl.cleared, made: made, dropped: cl.dropped, layout: snapshot(g) }],
+      steps: [{ words: [rec], blast: cl.blast, cleared: cl.cleared, made: made, dropped: cl.dropped, lit: cl.lit, baked: cl.baked, layout: snapshot(g) }],
       words: [rec], earned: earned
     });
   };
@@ -373,16 +510,16 @@ var Spellbright = (function () {
       if (!inside(opts.cell)) return null;
       if (kind === "wild") {
         var t = g[opts.cell[0]][opts.cell[1]];
-        if (t.ch === WILD) return null;
+        if (t.ch === WILD || t.bread) return null;
         t.ch = WILD; t.bomb = false;
         res = { steps: [{ words: [], wild: opts.cell, cleared: [], made: [], layout: snapshot(g) }] };
       } else if (kind === "line" || kind === "bomb") {
-        var cells = blastCells(kind, opts.cell, opts.dir);
+        var cells = blastCells(kind, opts.cell, opts.dir).filter(function (c) { return !g[c[0]][c[1]].bread; });
         cells.forEach(function (c) { var bt = g[c[0]][c[1]]; pts += VALUES[bt.ch] * UNIT * bt.mult; });
         var cl = this._clear(cells, null, earned);
         pts += cl.points;
         var shown = cl.blast ? cells.concat(cl.blast.cells) : cells;
-        res = { steps: [{ words: [], blast: { kind: kind, cells: shown, points: pts }, cleared: cl.cleared, made: [], dropped: cl.dropped, layout: snapshot(g) }] };
+        res = { steps: [{ words: [], blast: { kind: kind, cells: shown, points: pts }, cleared: cl.cleared, made: [], dropped: cl.dropped, lit: cl.lit, baked: cl.baked, layout: snapshot(g) }] };
       } else return null;
     }
     this.inv[kind]--;
@@ -404,9 +541,35 @@ var Spellbright = (function () {
   Game.prototype.hint = function () {
     var all = solve(this.board);
     if (!all.length) return null;
-    function rank(w) { return (w.common ? 0 : 10) + Math.abs(w.word.length - 4.5); }
+    var self = this;
+    function rank(w) { return (w.common ? 0 : 10) + Math.abs(w.word.length - 4.5) - 3 * self.goalValue(w); }
     all.sort(function (a, b) { return rank(a) - rank(b) || (a.word < b.word ? -1 : 1); });
     return all[0];
+  };
+
+  // How much a word (from solve) would help the goal: letters it fills, bulbs it lights, cells it
+  // clears under a loaf. Used for hints and by the test bots.
+  Game.prototype.goalValue = function (w) {
+    if (!this.goal) return 0;
+    var g = this.board, v = 0, got = {}, self = this;
+    if (this.need) for (var i = 0; i < w.word.length; i++) {
+      var ch = w.word[i];
+      if (this.need[ch] && this.got[ch] + (got[ch] || 0) < this.need[ch]) { got[ch] = (got[ch] || 0) + 1; v++; }
+    }
+    if (this.dark) w.path.forEach(function (c) { if (self.dark[c[0]][c[1]]) v++; });
+    if (this.goal.bread) {
+      // Cells cleared under a loaf drop it; touching a loaf nudges it.
+      var touched = {};
+      w.path.forEach(function (c) {
+        for (var r = 0; r < c[0]; r++) if (g[r][c[1]].bread) { v += 1; break; }
+        for (var dr = -1; dr <= 1; dr++) for (var dc = -1; dc <= 1; dc++) {
+          var nr = c[0] + dr, nc = c[1] + dc;
+          if (nr >= 0 && nc >= 0 && nr < SIZE && nc < SIZE && g[nr][nc].bread) touched[nr * SIZE + nc] = true;
+        }
+      });
+      v += Object.keys(touched).length;
+    }
+    return v;
   };
 
   // Highest-scoring word of the game so far.
@@ -422,25 +585,59 @@ var Spellbright = (function () {
     return this.log.filter(function (m) { return !m.power; });
   };
 
-  // Levels: generous at first (easy letters, a powerup to start, a faster meter, low targets), then
-  // a slow climb. Targets are set from test/calibrate.mjs; `assist` makes a word glow when the
-  // player is stuck.
+  // Levels. Episode 1 gives each chapter its own goal: orders at Mo's Diner (2-3), dim bulbs at the
+  // Bijou (4-6), loaves at Rosa's Bakery (7-10), and each chapter's last level mixes in the one
+  // before. After level 10 the goals take turns and grow. Levels 1-10 use easy letters, a powerup to
+  // start and a faster meter; a word glows when the player is stuck (`assist`, in seconds). Moves,
+  // targets and star thresholds come from test/calibrate.mjs.
+  var THEMES = {
+    diner: "pie egg eggs toast tea jam ham bacon coffee menu order diner fries soup stew bun buns plate table cook grill sauce shake pancake waffle syrup milk cream sugar salt fork knife cup mug lunch dinner steak burger tip booth",
+    cinema: "film films movie movies show star stars seat seats ticket reel scene actor actors cast plot popcorn screen drama light lights camera act role stage hero script sequel usher snack comedy horror credits film",
+    bakery: "bread loaf loaves bun buns roll rolls cake cakes pie pies tart dough flour bake baker baked oven crust sweet sugar honey icing cream scone bagel toast rye yeast knead crumb butter cookie muffin pastry"
+  };
+  var EPISODE = [
+    null,
+    { theme: "diner", moves: 12, targets: [7000, 10500, 14000] },
+    { theme: "diner", moves: 12, goal: { orders: { e: 5, a: 3 } }, starMoves: [3, 6] },
+    { theme: "diner", moves: 13, goal: { orders: { s: 3, t: 3, o: 3 } }, starMoves: [3, 6] },
+    { theme: "cinema", moves: 16, goal: { bulbs: 8 }, starMoves: [5, 8] },
+    { theme: "cinema", moves: 16, goal: { bulbs: 12 }, starMoves: [3, 6] },
+    { theme: "cinema", moves: 17, goal: { bulbs: 10, orders: { e: 4, n: 2 } }, starMoves: [3, 6] },
+    { theme: "bakery", moves: 12, goal: { bread: 2, row: 0 }, starMoves: [3, 6] },
+    { theme: "bakery", moves: 12, goal: { bread: 3, row: 0 }, starMoves: [3, 6] },
+    { theme: "bakery", moves: 16, goal: { bread: 2, row: 0, bulbs: 8 }, starMoves: [3, 6] },
+    { theme: "bakery", moves: 14, goal: { bread: 3, row: 0, orders: { r: 3, e: 5 } }, starMoves: [3, 6] }
+  ];
+  var ORDER_SETS = [{ e: 6, s: 4, t: 3 }, { a: 5, r: 4, n: 3 }, { o: 5, l: 4, d: 2 }, { i: 5, t: 4, g: 2 }, { e: 7, d: 3, c: 2 }];
   function level(n) {
     n = Math.max(1, Math.floor(n));
-    var cfg = { n: n, moves: 15, easy: false, powerAt: POWER_AT, inv: {}, assist: 0 };
-    if (n <= 5) { cfg.moves = 12; cfg.easy = true; cfg.powerAt = 20; cfg.inv = { bomb: 1 }; cfg.assist = 6; }
+    var cfg = { n: n, moves: 15, easy: false, powerAt: POWER_AT, inv: {}, assist: 0, goal: null, theme: [] };
+    if (n <= 5) { cfg.easy = true; cfg.powerAt = 20; cfg.inv = { bomb: 1 }; cfg.assist = 6; }
     else if (n <= 10) { cfg.easy = true; cfg.powerAt = 25; cfg.inv = { wild: 1 }; cfg.assist = 10; }
-    else if (n > 20) cfg.moves = Math.max(12, 15 - Math.floor((n - 20) / 10));
-    var base = n <= TARGETS.length ? TARGETS[n - 1] : LATE_TARGET;
-    cfg.targets = [base, Math.round(base * 1.5 / 500) * 500, base * 2];
+    var e = EPISODE[n];
+    if (e) {
+      cfg.moves = e.moves;
+      cfg.goal = e.goal || null;
+      cfg.starMoves = e.starMoves;
+      cfg.theme = THEMES[e.theme].split(" ");
+      cfg.chapterTheme = e.theme;
+      if (e.targets) cfg.targets = e.targets;
+    } else {
+      // After the episode: goals take turns and slowly grow; every fourth level is a score level.
+      var k = n - 11, step = Math.floor(k / 4), kind = k % 4;
+      cfg.moves = Math.max(13, 16 - Math.floor(k / 12));
+      cfg.theme = THEMES[["diner", "cinema", "bakery"][k % 3]].split(" ");
+      if (kind === 0) { var base = Math.min(30000, 18000 + step * 1000); cfg.targets = [base, Math.round(base * 1.5 / 500) * 500, base * 2]; }
+      else if (kind === 1) {
+        var o = ORDER_SETS[step % ORDER_SETS.length], grown = {};
+        for (var ok in o) grown[ok] = Math.max(2, o[ok] - 1) + Math.floor(step / ORDER_SETS.length);
+        cfg.goal = { orders: grown }; cfg.starMoves = [2, 4];
+      }
+      else if (kind === 2) { cfg.goal = { bulbs: Math.min(22, 10 + step) }; cfg.starMoves = [2, 4]; }
+      else { cfg.goal = { bread: Math.min(5, 3 + Math.floor(step / 3)), row: 0 }; cfg.moves -= 4; cfg.starMoves = [3, 5]; }
+    }
     return cfg;
   }
-  // Early targets sit low on purpose (most players three-star levels 1-5); levels 11+ use the
-  // normal letters, so their targets jump and then climb slowly.
-  var TARGETS = [7000, 7500, 8000, 8500, 9000, 11500, 12000, 12000, 12500, 13000,
-    17000, 17000, 17500, 17500, 18000, 18500, 19000, 19000, 19500, 20000,
-    20500, 21000, 21000, 21500, 22000, 22500, 23000, 23000, 23500, 22000];
-  var LATE_TARGET = 20000; // fewer moves keep later levels getting harder
 
   return {
     SIZE: SIZE, MOVES: MOVES, MIN: MIN, MAX: MAX, VALUES: VALUES, LEN_FACTOR: LEN_FACTOR, WILD: WILD,

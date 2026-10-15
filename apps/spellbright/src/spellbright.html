@@ -178,6 +178,7 @@ dialog.night-sheet { background: var(--night); color: var(--night-ink); }
 .ch-levels { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .ch-level { flex: 1 1 64px; min-width: 64px; border-radius: 12px; border: 1px solid #3a3970; background: var(--night-2); color: var(--night-ink); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font: inherit; }
 .ch-level b { font-family: var(--font-display); font-weight: 400; font-size: 1.2rem; }
+.ch-level em { font-style: normal; font-size: 0.68rem; color: var(--night-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .ch-level small { font-size: 0.8rem; color: var(--gold); letter-spacing: 0.08em; }
 .ch-level small.none { color: var(--tube-off); }
 .ch-level[aria-pressed="true"] { border-color: var(--neon-cyan); box-shadow: 0 0 0 2px rgba(72, 230, 255, 0.35); }
@@ -265,6 +266,21 @@ dialog.talk::backdrop { background: rgba(8, 10, 30, 0.45); }
 .tile.sel .face { transform: translateY(-4px) scale(1.06); box-shadow: inset 0 -4px 0 var(--tile-edge), 0 0 0 3px var(--accent), 0 8px 14px rgba(0,0,0,0.35); }
 .tile[data-bomb="1"] .face { background: var(--blast); color: #2a0d00; box-shadow: inset 0 -4px 0 #c95b30, 0 0 0 2px rgba(255,138,92,0.5), 0 2px 0 rgba(0,0,0,0.25); }
 .tile[data-bomb="1"] .face .m { color: #2a0d00; text-transform: uppercase; letter-spacing: 0.04em; }
+.tile.unlit .face { background: #3d4170; color: #eceaff; box-shadow: inset 0 -4px 0 #272a52, inset 0 0 0 2px #6b70b8, 0 2px 0 rgba(0,0,0,0.25); }
+.tile.unlit .face::before { content: ""; position: absolute; left: 6px; top: 6px; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid #9ea3e6; }
+.tile[data-bread="1"] .face { background: linear-gradient(180deg, #f6c56e, #d98f2e); color: #5a2e00; box-shadow: inset 0 -4px 0 #a8651c, 0 0 0 2px rgba(246,197,110,0.45), 0 2px 0 rgba(0,0,0,0.25); cursor: default; }
+.tile[data-bread="1"] .face svg { width: 62%; height: 62%; }
+.tile.want .face::after { content: ""; position: absolute; right: 6px; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--neon-pink); box-shadow: 0 0 6px var(--neon-pink); }
+.tile.litup .face { animation: litup 0.6s ease; }
+@keyframes litup { 40% { box-shadow: 0 0 0 4px var(--neon-amber), 0 0 18px var(--neon-amber); } }
+.goal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: var(--panel); border: 1px solid var(--rule); font-weight: 700; font-variant-numeric: tabular-nums; font-size: var(--step--1); }
+.gchip i { font-style: normal; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--tile); color: var(--tile-ink); font-family: var(--font-tile); font-weight: 700; text-transform: uppercase; box-shadow: inset 0 -2px 0 var(--tile-edge); }
+.gchip i svg { width: 18px; height: 18px; }
+.gchip i.bulb { background: #3d4170; color: #ffd36b; box-shadow: none; }
+.gchip i.loaf { background: linear-gradient(180deg, #f6c56e, #d98f2e); color: #5a2e00; box-shadow: none; }
+.gchip.done { border-color: var(--good); color: var(--good); }
+.gchip.bump { animation: bump 0.5s ease; }
 .tile.hint .face { animation: hint 0.9s ease-in-out 3; animation-delay: var(--d, 0s); }
 .tile.path .face { background: #ffe58a; color: #241a00; transform: scale(0.94); box-shadow: inset 0 -4px 0 #d9b43c, 0 0 0 3px #ffd23f; }
 .board.valid .tile.path .face { background: #a8ecc0; color: #0b2a17; box-shadow: inset 0 -4px 0 #5fbf84, 0 0 0 3px #4fd38a; }
@@ -447,6 +463,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <span class="star" id="star-1" style="left:75%">★</span>
       <span class="star" id="star-2" style="left:100%">★</span>
     </div>
+    <div id="goal-chips" class="goal-chips" hidden></div>
     <p id="goal-text" class="goal-text">Score 12,000 for one star</p>
   </div>
 
@@ -692,7 +709,8 @@ var WORDS = "/*@WORDS*/";
   function progress() { return Object.assign({ current: 1, stars: {} }, load(K + "levels", {})); }
   function storageKey() { return S.mode === "daily" ? K + "daily:" + S.day : K + "level-game"; }
   function persist() { save(storageKey(), { seed: S.seed, moves: S.moves, hints: S.hints, n: S.level && S.level.n }); }
-  function starsFor(score) { return S.level ? S.level.targets.filter(function (t) { return score >= t; }).length : 0; }
+  // Stars come from the rules: score levels by score, goal levels by moves left at the finish.
+  function starsFor() { return S.level && S.game ? S.game.stars() : 0; }
 
   function start(mode, fresh, levelN) {
     S.mode = mode; setBusy(false);
@@ -712,6 +730,7 @@ var WORDS = "/*@WORDS*/";
       S.seed = (saved && saved.seed) || "lv" + S.level.n + "-" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
     }
     S.game = new L.Game(S.seed, S.level || undefined);
+    S.level && (S.level.starMoves = S.game.starMoves);
     S.moves = []; S.hints = (saved && saved.hints) || 0;
     // Replaying the saved actions rebuilds the exact game: the rules are deterministic.
     if (saved && saved.moves) {
@@ -733,7 +752,7 @@ var WORDS = "/*@WORDS*/";
     hud(true);
     showGame();
     if (S.game.over()) finish(false);
-    else idle();
+    else { idle(); introduceGoals(); }
   }
 
   // ---- drawing ----------------------------------------------------------
@@ -745,7 +764,18 @@ var WORDS = "/*@WORDS*/";
     S.els[t.id] = b;
     return b;
   }
+  var LOAF = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 30c0-9 7-15 16-15s16 6 16 15v4a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4z"/><path d="M17 20l3 6M24 18v7M31 20l-3 6"/></svg>';
+  var BULB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg>';
   function paint(el, t, r, c) {
+    el.dataset.bread = t.bread ? 1 : 0;
+    if (t.bread) {
+      el.querySelector(".ch").innerHTML = LOAF;
+      el.querySelector(".v").textContent = "";
+      el.querySelector(".m").hidden = true;
+      el.dataset.r = r; el.dataset.c = c; el.dataset.vowel = 0; el.dataset.wild = 0; el.dataset.mult = 1; el.dataset.bomb = 0;
+      el.setAttribute("aria-label", "Loaf, row " + (r + 1) + " column " + (c + 1));
+      return;
+    }
     var wild = t.ch === L.WILD;
     el.querySelector(".ch").textContent = wild ? "★" : t.ch;
     el.querySelector(".v").textContent = wild ? "" : L.VALUES[t.ch];
@@ -791,6 +821,17 @@ var WORDS = "/*@WORDS*/";
     }
     var f = cellEl(focusCell[0], focusCell[1]);
     if (f) f.tabIndex = 0;
+    decorate();
+  }
+  // Goal marks on tiles: dim bulbs (a property of the cell) and letters an order still wants.
+  function decorate() {
+    var g = S.game, want = g ? g.wanted() : {};
+    for (var id in S.els) {
+      var el = S.els[id], r = +el.dataset.r, c = +el.dataset.c;
+      el.classList.toggle("unlit", !!(g && g.dark && g.dark[r] && g.dark[r][c]));
+      var ch = el.dataset.bread === "1" ? "" : el.querySelector(".ch").textContent;
+      el.classList.toggle("want", !!want[ch]);
+    }
   }
 
   function cellEl(r, c) {
@@ -822,7 +863,22 @@ var WORDS = "/*@WORDS*/";
     var next = g.nextCombo();
     $("combo").hidden = over || next <= 1;
     $("combo").textContent = "Combo ×" + next;
-    if (S.level) {
+    var goal = S.level && S.level.goal ? g.goalState() : null;
+    $("goal-bar").hidden = !!goal;
+    $("goal-chips").hidden = !goal;
+    if (goal) {
+      var html = "";
+      (goal.orders || []).forEach(function (o) {
+        html += '<span class="gchip' + (o.got >= o.need ? " done" : "") + '" data-g="o-' + o.ch + '"><i>' + o.ch + "</i>" + o.got + "/" + o.need + "</span>";
+      });
+      if (goal.bulbs) html += '<span class="gchip' + (goal.bulbs.lit >= goal.bulbs.total ? " done" : "") + '" data-g="bulbs"><i class="bulb">' + BULB + "</i>" + goal.bulbs.lit + "/" + goal.bulbs.total + " lit</span>";
+      if (goal.bread) html += '<span class="gchip' + (goal.bread.baked >= goal.bread.total ? " done" : "") + '" data-g="bread"><i class="loaf">' + LOAF + "</i>" + goal.bread.baked + "/" + goal.bread.total + " baked</span>";
+      $("goal-chips").innerHTML = html;
+      var sm = S.level.starMoves, ml = g.movesLeft;
+      $("goal-text").textContent = g.goalDone ? "Goal done!" :
+        ml >= sm[1] ? "Finish with " + sm[1] + "+ moves left for ★★★" : ml >= sm[0] ? "Finish with " + sm[0] + "+ moves left for ★★" : "Finish the goal for ★";
+      $("new-btn").textContent = g.stars() ? "Back to Main Street" : "Try again";
+    } else if (S.level) {
       var top = S.level.targets[2], n = starsFor(g.score);
       $("goal-fill").style.width = Math.min(100, 100 * g.score / top) + "%";
       $("goal-bar").setAttribute("aria-valuemax", top);
@@ -879,7 +935,7 @@ var WORDS = "/*@WORDS*/";
 
   // Celebrate each star as the score passes it.
   function starCheck() {
-    if (!S.level) return;
+    if (!S.level || S.level.goal) return;
     var n = starsFor(S.game.score);
     if (n > S.starsShown) {
       S.starsShown = n;
@@ -911,7 +967,9 @@ var WORDS = "/*@WORDS*/";
         popAt(w.cells, w.points, w.points >= 5000);
         chip("", w.word, "+" + fmt(w.points) +
           (w.mult > 1 ? ' <span class="x">×' + w.mult + "</span>" : "") +
-          (w.combo > 1 ? ' <span class="x">combo ×' + w.combo + "</span>" : ""));
+          (w.combo > 1 ? ' <span class="x">combo ×' + w.combo + "</span>" : "") +
+          (w.theme ? ' <span class="x">' + themeName() + " ×2</span>" : ""));
+        Object.keys(w.filled || {}).forEach(function (ch) { var gc = document.querySelector('[data-g="o-' + ch + '"]'); if (gc) { gc.classList.remove("bump"); void gc.offsetWidth; gc.classList.add("bump"); } });
       }
       if (st.blast) {
         await wait(w ? 220 : 0);
@@ -922,7 +980,8 @@ var WORDS = "/*@WORDS*/";
       }
       // Say the best thing that happened.
       var made = st.made[0];
-      if (made) callout(made.kind === "wild" ? "Wild tile!" : made.kind === "bomb" ? "Bomb tile!" : "×2 tile!");
+      if (w && w.theme) callout(themeName() + "! ×2");
+      else if (made) callout(made.kind === "wild" ? "Wild tile!" : made.kind === "bomb" ? "Bomb tile!" : "×2 tile!");
       else if (st.blast) callout(st.blast.kind === "line" ? "Zap!" : "Boom!");
       else if (w && w.combo >= 2) callout("Combo ×" + w.combo + "!");
       else if (w && w.word.length >= 4) callout(w.points >= 3000 ? "Great!" : "Nice!");
@@ -932,6 +991,8 @@ var WORDS = "/*@WORDS*/";
       st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) { el.remove(); delete S.els[cl.id]; } });
       tilesEl.querySelectorAll(".word,.blast").forEach(function (el) { el.classList.remove("word", "blast"); });
       draw(st.layout);
+      (st.lit || []).forEach(function (cl) { var el = cellEl(cl[0], cl[1]); if (el) { el.classList.add("litup"); setTimeout(function () { el.classList.remove("litup"); }, 650); } });
+      if (st.baked && st.baked.length) { callout(st.baked.length > 1 ? "Two loaves baked!" : "Loaf baked!"); chimeSound(3); }
       st.made.forEach(function (m) {
         var el = S.els[m.id];
         if (el) { el.classList.add("made"); setTimeout(function () { el.classList.remove("made"); }, 650); }
@@ -955,7 +1016,14 @@ var WORDS = "/*@WORDS*/";
       await wait(500);
     }
     starCheck();
-    if (res.cashIn) toast("Unused powerups cashed in: +" + fmt(res.cashIn));
+    if (res.goalDone) {
+      var done = S.level && S.level.chapterTheme;
+      callout(done === "cinema" ? "Lights on!" : done === "bakery" ? "Out of the oven!" : done === "diner" ? "Order up!" : "Goal done!");
+      chimeSound(5); buzz(60);
+      if (res.encore) toast("Encore: " + S.game.finishLeft + " moves to spare, +" + fmt(res.encore));
+      await wait(700);
+    }
+    if (res.cashIn) setTimeout(function () { toast("Unused powerups cashed in: +" + fmt(res.cashIn)); }, res.encore ? 1600 : 0);
   }
 
   // ---- tracing a word -----------------------------------------------------
@@ -986,6 +1054,7 @@ var WORDS = "/*@WORDS*/";
   // Add a cell to the path, or step back if it's the previous one. Returns true if the path changed.
   function extendPath(cell) {
     var p = S.path, last = p[p.length - 1];
+    if (S.game.board[cell[0]][cell[1]].bread) return false; // loaves aren't letters
     if (!last) { p.push(cell); tickSound(1); return true; }
     if (same(cell, last)) return false;
     if (p.length >= 2 && same(cell, p[p.length - 2])) { p.pop(); return true; }
@@ -1247,7 +1316,7 @@ var WORDS = "/*@WORDS*/";
     var log = g.moveLog();
     var lvl = S.mode === "level", stars = starsFor(g.score), gained = 0;
     $("result-kicker").textContent = lvl ? "Level " + S.level.n : "Daily #" + puzzleNo(S.day);
-    $("result-title").textContent = lvl ? ["So close!", "Level complete!", "Great job!", "Perfect!"][stars] : verdict(g.score);
+    $("result-title").textContent = lvl ? [S.level.goal ? "Out of moves" : "So close!", "Level complete!", "Great job!", "Perfect!"][stars] : verdict(g.score);
     $("r-stars").hidden = !lvl;
     $("r-stars").innerHTML = lvl ? [0, 1, 2].map(function (k) { return '<span class="' + (k < stars ? "on" : "") + '">★</span>'; }).join("") : "";
     $("r-stars").setAttribute("aria-label", stars + " of 3 stars");
@@ -1255,9 +1324,11 @@ var WORDS = "/*@WORDS*/";
     // Where the points came from, when it isn't all words.
     var extra = [];
     if (g.powerPoints) extra.push(fmt(g.powerPoints) + " from powerups");
+    if (g.encore) extra.push(fmt(g.encore) + " encore for " + g.finishLeft + " moves to spare");
     if (g.cashIn) extra.push(fmt(g.cashIn) + " for powerups you didn't use");
     $("r-breakdown").textContent = extra.length ? "points, including " + extra.join(" and ") : "points";
-    if (lvl && !stars) $("r-breakdown").textContent = "points. You needed " + fmt(S.level.targets[0]) + " for a star. Try again with a new board.";
+    if (lvl && !stars) $("r-breakdown").textContent = S.level.goal ? "points. The goal wasn't finished before the moves ran out. Try again with a new board." :
+      "points. You needed " + fmt(S.level.targets[0]) + " for a star. Try again with a new board.";
     $("r-word").textContent = best ? best.word : "-";
     $("r-words").textContent = log.length;
     $("r-words-label").textContent = "Words";
@@ -1513,7 +1584,7 @@ var WORDS = "/*@WORDS*/";
     for (var n = lv[0]; n <= lv[1]; n++) {
       var got = pr.stars[n] || 0, open = n <= pr.current;
       chips += '<button type="button" class="ch-level" data-level="' + n + '" aria-pressed="' + (n === CH.pick) + '"' + (open ? "" : " disabled") +
-        ' aria-label="Level ' + n + (open ? ", " + got + " stars" : ", locked") + '"><b>' + n + "</b>" +
+        ' aria-label="Level ' + n + ", " + goalLabel(n) + (open ? ", " + got + " stars" : ", locked") + '"><b>' + n + "</b><em>" + goalLabel(n) + "</em>" +
         '<small class="' + (got ? "" : "none") + '">' + (open ? "★★★".slice(0, got) + "☆☆☆".slice(got) : "locked") + "</small></button>";
     }
     $("ch-levels").innerHTML = chips;
@@ -1576,6 +1647,36 @@ var WORDS = "/*@WORDS*/";
   $("talk").addEventListener("cancel", function (e) { e.preventDefault(); if (talk.next) talk.next(); });
 
   function meetFirst() { openChapter(0); }
+
+  // Theme words have a name per chapter.
+  function themeName() {
+    var t = S.level && S.level.chapterTheme;
+    return t === "cinema" ? "Movie word" : t === "bakery" ? "Bakery word" : t === "diner" ? "Menu word" : "Theme word";
+  }
+  // The first time a goal shows up, the chapter's owner explains it.
+  var GOAL_INTROS = {
+    theme: [["mo", "One more thing. Spell anything on my menu, like PIE, EGG or TOAST, and it counts double."]],
+    orders: [["mo", "Customers are lining up, and they order by the letter! Every word you spell fills the order with its letters."],
+             ["mo", "The pink dots show letters still wanted. Fill every order before the moves run out. Finish early and the moves you save turn into bonus points."]],
+    bulbs: [["pip", "See the dark tiles? Those are dead bulbs on our marquee."],
+            ["pia", "Spell a word through a dark tile and it lights up. Light every bulb to open the show. Movie words like FILM or SCENE count double in here."]],
+    bread: [["rosa", "My loaves are stuck up top, dear. They aren't letters, so you can't spell through them."],
+            ["rosa", "Clear the letters under a loaf, or spell right next to one to nudge it down. Get every loaf to the bottom row and into the oven. Baking words count double, naturally."]]
+  };
+  function introduceGoals() {
+    if (!S.level) return;
+    var st = story(), seen = st.seenGoals || {}, lines = [];
+    var kinds = ["theme"].concat(S.level.goal ? Object.keys(S.level.goal).filter(function (k) { return GOAL_INTROS[k]; }) : []);
+    kinds.forEach(function (k) { if (!seen[k]) { seen[k] = true; lines = lines.concat(GOAL_INTROS[k]); } });
+    if (!lines.length) return;
+    st.seenGoals = seen; saveStory(st);
+    talk(lines);
+  }
+  function goalLabel(n) {
+    var c = L.level(n), g = c.goal;
+    if (!g) return "Score";
+    return [g.orders && "Orders", g.bulbs && "Bulbs", g.bread && "Loaves"].filter(Boolean).join(" + ");
+  }
 
   // The cold open: the city glowing, the storm, the apprentice.
   var INTRO = [

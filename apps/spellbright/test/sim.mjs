@@ -66,6 +66,53 @@ assert.equal(L.matchWord("???"), null);
   assert.equal(a.score, b.score);
 }
 
+// Goals: orders fill from a word's letters, bulbs light where words pass, loaves fall and bake,
+// finishing early ends the level with an encore and stars from moves left.
+{
+  const g = new L.Game("orders", { goal: { orders: { e: 2 } }, moves: 20, starMoves: [3, 6] });
+  let guard = 0;
+  while (!g.goalDone && !g.over() && guard++ < 30) {
+    const w = L.solve(g.board).sort((a, b) => g.goalValue(b) - g.goalValue(a))[0];
+    const before = g.got.e, res = g.trace(w.path);
+    assert.equal(g.got.e - before, Math.min(2 - before, [...w.word].filter((c) => c === "e").length));
+    if (res.goalDone) { assert.ok(g.over()); assert.equal(res.encore, g.finishLeft * 1000); }
+  }
+  assert.ok(g.goalDone, "orders can be finished");
+  assert.equal(g.stars(), 1 + (g.finishLeft >= 3) + (g.finishLeft >= 6));
+}
+{
+  const g = new L.Game("bulbs", { goal: { bulbs: 6 }, moves: 30 });
+  assert.equal(g.goalState().bulbs.lit, 0);
+  const w = L.solve(g.board).sort((a, b) => g.goalValue(b) - g.goalValue(a))[0];
+  const darkOnPath = w.path.filter((c) => g.dark[c[0]][c[1]]).length;
+  g.trace(w.path);
+  assert.equal(g.goalState().bulbs.lit, darkOnPath, "bulbs on the path light up");
+}
+{
+  const g = new L.Game("bread", { goal: { bread: 2, row: 0 }, moves: 40 });
+  assert.equal(g.board[0].filter((t) => t.bread).length, 2);
+  assert.ok(L.solve(g.board).every((w) => w.path.every((c) => !g.board[c[0]][c[1]].bread)), "loaves aren't letters");
+  let guard = 0;
+  while (!g.goalDone && guard++ < 40) {
+    const w = L.solve(g.board).sort((a, b) => g.goalValue(b) - g.goalValue(a))[0];
+    g.trace(w.path);
+    assert.ok(g.board.flat().filter((t) => t.bread).length + g.baked === 2, "loaves are never lost");
+  }
+  assert.ok(g.goalDone, "loaves can be baked");
+  const s = new L.Game("bread2", { goal: { bread: 2 }, inv: { shuffle: 1, line: 1 } });
+  const at = s.board.flat().filter((t) => t.bread).map((t) => t.id).sort().join();
+  s.usePower("shuffle");
+  s.usePower("line", { cell: [1, 0], dir: "row" });
+  assert.equal(s.board.flat().filter((t) => t.bread).length + s.baked, 2, "powerups don't destroy loaves");
+}
+{
+  const g = new L.Game("theme", { theme: ["tea", "eat", "ate", "tie", "toe", "one", "ten", "net", "ear", "era"] });
+  const w = L.solve(g.board).find((x) => g.theme.has(x.word));
+  if (w) { const r = g.trace(w.path); assert.ok(r.words[0].theme); }
+}
+// Every level config is valid and its goals can start.
+for (let n = 1; n <= 60; n++) { const c = L.level(n); const g = new L.Game("lv" + n, c); assert.ok(c.goal || c.targets); assert.ok(L.solve(g.board).length > 0); }
+
 // Bots. "casual" picks a random common word (what most people spot); "greedy" the longest word.
 for (const bot of ["casual", "greedy"]) {
   const st = { moves: 0, len: 0, specials: 0, bombs: 0, shuffles: 0, earned: 0, used: 0, words: 0, scores: [], combo: 0 };
