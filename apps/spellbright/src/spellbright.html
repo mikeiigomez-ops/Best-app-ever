@@ -147,12 +147,41 @@ button { font: inherit; color: inherit; }
 .harbour { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px dashed #2f2d58; color: var(--night-muted); font-size: 0.8rem; }
 .harbour svg { width: 34px; height: 44px; flex: none; color: var(--tube-off); }
 .harbour b { color: var(--night-ink); font-weight: 500; display: block; font-size: 0.9rem; }
-.task { background: var(--night-2); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 12px; }
-.task p { margin: 0; flex: 1; min-width: 0; font-size: var(--step--1); color: var(--night-muted); }
-.task p b { display: block; color: var(--night-ink); font-size: var(--step-0); font-weight: 500; }
-.task button { flex: none; border: 0; border-radius: 999px; padding: 9px 14px; font-weight: 700; background: var(--gold); color: #2a1a00; cursor: pointer; }
-.task button:disabled { background: var(--tube-off); color: var(--night-muted); cursor: default; }
-.play-btn { font-size: 1.1rem; padding: 14px; }
+.play-btn { font-size: 1.15rem; padding: 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; }
+.play-btn small { font-size: 0.75rem; font-weight: 400; opacity: 0.8; }
+.playbar {
+  position: sticky; bottom: env(safe-area-inset-bottom, 0px); margin: 0 -16px -16px; padding: 12px 16px 16px;
+  background: linear-gradient(180deg, rgba(11, 13, 31, 0), var(--night) 30%); border-radius: 0 0 20px 20px;
+}
+button.shop { width: 100%; font: inherit; color: inherit; cursor: pointer; }
+button.shop:hover:not(.locked) { border-color: #5a59a0; }
+.shop-meta { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 8px; }
+.shop-state { font-size: 0.72rem; color: var(--night-muted); white-space: nowrap; }
+.shop-open { margin-top: 2px; font-size: 0.8rem; font-weight: 500; color: var(--neon-white); background: var(--night-2); border: 1px solid #3a3970; border-radius: 999px; padding: 4px 12px; }
+.shop.locked .shop-open { color: var(--night-muted); border-style: dashed; }
+/* Chapter sheet */
+dialog.night-sheet { background: var(--night); color: var(--night-ink); }
+.night-sheet .label { color: var(--night-muted); }
+.night-sheet h2 { font-family: var(--font-neon); color: var(--neon-white); text-shadow: 0 0 6px rgba(255, 243, 214, 0.55); }
+.night-sheet .icon-btn { background: var(--night-2); border-color: #3a3970; color: var(--night-ink); }
+.ch-sign { padding: 14px 12px; }
+.ch-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.small-purse { padding: 3px 10px; font-size: 1rem; }
+.ch-parts { display: flex; flex-direction: column; gap: 6px; }
+.ch-part { display: flex; align-items: center; gap: 10px; background: var(--night-2); border-radius: 12px; padding: 10px 12px; }
+.ch-part span { flex: 1; min-width: 0; font-size: var(--step-0); }
+.ch-part small { color: var(--night-muted); font-size: 0.78rem; white-space: nowrap; }
+.ch-part.done span { color: var(--night-muted); }
+.ch-part.done small { color: var(--good); }
+.ch-part button { flex: none; border: 0; border-radius: 999px; padding: 8px 14px; font-weight: 700; background: var(--gold); color: #2a1a00; cursor: pointer; }
+.ch-part button:disabled { background: var(--tube-off); color: var(--night-muted); cursor: default; }
+.ch-levels { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.ch-level { flex: 1 1 64px; min-width: 64px; border-radius: 12px; border: 1px solid #3a3970; background: var(--night-2); color: var(--night-ink); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font: inherit; }
+.ch-level b { font-family: var(--font-display); font-weight: 400; font-size: 1.2rem; }
+.ch-level small { font-size: 0.8rem; color: var(--gold); letter-spacing: 0.08em; }
+.ch-level small.none { color: var(--tube-off); }
+.ch-level[aria-pressed="true"] { border-color: var(--neon-cyan); box-shadow: 0 0 0 2px rgba(72, 230, 255, 0.35); }
+.ch-level:disabled { opacity: 0.4; cursor: default; }
 .city-foot { margin: 0; text-align: center; }
 .linkish { background: none; border: 0; color: var(--night-muted); text-decoration: underline; cursor: pointer; font-size: var(--step--1); padding: 4px; }
 
@@ -173,8 +202,9 @@ button { font: inherit; color: inherit; }
 .intro-actions .btn { flex: 0 0 auto; min-width: 140px; }
 
 /* Character lines */
-.talk { position: fixed; inset: 0; z-index: 25; background: rgba(8, 10, 30, 0.55); display: flex; align-items: flex-end; justify-content: center; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
-.talk-card { width: min(460px, 100%); background: var(--night-2); color: var(--night-ink); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; border: 1px solid #2f2d58; animation: rise 0.25s ease; }
+dialog.talk { background: none; box-shadow: none; overflow: visible; margin: auto auto calc(16px + env(safe-area-inset-bottom, 0px)); width: min(460px, calc(100% - 32px)); }
+dialog.talk::backdrop { background: rgba(8, 10, 30, 0.45); }
+.talk-card { width: 100%; background: var(--night-2); color: var(--night-ink); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; border: 1px solid #2f2d58; animation: rise 0.25s ease; }
 @keyframes rise { from { transform: translateY(20px); opacity: 0; } }
 .talk-who { display: flex; align-items: center; gap: 10px; }
 .talk-who b { font-family: var(--font-neon); font-weight: 400; font-size: 1.25rem; color: var(--c, var(--neon-white)); text-shadow: 0 0 8px var(--c, transparent); }
@@ -397,9 +427,10 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
       <div class="purse" aria-label="Stars to spend"><span class="purse-star">★</span><b id="purse">0</b></div>
     </div>
     <div class="street" id="street"></div>
-    <div id="task" class="task"></div>
-    <button id="play-btn" class="btn primary play-btn" type="button">Play level 1</button>
     <p class="city-foot"><button id="intro-btn" class="linkish" type="button">Watch the intro again</button></p>
+    <div class="playbar">
+      <button id="play-btn" class="btn primary play-btn" type="button"><span id="play-main">Play level 1</span><small id="play-sub">Chapter 1 · Mo's Diner</small></button>
+    </div>
   </section>
 
   <div id="game-view" class="game-view">
@@ -484,13 +515,35 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
   </div>
 </div>
 
-<div id="talk" class="talk" hidden role="dialog" aria-modal="true" aria-labelledby="talk-name">
+<dialog id="talk" class="talk" aria-labelledby="talk-name">
   <div class="talk-card">
     <div class="talk-who"><span id="talk-face" class="face-chip">M</span><b id="talk-name">Mo</b></div>
     <p id="talk-text" class="talk-text"></p>
     <button id="talk-next" class="btn primary" type="button">Next</button>
   </div>
-</div>
+</dialog>
+
+<dialog id="chapter" class="night-sheet" aria-labelledby="ch-title">
+  <div class="sheet">
+    <div class="r-top">
+      <div>
+        <p id="ch-kicker" class="label">Chapter 1 · Levels 1-3</p>
+        <h2 id="ch-title">Mo's Diner</h2>
+      </div>
+      <button id="ch-close" class="icon-btn" type="button" aria-label="Back to Main Street">✕</button>
+    </div>
+    <div id="ch-sign" class="shop ch-sign"></div>
+    <section>
+      <div class="ch-head"><p class="label">Relight the sign</p><span class="purse small-purse"><span class="purse-star">★</span><b id="ch-purse">0</b></span></div>
+      <div id="ch-parts" class="ch-parts"></div>
+    </section>
+    <section>
+      <p class="label">Levels</p>
+      <div id="ch-levels" class="ch-levels"></div>
+    </section>
+    <button id="ch-play" class="btn primary play-btn" type="button">Play level 1</button>
+  </div>
+</dialog>
 
 <dialog id="help" aria-labelledby="help-title">
   <div class="sheet">
@@ -641,7 +694,7 @@ var WORDS = "/*@WORDS*/";
   function persist() { save(storageKey(), { seed: S.seed, moves: S.moves, hints: S.hints, n: S.level && S.level.n }); }
   function starsFor(score) { return S.level ? S.level.targets.filter(function (t) { return score >= t; }).length : 0; }
 
-  function start(mode, fresh) {
+  function start(mode, fresh, levelN) {
     S.mode = mode; setBusy(false);
     save(K + "mode", mode);
     endAim();
@@ -653,7 +706,7 @@ var WORDS = "/*@WORDS*/";
       saved = fresh ? null : load(K + "daily:" + S.day, null);
       S.seed = "daily-" + S.day;
     } else {
-      S.level = L.level(progress().current);
+      S.level = L.level(levelN || progress().current);
       saved = fresh ? null : load(K + "level-game", null);
       if (saved && saved.n !== S.level.n) saved = null;
       S.seed = (saved && saved.seed) || "lv" + S.level.n + "-" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
@@ -1300,7 +1353,7 @@ var WORDS = "/*@WORDS*/";
     wren: { name: "Wren", c: "#7cf5c8" }
   };
   var SIGNS = [
-    { shop: "Mo's Diner",
+    { shop: "Mo's Diner", levels: [1, 3],
       hello: [["mo", "So you're the sign-maker's new apprentice? Thank goodness. My diner's been dark since the storm, and nobody finds a diner in the dark."],
               ["mo", "Here's how it works. Spell words to catch the fallen letters. Every star you earn in a level buys a little light. Start with my name up there."]],
       parts: [
@@ -1312,7 +1365,7 @@ var WORDS = "/*@WORDS*/";
           line: [["mo", "Open for business! First slice of pie is on the house, apprentice."],
                  ["mo", "The Bijou next door has been dark too. The twins could use you. Fair warning: they finish each other's sentences."]] }
       ] },
-    { shop: "The Bijou",
+    { shop: "The Bijou", levels: [4, 6],
       hello: [["pip", "You're the apprentice! We're Pip and..."], ["pia", "...Pia. Our marquee lost every single letter."],
               ["pip", "Tonight's movie is a mystery. Literally. Nobody can read the title."]],
       parts: [
@@ -1323,7 +1376,7 @@ var WORDS = "/*@WORDS*/";
         { html: "NOW SHOWING: THE NIGHT THE LETTERS FELL", cls: "sign-s", c: "--neon-pink", task: "Spell out tonight's movie", cost: 3,
           line: [["pia", "\"The Night the Letters Fell.\" A little on the nose."], ["pip", "Go see Rosa at the bakery. She's been baking in the dark all week."]] }
       ] },
-    { shop: "Rosa's Bakery",
+    { shop: "Rosa's Bakery", levels: [7, 10],
       hello: [["rosa", "Forty years my sign has glowed before the sun comes up. Forty years! Until this storm."],
               ["rosa", "Help an old baker, dear? There's a warm roll in it for you."]],
       parts: [
@@ -1343,8 +1396,24 @@ var WORDS = "/*@WORDS*/";
   var PARTS = [];
   SIGNS.forEach(function (sg, si) { sg.parts.forEach(function (p, pi) { PARTS.push({ sign: si, idx: pi, p: p }); }); });
 
-  function story() { return Object.assign({ intro: false, met: false, purse: 0, lit: 0, finale: false }, load(K + "story", {})); }
+  // Story state. `lit` counts the parts lit on each sign; `met` marks who has said hello.
+  function story() {
+    var st = Object.assign({ intro: false, purse: 0, lit: [0, 0, 0], met: [false, false, false], finale: false }, load(K + "story", {}));
+    if (typeof st.lit === "number") { // an earlier save counted parts across the whole street
+      var n = st.lit; st.lit = [0, 1, 2].map(function (k) { return Math.max(0, Math.min(3, n - 3 * k)); });
+    }
+    if (!Array.isArray(st.met)) st.met = [!!st.met, false, false];
+    return st;
+  }
   function saveStory(st) { save(K + "story", st); }
+  function chapterOf(n) {
+    for (var k = 0; k < SIGNS.length; k++) if (n >= SIGNS[k].levels[0] && n <= SIGNS[k].levels[1]) return k;
+    return -1;
+  }
+  function chapterLabel(n) {
+    var k = chapterOf(n);
+    return k < 0 ? "Bonus level · Main Street" : "Chapter " + (k + 1) + " · " + SIGNS[k].shop;
+  }
 
   function showGame() {
     S.view = "game";
@@ -1364,58 +1433,120 @@ var WORDS = "/*@WORDS*/";
     $("mode-daily").setAttribute("aria-pressed", false);
     renderCity();
   }
-  // After a level: back to the city with stars to spend, or straight into a retry.
+  // After a level: back to the city (straight into that chapter if a part can be relit), or a retry.
   function afterLevel() {
-    if (S.level && starsFor(S.game.score)) showCity();
-    else start("level", true);
+    var n = S.level ? S.level.n : 1;
+    if (!S.level || !starsFor(S.game.score)) { start("level", true, n); return; }
+    showCity();
+    var k = chapterOf(n), st = story();
+    if (k >= 0 && st.lit[k] < 3 && st.purse >= SIGNS[k].parts[st.lit[k]].cost) openChapter(k);
   }
 
-  function renderCity(fresh) {
-    var st = story(), html = "";
+  function signHTML(si, lit, fresh) {
+    return SIGNS[si].parts.map(function (p, pi) {
+      var on = lit > pi;
+      return '<span class="part ' + (p.cls || "") + (on ? " lit" : "") + (on && fresh === pi ? " fresh" : "") + '" style="--c: var(' + p.c + ')">' + p.html + "</span>";
+    }).join("");
+  }
+  function chapterStars(si, pr) {
+    var got = 0, lv = SIGNS[si].levels;
+    for (var n = lv[0]; n <= lv[1]; n++) got += pr.stars[n] || 0;
+    return got;
+  }
+
+  function renderCity() {
+    var st = story(), pr = progress(), html = "", playCh = chapterOf(pr.current);
     SIGNS.forEach(function (sg, si) {
-      var first = si * 3, locked = st.lit < first, current = st.lit >= first && st.lit < first + 3;
-      html += '<article class="shop' + (locked ? " locked" : "") + (current ? " current" : "") + '" aria-label="' + sg.shop + '">' +
-        '<span class="who">' + sg.shop + "</span>";
-      sg.parts.forEach(function (p, pi) {
-        var k = first + pi, on = st.lit > k;
-        html += '<span class="part ' + (p.cls || "") + (on ? " lit" : "") + (on && fresh === k ? " fresh" : "") + '" style="--c: var(' + p.c + ')">' + p.html + "</span>";
-      });
-      if (locked) html += '<span class="lockline">Dark since the storm</span>';
-      html += "</article>";
+      var lv = sg.levels, locked = pr.current < lv[0], lit = st.lit[si];
+      var max = (lv[1] - lv[0] + 1) * 3;
+      html += '<button type="button" class="shop' + (locked ? " locked" : "") + (si === playCh ? " current" : "") + '" data-ch="' + si + '">' +
+        '<span class="shop-meta"><span class="who">Chapter ' + (si + 1) + " · " + sg.shop + '</span><span class="shop-state">' +
+        (locked ? "Levels " + lv[0] + "-" + lv[1] : lit + " of 3 lit · ★ " + chapterStars(si, pr) + "/" + max) + "</span></span>" +
+        signHTML(si, lit) +
+        '<span class="shop-open">' + (locked ? "Opens at level " + lv[0] : lit === 3 ? "Glowing again ›" : "Open ›") + "</span></button>";
     });
-    html += '<div class="harbour">' + LIGHTHOUSE + "<span><b>The Harbour</b>" +
-      (st.finale ? "Episode 2. Coming soon." : "Still dark. Episode 2.") + "</span></div>";
+    html += '<div class="harbour">' + LIGHTHOUSE + "<span><b>The Harbour</b>" + (st.finale ? "Episode 2. Coming soon." : "Still dark. Episode 2.") + "</span></div>";
     $("street").innerHTML = html;
     $("purse").textContent = st.purse;
-    var next = PARTS[st.lit];
-    if (!next) {
-      $("task").innerHTML = "<p><b>Main Street is glowing again!</b>Episode 2, The Harbour, is coming soon. Keep playing levels and the Daily to stay sharp.</p>";
-    } else {
-      var need = next.p.cost - st.purse;
-      $("task").innerHTML = "<p><b>" + SIGNS[next.sign].shop + ": " + next.p.task + "</b>" +
-        (need > 0 ? "Earn " + need + " more ★ in levels." : "You have enough stars.") + "</p>" +
-        '<button id="relight" type="button"' + (need > 0 ? " disabled" : "") + ">★ " + next.p.cost + " Relight</button>";
-      $("relight").addEventListener("click", relight);
-    }
-    $("play-btn").textContent = "Play level " + progress().current;
+    $("play-main").textContent = "Play level " + pr.current;
+    $("play-sub").textContent = chapterLabel(pr.current);
   }
+  $("street").addEventListener("click", function (e) {
+    var b = e.target.closest(".shop");
+    if (!b) return;
+    var si = +b.dataset.ch;
+    if (b.classList.contains("locked")) { toast("Finish the levels before it to open " + SIGNS[si].shop + "."); return; }
+    openChapter(si);
+  });
 
-  function relight() {
-    var st = story(), next = PARTS[st.lit];
-    if (!next || st.purse < next.p.cost) return;
-    st.purse -= next.p.cost;
-    st.lit++;
+  // ---- chapter sheet ------------------------------------------------------
+  var CH = { si: 0, pick: 1 };
+  function openChapter(si) {
+    var st = story();
+    if (!st.met[si]) {
+      // First visit: the owner says hello, then the chapter opens.
+      st.met[si] = true; saveStory(st);
+      talk(SIGNS[si].hello, function () { openChapter(si); });
+      return;
+    }
+    var pr = progress(), lv = SIGNS[si].levels;
+    CH.si = si;
+    CH.pick = pr.current <= lv[1] ? Math.max(lv[0], pr.current) : pr.current;
+    renderChapter();
+    if (!$("chapter").open) $("chapter").showModal();
+  }
+  function renderChapter(fresh) {
+    var si = CH.si, sg = SIGNS[si], st = story(), pr = progress(), lv = sg.levels, lit = st.lit[si];
+    $("ch-kicker").textContent = "Chapter " + (si + 1) + " · Levels " + lv[0] + "-" + lv[1];
+    $("ch-title").textContent = sg.shop;
+    $("ch-sign").innerHTML = signHTML(si, lit, fresh);
+    $("ch-purse").textContent = st.purse;
+    $("ch-parts").innerHTML = sg.parts.map(function (p, pi) {
+      var row = '<div class="ch-part' + (pi < lit ? " done" : "") + '"><span>' + p.task + "</span>";
+      if (pi < lit) return row + "<small>✓ Lit</small></div>";
+      if (pi > lit) return row + "<small>After the one above</small></div>";
+      var need = p.cost - st.purse;
+      return row + (need > 0 ? "<small>" + need + " more ★</small>" : "") +
+        '<button type="button" data-relight="' + pi + '"' + (need > 0 ? " disabled" : "") + ">★ " + p.cost + " Relight</button></div>";
+    }).join("");
+    var chips = "";
+    for (var n = lv[0]; n <= lv[1]; n++) {
+      var got = pr.stars[n] || 0, open = n <= pr.current;
+      chips += '<button type="button" class="ch-level" data-level="' + n + '" aria-pressed="' + (n === CH.pick) + '"' + (open ? "" : " disabled") +
+        ' aria-label="Level ' + n + (open ? ", " + got + " stars" : ", locked") + '"><b>' + n + "</b>" +
+        '<small class="' + (got ? "" : "none") + '">' + (open ? "★★★".slice(0, got) + "☆☆☆".slice(got) : "locked") + "</small></button>";
+    }
+    $("ch-levels").innerHTML = chips;
+    var replay = (pr.stars[CH.pick] || 0) > 0 && CH.pick !== pr.current;
+    $("ch-play").textContent = (replay ? "Replay level " : "Play level ") + CH.pick;
+  }
+  $("ch-levels").addEventListener("click", function (e) {
+    var b = e.target.closest(".ch-level");
+    if (!b || b.disabled) return;
+    CH.pick = +b.dataset.level;
+    renderChapter();
+  });
+  $("ch-parts").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-relight]");
+    if (b && !b.disabled) relight(CH.si);
+  });
+  $("ch-play").addEventListener("click", function () { $("chapter").close(); start("level", false, CH.pick); });
+  $("ch-close").addEventListener("click", function () { $("chapter").close(); });
+  $("chapter").addEventListener("close", renderCity);
+
+  function relight(si) {
+    var st = story(), sg = SIGNS[si], pi = st.lit[si], p = sg.parts[pi];
+    if (!p || st.purse < p.cost) return;
+    st.purse -= p.cost;
+    st.lit[si]++;
     saveStory(st);
-    renderCity(st.lit - 1);
+    renderChapter(pi);
+    renderCity();
     chimeSound(4); buzz(40);
-    var lines = next.p.line.slice();
-    var signDone = next.idx === 2, nextSign = SIGNS[next.sign + 1];
+    var allLit = st.lit.every(function (n) { return n === 3; });
     setTimeout(function () {
-      talk(lines, function () {
-        if (signDone && nextSign) talk(nextSign.hello);
-        else if (signDone && !st.finale) {
-          talk(FINALE, function () { var s2 = story(); s2.finale = true; saveStory(s2); renderCity(); });
-        }
+      talk(p.line, function () {
+        if (allLit && !st.finale) talk(FINALE, function () { var s2 = story(); s2.finale = true; saveStory(s2); renderCity(); });
       });
     }, reduced ? 0 : 900);
   }
@@ -1434,20 +1565,17 @@ var WORDS = "/*@WORDS*/";
     talk.next = function () {
       i++;
       if (i < lines.length) show();
-      else { $("talk").hidden = true; talk.next = null; if (done) done(); }
+      else { talk.next = null; $("talk").close(); if (done) done(); }
     };
-    $("talk").hidden = false;
     show();
+    if (!$("talk").open) $("talk").showModal();
     $("talk-next").focus();
   }
   $("talk-next").addEventListener("click", function () { if (talk.next) talk.next(); });
+  // Escape closes the dialog without the Next button: treat it as reading on.
+  $("talk").addEventListener("cancel", function (e) { e.preventDefault(); if (talk.next) talk.next(); });
 
-  function meetFirst() {
-    var st = story();
-    if (st.met) return;
-    st.met = true; saveStory(st);
-    talk(SIGNS[0].hello);
-  }
+  function meetFirst() { openChapter(0); }
 
   // The cold open: the city glowing, the storm, the apprentice.
   var INTRO = [

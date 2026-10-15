@@ -4,8 +4,9 @@ A word puzzle with match-3 energy and a story: trace words through a grid of let
 
 ## The story (Episode 1: Main Street)
 
-A storm knocked every letter off every neon sign in Lumen City. You're the sign-maker's new apprentice. A three-panel cold open sets this up the first time you play; after that the **city screen** is home.
+A storm knocked every letter off every neon sign in Lumen City. You're the sign-maker's new apprentice. A three-panel cold open sets this up the first time you play; after that the **city screen** is home: three chapter cards and a Play bar pinned to the bottom.
 
+- **Chapters:** Mo's Diner is Chapter 1 (levels 1-3), the Bijou Chapter 2 (4-6) and Rosa's Bakery Chapter 3 (7-10). Tapping a chapter opens a sheet with its sign, the three parts to relight in order, its levels with your stars (tap one to replay it) and one Play button. After a winning level you land back in that chapter if you can afford a part.
 - **Main Street** has three dark signs, each in three parts: Mo's Diner (name, coffee cup, OPEN ALL NIGHT), the Bijou cinema (name, marquee bulbs, tonight's movie) and Rosa's Bakery (name, croissant, FRESH BREAD DAILY). Parts cost 2-3 stars each, 21 in all, so a player averaging two stars a level finishes the episode in about ten levels.
 - **Stars come from levels.** Only stars beyond a level's previous best go in the purse, so replaying levels can't farm them.
 - **Characters:** Mo (diner), the twins Pip and Pia (cinema) and Rosa (bakery) greet you, react as each part lights up with a neon flicker, and hand you on to the next sign.
