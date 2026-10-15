@@ -11,7 +11,7 @@ const OUT = process.env.OUT || join(root, "dist");
 const read = (p) => readFileSync(join(root, "src", p), "utf8");
 
 const words = read("words.txt").split(/\s+/).filter(Boolean);
-if (!words.every((w) => /^[a-z]{3,6}$/.test(w))) throw new Error("words.txt: only 3-6 lowercase letters per line");
+if (!words.every((w) => /^\*?[a-z]{3,8}$/.test(w))) throw new Error("words.txt: 3-8 lowercase letters per line, * marks common words");
 const page = read("letterfall.html")
   .replace('"/*@WORDS*/"', () => JSON.stringify(words.join(" ")))
   .replace("/*@ENGINE*/", () => read("engine.js").replace(/<\/script/gi, "<\\/script"));

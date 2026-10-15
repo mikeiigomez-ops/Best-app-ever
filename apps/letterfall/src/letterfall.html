@@ -92,6 +92,20 @@ button { font: inherit; color: inherit; }
 .pip { width: 8px; height: 8px; border-radius: 2px; background: var(--rule); }
 .pip.on { background: var(--accent); }
 
+/* The word being traced */
+.word-bar { display: flex; align-items: center; gap: 8px; min-height: 46px; }
+.word-now {
+  flex: 1; min-width: 0; font-family: var(--font-tile); font-weight: 700; font-size: 1.7rem; letter-spacing: 0.12em;
+  text-transform: uppercase; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink);
+}
+.word-now.ok { color: var(--good); }
+.word-now.nope { color: var(--bad); animation: shake 0.32s ease; }
+.word-ph { font-family: var(--font-body); font-weight: 400; font-size: var(--step-0); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.combo { flex: none; padding: 5px 10px; border-radius: 999px; background: var(--t4); color: #2a1300; font-weight: 700; font-size: var(--step--1); }
+.word-go, .word-x { flex: none; border: 0; border-radius: 999px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
+.word-go { background: var(--good); color: var(--bg); }
+.word-x { background: var(--panel); border: 1px solid var(--rule); padding: 8px 12px; }
+
 /* Level goal */
 .goal { display: flex; flex-direction: column; gap: 4px; margin-top: -4px; }
 .goal-bar { position: relative; height: 14px; border-radius: 999px; background: var(--rule); margin-right: 10px; }
@@ -102,7 +116,7 @@ button { font: inherit; color: inherit; }
   border: 2px solid var(--rule); transition: background-color 200ms ease, color 200ms ease, transform 200ms ease;
 }
 .goal-bar .star.on { background: var(--gold); color: #5a3d00; border-color: #c78a12; transform: translate(-50%, -50%) scale(1.15); }
-.goal-text { margin: 0; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; }
+.goal-text { margin: 0; font-size: var(--step--1); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Board */
 .board-wrap { position: relative; }
@@ -143,7 +157,14 @@ button { font: inherit; color: inherit; }
 .tile[data-mult="3"] .face { background: var(--rose); color: #fff; box-shadow: inset 0 -4px 0 #a92a5a, 0 0 0 2px rgba(226,69,124,0.5), 0 2px 0 rgba(0,0,0,0.25); }
 .tile[data-mult="3"] .face .m { color: #fff; }
 .tile.sel .face { transform: translateY(-4px) scale(1.06); box-shadow: inset 0 -4px 0 var(--tile-edge), 0 0 0 3px var(--accent), 0 8px 14px rgba(0,0,0,0.35); }
-.tile.hint .face { animation: hint 0.9s ease-in-out 3; }
+.tile[data-bomb="1"] .face { background: var(--blast); color: #2a0d00; box-shadow: inset 0 -4px 0 #c95b30, 0 0 0 2px rgba(255,138,92,0.5), 0 2px 0 rgba(0,0,0,0.25); }
+.tile[data-bomb="1"] .face .m { color: #2a0d00; text-transform: uppercase; letter-spacing: 0.04em; }
+.tile.hint .face { animation: hint 0.9s ease-in-out 3; animation-delay: var(--d, 0s); }
+.tile.path .face { background: #ffe58a; color: #241a00; transform: scale(0.94); box-shadow: inset 0 -4px 0 #d9b43c, 0 0 0 3px #ffd23f; }
+.board.valid .tile.path .face { background: #a8ecc0; color: #0b2a17; box-shadow: inset 0 -4px 0 #5fbf84, 0 0 0 3px #4fd38a; }
+.trail { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); pointer-events: none; overflow: visible; }
+.trail polyline { fill: none; stroke: #ffd23f; stroke-width: 9px; stroke-linecap: round; stroke-linejoin: round; opacity: 0.55; vector-effect: non-scaling-stroke; }
+.board.valid .trail polyline { stroke: #4fd38a; }
 .tile.word .face { background: #ffe58a; color: #241a00; transform: scale(1.08); }
 .tile.word.chain2 .face { background: #ffc46b; }
 .tile.word.chain3 .face { background: #ff9c8a; }
@@ -266,6 +287,8 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 .demo i.hl { background: #ffe58a; color: #241a00; }
 .demo i.g { background: var(--gold); color: #1b1300; box-shadow: inset 0 -3px 0 #c78a12; }
 .demo i.r { background: var(--rose); color: #fff; box-shadow: inset 0 -3px 0 #a92a5a; }
+.demo i.b { background: var(--blast); color: #2a0d00; box-shadow: inset 0 -3px 0 #c95b30; }
+.demo i.w { background: var(--wild); color: #fff; box-shadow: inset 0 -3px 0 var(--wild-edge); }
 .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: var(--step--1); opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
 .toast.show { opacity: 1; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -305,10 +328,18 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
     <p id="goal-text" class="goal-text">Score 12,000 for one star</p>
   </div>
 
+  <div class="word-bar">
+    <div id="word-now" class="word-now" aria-live="polite"><span class="word-ph">Drag across letters to spell a word</span></div>
+    <span id="combo" class="combo" hidden>Combo ×1.5</span>
+    <button id="word-clear" class="word-x" type="button" hidden aria-label="Clear the word">✕</button>
+    <button id="word-go" class="word-go" type="button" hidden>Play</button>
+  </div>
+
   <div class="board-wrap">
-    <div id="board" class="board" role="grid" aria-label="Letter board. Swap two neighbouring letters to spell a word.">
+    <div id="board" class="board" role="grid" aria-label="Letter board. Drag through touching letters, diagonals too, to spell a word.">
       <div class="grid-lines" aria-hidden="true"></div>
       <div id="tiles" class="tiles"></div>
+      <svg class="trail" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline id="trail-line" points=""/></svg>
     </div>
     <div id="pops" class="pops" aria-hidden="true"></div>
     <div id="callout" class="callout" aria-hidden="true"></div>
@@ -339,11 +370,11 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 
   <section class="feed" aria-live="polite">
     <div id="feed-row" class="feed-row"></div>
-    <p id="feed-hint" class="hint-text">Swap two neighbouring letters to spell a word across or down. Drag a tile, or tap one and then its neighbour.</p>
+    <p id="feed-hint" class="hint-text">Drag through touching letters (diagonals count) to spell a word. You can also tap letters one at a time, then tap the last one again to play it.</p>
   </section>
 
   <div class="actions">
-    <button id="hint-btn" class="btn" type="button">Show a move</button>
+    <button id="hint-btn" class="btn" type="button">Show a word</button>
     <button id="new-btn" class="btn primary" type="button" hidden>Next level</button>
     <button id="result-btn" class="btn primary" type="button" hidden>See result</button>
   </div>
@@ -353,17 +384,15 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
   <div class="sheet">
     <h2 id="help-title">How to play</h2>
     <ol class="rules">
-      <li>Swap two neighbouring letters to spell a word of 3 to 6 letters, reading left to right or top to bottom.
+      <li>Drag through touching letters to spell a word of 3 to 8 letters. Diagonals count, and each tile can be used once per word.
         <div class="demo" aria-hidden="true"><i class="hl">S</i><i class="hl">T</i><i class="hl">A</i><i class="hl">R</i></div></li>
-      <li>Words clear and the letters above fall. If the fall spells more words, they score again with a chain bonus.</li>
-      <li>Longer words score far more. A 5-letter word leaves a <b>×2</b> tile and a 6-letter word a <b>×3</b>. Use them in a word to multiply it, and two together multiply each other.
-        <div class="demo" aria-hidden="true"><i class="g">E</i><i class="r">A</i></div></li>
-      <li>When an across word and a down word share a letter, that's a <b>crossing</b>: both score double and your power meter jumps.</li>
+      <li>The word clears and new letters drop in. Each word uses one move. If it isn't a word, nothing happens and no move is used.</li>
+      <li>Longer words score far more, and they leave a special tile where they end: 5 letters a <b>×2</b> tile, 6 letters a <b>bomb</b> that blows up the 3×3 around it when you use it, and 7 or more a <b>★ wild</b> that stands for any letter.
+        <div class="demo" aria-hidden="true"><i class="g">E</i><i class="b">T</i><i class="w">★</i></div></li>
+      <li>Play words of 4+ letters in a row to build a <b>combo</b>, up to ×3. A 3-letter word resets it.</li>
       <li>Every letter you clear charges the <b>power meter</b>. Each time it fills you earn a powerup. Using one costs no move:
-        <b>Shuffle</b> mixes up the board, <b>Line clear</b> wipes out a row or column, <b>Bomb</b> clears a 3×3 square, and <b>Wild</b> turns a tile into a ★ that stands for any letter.</li>
-      <li>A swap that spells nothing bounces back and costs nothing. Powerups you haven't used when the moves run out are worth 1,500 points each.</li>
-      <li><b>Levels:</b> beat the target score for a star, and hit the higher marks for two and three. Each level is a little tougher than the last.</li>
-      <li><b>Daily:</b> everyone gets the same board and 20 moves. Share your score.</li>
+        <b>Shuffle</b> mixes up the board, <b>Line clear</b> wipes out a row or column, <b>Bomb</b> clears a 3×3 square, and <b>Wild</b> turns a tile into a ★. Unused powerups are worth 1,500 points each at the end.</li>
+      <li><b>Levels:</b> beat the target score for a star, and the higher marks for two and three. <b>Daily:</b> everyone gets the same board and 20 words.</li>
     </ol>
     <button id="help-close" class="btn primary" type="button">Play</button>
   </div>
@@ -398,17 +427,17 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
     </div>
     <div class="kv">
       <div><span class="label">Best word</span><b id="r-word">-</b></div>
-      <div><span class="label">Words</span><b id="r-words">0</b></div>
+      <div><span class="label" id="r-words-label">Words</span><b id="r-words">0</b></div>
       <div><span class="label" id="r-streak-label">Day streak</span><b id="r-streak">1</b></div>
     </div>
     <figure class="chart">
-      <figcaption class="label">Points per move</figcaption>
+      <figcaption class="label">Points per word</figcaption>
       <div id="r-bars" class="bars" role="img"></div>
-      <div class="axis"><span>Move 1</span><span id="r-last">Move 20</span></div>
+      <div class="axis"><span>Word 1</span><span id="r-last">Word 20</span></div>
     </figure>
     <button id="r-level-btn" class="btn primary" type="button" hidden>Next level</button>
     <button id="copy-btn" class="btn primary" type="button">Share result</button>
-    <p class="legend" id="share-legend">Copies your score with one square per move, from <span class="sq t1"></span> fewer points to <span class="sq t5"></span> more.</p>
+    <p class="legend" id="share-legend">Copies your score with one square per word, from <span class="sq t1"></span> fewer points to <span class="sq t5"></span> more.</p>
     <details class="preview">
       <summary>Preview what you'll share</summary>
       <pre id="r-share" class="share-box"></pre>
@@ -431,12 +460,15 @@ var WORDS = "/*@WORDS*/";
   var SIZE = L.SIZE;
   var EPOCH = Date.UTC(2026, 9, 14); // Puzzle #1
   var POWER_NAMES = { shuffle: "Shuffle", line: "Line clear", bomb: "Bomb", wild: "Wild" };
+  var SPECIAL_NAMES = { x2: "×2 tile", bomb: "Bomb tile", wild: "Wild tile" };
 
   var $ = function (id) { return document.getElementById(id); };
   var tilesEl = $("tiles");
   var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   var wait = function (ms) { return new Promise(function (r) { setTimeout(r, reduced ? Math.min(ms, 60) : ms); }); };
 
+  // Saves from the old swap version can't replay as words, so this version keeps its own keys.
+  var K = "lf2:";
   function load(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
@@ -445,6 +477,7 @@ var WORDS = "/*@WORDS*/";
   function puzzleNo(ds) { var p = ds.split("-").map(Number); return Math.round((Date.UTC(p[0], p[1] - 1, p[2]) - EPOCH) / 864e5) + 1; }
   function fmt(n) { return n.toLocaleString("en-US"); }
   function same(a, b) { return a && b && a[0] === b[0] && a[1] === b[1]; }
+  function touching(a, b) { return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])) === 1; }
 
   // ---- settings ---------------------------------------------------------
   var prefs = Object.assign({ tint: true, values: true, big: false, sound: true }, load("lf:prefs", {}));
@@ -461,7 +494,7 @@ var WORDS = "/*@WORDS*/";
     $(p[0]).addEventListener("change", function (e) { prefs[p[1]] = e.target.checked; save("lf:prefs", prefs); applyPrefs(); });
   });
 
-  // ---- sound: tiny synth, starts on the first tap ------------------------
+  // ---- sound: tiny synth, starts on the first touch ----------------------
   var audio = null;
   function tone(freq, dur, type, vol, delay) {
     if (!prefs.sound) return;
@@ -476,36 +509,39 @@ var WORDS = "/*@WORDS*/";
       o.start(t); o.stop(t + dur + 0.02);
     } catch (e) {}
   }
-  // Each word in a chain pops a little higher.
-  function popSound(chain, k) { tone(440 * Math.pow(2, ((chain - 1) * 4 + k * 2) / 12), 0.2, "triangle", 0.13); }
+  // A soft tick for each letter added to the path, climbing the scale.
+  function tickSound(n) { tone(330 * Math.pow(2, (n * 2) / 12), 0.07, "sine", 0.06); }
+  function wordSound(len) { for (var k = 0; k < Math.min(len, 6); k++) tone(523 * Math.pow(2, k * 3 / 12), 0.18, "triangle", 0.1, k * 0.045); }
   function boomSound() { tone(90, 0.4, "sawtooth", 0.14); tone(60, 0.5, "sine", 0.18); }
   function chimeSound(n) { for (var k = 0; k < n; k++) tone(660 * Math.pow(2, k * 4 / 12), 0.35, "sine", 0.12, k * 0.09); }
+  function nopeSound() { tone(180, 0.15, "square", 0.05); }
   function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 
   // ---- game state -------------------------------------------------------
-  // moves holds every action in order: [a, b] for a swap, {p, cell, dir} for a powerup.
+  // moves holds every action in order: an array of cells for a word, {p, cell, dir} for a powerup.
   function setBusy(v) { S.busy = v; $("board").dataset.busy = v ? 1 : 0; }
-  var S = { mode: "level", day: null, seed: null, game: null, moves: [], hints: 0, busy: false, sel: null, els: {}, aim: null, level: null, starsShown: 0 };
+  var S = { mode: "level", day: null, seed: null, game: null, moves: [], hints: 0, busy: false, els: {}, aim: null, level: null, starsShown: 0, path: [] };
 
   // Level progress: the next level to play, and the best stars on each.
-  function progress() { return Object.assign({ current: 1, stars: {} }, load("lf:levels", {})); }
-  function storageKey() { return S.mode === "daily" ? "lf:daily:" + S.day : "lf:level-game"; }
+  function progress() { return Object.assign({ current: 1, stars: {} }, load(K + "levels", {})); }
+  function storageKey() { return S.mode === "daily" ? K + "daily:" + S.day : K + "level-game"; }
   function persist() { save(storageKey(), { seed: S.seed, moves: S.moves, hints: S.hints, n: S.level && S.level.n }); }
   function starsFor(score) { return S.level ? S.level.targets.filter(function (t) { return score >= t; }).length : 0; }
 
   function start(mode, fresh) {
-    S.mode = mode; S.sel = null; setBusy(false);
-    save("lf:mode", mode);
+    S.mode = mode; setBusy(false);
+    save(K + "mode", mode);
     endAim();
+    clearPath();
     S.day = dayStr(new Date());
     var saved = null;
     if (mode === "daily") {
       S.level = null;
-      saved = fresh ? null : load("lf:daily:" + S.day, null);
+      saved = fresh ? null : load(K + "daily:" + S.day, null);
       S.seed = "daily-" + S.day;
     } else {
       S.level = L.level(progress().current);
-      saved = fresh ? null : load("lf:level-game", null);
+      saved = fresh ? null : load(K + "level-game", null);
       if (saved && saved.n !== S.level.n) saved = null;
       S.seed = (saved && saved.seed) || "lv" + S.level.n + "-" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
     }
@@ -547,12 +583,15 @@ var WORDS = "/*@WORDS*/";
     el.querySelector(".ch").textContent = wild ? "★" : t.ch;
     el.querySelector(".v").textContent = wild ? "" : L.VALUES[t.ch];
     var m = el.querySelector(".m");
-    m.hidden = t.mult === 1; m.textContent = "×" + t.mult;
+    m.hidden = t.mult === 1 && !t.bomb;
+    m.textContent = t.bomb ? "bomb" : "×" + t.mult;
     el.dataset.mult = t.mult;
+    el.dataset.bomb = t.bomb ? 1 : 0;
     el.dataset.vowel = "aeiou".indexOf(t.ch) >= 0 ? 1 : 0;
     el.dataset.wild = wild ? 1 : 0;
     el.dataset.r = r; el.dataset.c = c;
-    el.setAttribute("aria-label", (wild ? "Wild" : t.ch.toUpperCase()) + ", row " + (r + 1) + " column " + (c + 1) + (t.mult > 1 ? ", times " + t.mult : ""));
+    el.setAttribute("aria-label", (wild ? "Wild" : t.ch.toUpperCase()) + ", row " + (r + 1) + " column " + (c + 1) +
+      (t.mult > 1 ? ", times " + t.mult : "") + (t.bomb ? ", bomb" : ""));
   }
   function place(el, r, c) { el.style.setProperty("--r", r); el.style.setProperty("--c", c); }
 
@@ -612,17 +651,20 @@ var WORDS = "/*@WORDS*/";
     $("hint-btn").hidden = over;
     $("result-btn").hidden = !over;
     $("new-btn").hidden = !(over && S.mode === "level");
+    // Combo: shown once a streak of 4+ letter words is going.
+    var next = g.nextCombo();
+    $("combo").hidden = over || next <= 1;
+    $("combo").textContent = "Combo ×" + next;
     if (S.level) {
       var top = S.level.targets[2], n = starsFor(g.score);
       $("goal-fill").style.width = Math.min(100, 100 * g.score / top) + "%";
       $("goal-bar").setAttribute("aria-valuemax", top);
       $("goal-bar").setAttribute("aria-valuenow", g.score);
       for (var k = 0; k < 3; k++) $("star-" + k).classList.toggle("on", k < n);
-      $("goal-text").textContent = n === 3 ? "Three stars! Keep going for a high score." :
+      $("goal-text").textContent = n === 3 ? "Three stars! Keep scoring." :
         "Score " + fmt(S.level.targets[n]) + " for " + (n === 0 ? "one star" : n === 1 ? "two stars" : "three stars");
       $("new-btn").textContent = n ? "Next level" : "Try again";
     }
-    // Power meter and tray.
     $("meter-fill").style.width = (100 * g.power / g.powerAt) + "%";
     $("meter").setAttribute("aria-valuemax", g.powerAt);
     $("meter").setAttribute("aria-valuenow", g.power);
@@ -655,87 +697,6 @@ var WORDS = "/*@WORDS*/";
     $("feed-row").appendChild(c);
   }
 
-  // ---- animating a result from the rules ----------------------------------
-  var WORD_CLASSES = ["word", "chain1", "chain2", "chain3", "blast"];
-  async function animate(res) {
-    $("feed-row").textContent = "";
-    $("feed-hint").hidden = true;
-    var chain = 0;
-    for (var i = 0; i < res.steps.length; i++) {
-      var st = res.steps[i];
-      if (st.wild) {
-        var we = cellEl(st.wild[0], st.wild[1]);
-        if (we) { paint(we, { ch: L.WILD, mult: +we.dataset.mult }, st.wild[0], st.wild[1]); we.classList.add("made"); }
-        callout("Wild!");
-        await wait(450);
-        if (we) we.classList.remove("made");
-        continue;
-      }
-      if (st.shuffle) {
-        callout("Shuffle!");
-        draw(st.layout);
-        await wait(450);
-        continue;
-      }
-      if (st.blast) {
-        st.blast.cells.forEach(function (cl) { var el = cellEl(cl[0], cl[1]); if (el) el.classList.add("blast"); });
-        chip("blast-chip", POWER_NAMES[st.blast.kind], "+" + fmt(st.blast.points));
-        callout(st.blast.kind === "bomb" ? "Boom!" : "Zap!");
-        boomSound(); buzz(40);
-        popAt(st.blast.cells, st.blast.points, true);
-        await wait(320);
-      } else {
-        chain++;
-        var c = chain;
-        st.words.forEach(function (w, k) {
-          popSound(c, k);
-          popAt(w.cells, w.points, w.points >= 5000);
-          w.cells.forEach(function (cl) {
-            var el = cellEl(cl[0], cl[1]);
-            if (el) el.classList.add("word", c >= 3 ? "chain3" : c === 2 ? "chain2" : "chain1");
-          });
-          chip("", w.word, "+" + fmt(w.points) +
-            (w.mult > 1 ? ' <span class="x">×' + w.mult + "</span>" : "") +
-            (w.cross ? ' <span class="x">crossing ×2</span>' : "") +
-            (c > 1 ? ' <span class="x">chain ' + c + "</span>" : ""));
-        });
-        if (st.words.some(function (w) { return w.cross; })) callout("Crossing!");
-        else if (c >= 2) callout(c === 2 ? "Chain!" : c === 3 ? "Triple chain!" : "Chain ×" + c + "!");
-        else if (st.words.some(function (w) { return w.word.length >= 6; })) callout("Huge word!");
-        else if (st.words.length >= 2) callout("Double!");
-        await wait(380);
-      }
-      st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) el.classList.add("gone"); });
-      st.made.forEach(function (m) { var el = S.els[m.id]; if (el) WORD_CLASSES.forEach(function (k) { el.classList.remove(k); }); });
-      await wait(190);
-      st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) { el.remove(); delete S.els[cl.id]; } });
-      draw(st.layout);
-      st.made.forEach(function (m) { var el = S.els[m.id]; if (el) { el.classList.add("made"); setTimeout(function () { el.classList.remove("made"); }, 650); } });
-      hud();
-      starCheck();
-      await wait(380);
-      tilesEl.querySelectorAll(".word,.blast").forEach(function (el) { WORD_CLASSES.forEach(function (k) { el.classList.remove(k); }); });
-    }
-    if (res.shuffled) toast("No moves left, so the letters were shuffled");
-    draw(L.snapshot(S.game.board));
-    hud();
-    if (res.earned && res.earned.length) {
-      res.earned.forEach(function (e) {
-        chip("earn-chip", POWER_NAMES[e.kind], "earned");
-        var b = $("pw-" + e.kind);
-        b.classList.remove("earned"); void b.offsetWidth; b.classList.add("earned");
-      });
-      callout(res.earned.length > 1 ? res.earned.length + " powerups!" : "+ " + POWER_NAMES[res.earned[0].kind] + "!");
-      await wait(500);
-    }
-    // Praise the whole move by its points.
-    var total = res.words.reduce(function (s, w) { return s + w.points; }, 0);
-    var praise = total >= 40000 ? "Unstoppable!" : total >= 20000 ? "Incredible!" : total >= 10000 ? "Amazing!" : total >= 5000 ? "Great!" : total >= 2500 ? "Nice!" : "";
-    if (praise && !(res.earned && res.earned.length)) { callout(praise); if (total >= 10000) buzz(30); await wait(300); }
-    starCheck();
-    if (res.cashIn) toast("Unused powerups cashed in: +" + fmt(res.cashIn));
-  }
-
   // Floating points where the word was.
   function popAt(cells, points, big) {
     var r = 0, c = 0;
@@ -760,47 +721,141 @@ var WORDS = "/*@WORDS*/";
     }
   }
 
-  // ---- moves ------------------------------------------------------------
-  function select(cell) {
-    clearSel();
-    S.sel = cell;
-    var el = cell && cellEl(cell[0], cell[1]);
-    if (el) el.classList.add("sel");
-  }
-  function clearSel() {
-    var old = tilesEl.querySelector(".sel");
-    if (old) old.classList.remove("sel");
-    S.sel = null;
+  // ---- animating a result from the rules ----------------------------------
+  async function animate(res) {
+    $("feed-row").textContent = "";
+    $("feed-hint").hidden = true;
+    var st = res.steps[0];
+    if (st.wild) {
+      var we = cellEl(st.wild[0], st.wild[1]);
+      if (we) { draw(st.layout); we.classList.add("made"); }
+      callout("Wild!");
+      await wait(450);
+      if (we) we.classList.remove("made");
+    } else if (st.shuffle) {
+      callout("Shuffle!");
+      draw(st.layout);
+      await wait(450);
+    } else {
+      var w = st.words[0];
+      if (w) {
+        w.cells.forEach(function (cl) { var el = cellEl(cl[0], cl[1]); if (el) el.classList.add("word"); });
+        wordSound(w.word.length);
+        popAt(w.cells, w.points, w.points >= 5000);
+        chip("", w.word, "+" + fmt(w.points) +
+          (w.mult > 1 ? ' <span class="x">×' + w.mult + "</span>" : "") +
+          (w.combo > 1 ? ' <span class="x">combo ×' + w.combo + "</span>" : ""));
+      }
+      if (st.blast) {
+        await wait(w ? 220 : 0);
+        st.blast.cells.forEach(function (cl) { var el = cellEl(cl[0], cl[1]); if (el) el.classList.add("blast"); });
+        chip("blast-chip", w ? "Bomb tile" : POWER_NAMES[st.blast.kind], "+" + fmt(st.blast.points));
+        popAt(st.blast.cells, st.blast.points, true);
+        boomSound(); buzz(40);
+      }
+      // Say the best thing that happened.
+      var made = st.made[0];
+      if (made) callout(made.kind === "wild" ? "Wild tile!" : made.kind === "bomb" ? "Bomb tile!" : "×2 tile!");
+      else if (st.blast) callout(st.blast.kind === "line" ? "Zap!" : "Boom!");
+      else if (w && w.combo >= 2) callout("Combo ×" + w.combo + "!");
+      else if (w && w.word.length >= 4) callout(w.points >= 3000 ? "Great!" : "Nice!");
+      await wait(360);
+      st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) el.classList.add("gone"); });
+      await wait(190);
+      st.cleared.forEach(function (cl) { var el = S.els[cl.id]; if (el) { el.remove(); delete S.els[cl.id]; } });
+      tilesEl.querySelectorAll(".word,.blast").forEach(function (el) { el.classList.remove("word", "blast"); });
+      draw(st.layout);
+      st.made.forEach(function (m) {
+        var el = S.els[m.id];
+        if (el) { el.classList.add("made"); setTimeout(function () { el.classList.remove("made"); }, 650); }
+        chip("earn-chip", SPECIAL_NAMES[m.kind], "made");
+      });
+      hud();
+      starCheck();
+      await wait(360);
+    }
+    if (res.shuffled) toast("Few words left, so the letters were shuffled");
+    draw(L.snapshot(S.game.board));
+    hud();
+    if (res.earned && res.earned.length) {
+      res.earned.forEach(function (e) {
+        chip("earn-chip", POWER_NAMES[e.kind], "earned");
+        var b = $("pw-" + e.kind);
+        b.classList.remove("earned"); void b.offsetWidth; b.classList.add("earned");
+      });
+      callout(res.earned.length > 1 ? res.earned.length + " powerups!" : "+ " + POWER_NAMES[res.earned[0].kind] + "!");
+      chimeSound(2);
+      await wait(500);
+    }
+    starCheck();
+    if (res.cashIn) toast("Unused powerups cashed in: +" + fmt(res.cashIn));
   }
 
-  async function play(a, b) {
-    if (S.busy || S.game.over() || S.aim) return;
-    if (b[0] < 0 || b[1] < 0 || b[0] >= SIZE || b[1] >= SIZE) return;
-    setBusy(true);
-    clearSel();
-    clearHint();
-    var ea = cellEl(a[0], a[1]), eb = cellEl(b[0], b[1]);
-    // Show the swap first, then ask the rules whether it counts.
-    place(ea, b[0], b[1]); place(eb, a[0], a[1]);
-    ea.classList.remove("falling"); eb.classList.remove("falling");
-    await wait(200);
-    var res = S.game.tryMove(a, b);
+  // ---- tracing a word -----------------------------------------------------
+  function pathWord() {
+    var g = S.game.board;
+    return S.path.map(function (c) { var ch = g[c[0]][c[1]].ch; return ch === L.WILD ? "★" : ch; }).join("");
+  }
+  function showPath() {
+    tilesEl.querySelectorAll(".path").forEach(function (el) { el.classList.remove("path"); });
+    var word = S.path.length >= L.MIN ? S.game.wordAt(S.path) : null;
+    $("board").classList.toggle("valid", !!word);
+    S.path.forEach(function (c) { var el = cellEl(c[0], c[1]); if (el) el.classList.add("path"); });
+    // The trail: a line through the centres of the traced tiles.
+    $("trail-line").setAttribute("points", S.path.map(function (c) { return ((c[1] + 0.5) * 100 / SIZE) + "," + ((c[0] + 0.5) * 100 / SIZE); }).join(" "));
+    var bar = $("word-now");
+    if (!S.path.length) {
+      bar.innerHTML = '<span class="word-ph">' + (S.aim ? "Pick a tile for the powerup" : "Drag across letters to spell a word") + "</span>";
+      bar.classList.remove("ok");
+    } else {
+      bar.textContent = word ? word : pathWord();
+      bar.classList.toggle("ok", !!word);
+    }
+    $("word-go").hidden = !(word && S.tapping);
+    $("word-clear").hidden = !(S.path.length && S.tapping);
+  }
+  function clearPath() { S.path = []; S.tapping = false; if ($("trail-line")) showPath(); }
+
+  // Add a cell to the path, or step back if it's the previous one. Returns true if the path changed.
+  function extendPath(cell) {
+    var p = S.path, last = p[p.length - 1];
+    if (!last) { p.push(cell); tickSound(1); return true; }
+    if (same(cell, last)) return false;
+    if (p.length >= 2 && same(cell, p[p.length - 2])) { p.pop(); return true; }
+    if (!touching(cell, last) || p.some(function (c) { return same(c, cell); }) || p.length >= L.MAX) return false;
+    p.push(cell); tickSound(p.length); buzz(5);
+    return true;
+  }
+
+  async function submitPath() {
+    var path = S.path.slice();
+    if (S.busy || S.game.over()) return;
+    if (path.length < L.MIN) { clearPath(); return; }
+    var res = S.game.trace(path);
     if (!res) {
-      place(ea, a[0], a[1]); place(eb, b[0], b[1]);
-      await wait(200);
-      ea.classList.add("shake"); eb.classList.add("shake");
+      // Not a word: shake it off, no move used.
+      var els = path.map(function (c) { return cellEl(c[0], c[1]); }).filter(Boolean);
+      els.forEach(function (el) { el.classList.add("shake"); });
+      nopeSound();
+      $("word-now").classList.add("nope");
       await wait(320);
-      ea.classList.remove("shake"); eb.classList.remove("shake");
-      setBusy(false);
+      els.forEach(function (el) { el.classList.remove("shake"); });
+      $("word-now").classList.remove("nope");
+      clearPath();
       return;
     }
-    S.moves.push([a, b]);
+    setBusy(true);
+    clearHint();
+    S.moves.push(path);
     persist();
     $("moves").textContent = S.game.movesLeft;
-    ea.dataset.r = b[0]; ea.dataset.c = b[1]; eb.dataset.r = a[0]; eb.dataset.c = a[1];
-    focusCell = b;
+    S.path = []; S.tapping = false;
+    $("trail-line").setAttribute("points", "");
+    $("board").classList.remove("valid");
+    $("word-go").hidden = true; $("word-clear").hidden = true;
     await animate(res);
     setBusy(false);
+    showPath();
     idle();
     if (S.game.over()) { await wait(500); finish(true); }
   }
@@ -814,17 +869,15 @@ var WORDS = "/*@WORDS*/";
   function startAim(kind) {
     if (S.busy || S.game.over() || !S.game.inv[kind]) return;
     if (S.aim && S.aim.kind === kind) { endAim(); return; }
-    clearSel(); clearHint();
+    clearPath(); clearHint();
     if (kind === "shuffle") { endAim(); usePower("shuffle", {}); return; }
     S.aim = { kind: kind, dir: (S.aim && S.aim.dir) || "row" };
     $("aim-bar").hidden = false;
     $("aim-dir").hidden = kind !== "line";
-    $("aim-row").setAttribute("aria-pressed", S.aim.dir === "row");
-    $("aim-col").setAttribute("aria-pressed", S.aim.dir === "col");
-    $("aim-text").textContent = AIM_TEXT[kind]();
+    refreshAim();
     $("board").classList.add("aiming");
     L.POWERS.forEach(function (k) { $("pw-" + k).setAttribute("aria-pressed", k === kind); });
-    preview(focusCell);
+    showPath();
   }
   function endAim() {
     S.aim = null;
@@ -832,6 +885,12 @@ var WORDS = "/*@WORDS*/";
     $("board").classList.remove("aiming");
     L.POWERS.forEach(function (k) { $("pw-" + k).setAttribute("aria-pressed", false); });
     preview(null);
+  }
+  function refreshAim() {
+    $("aim-row").setAttribute("aria-pressed", S.aim.dir === "row");
+    $("aim-col").setAttribute("aria-pressed", S.aim.dir === "col");
+    $("aim-text").textContent = AIM_TEXT[S.aim.kind]();
+    preview(focusCell);
   }
   function preview(cell) {
     tilesEl.querySelectorAll(".target").forEach(function (el) { el.classList.remove("target"); });
@@ -852,85 +911,106 @@ var WORDS = "/*@WORDS*/";
     persist();
     await animate(res);
     setBusy(false);
+    showPath();
     idle();
     if (S.game.over()) { await wait(500); finish(true); }
   }
   L.POWERS.forEach(function (k) { $("pw-" + k).addEventListener("click", function () { startAim(k); }); });
-  $("aim-cancel").addEventListener("click", endAim);
+  $("aim-cancel").addEventListener("click", function () { endAim(); showPath(); });
   $("aim-row").addEventListener("click", function () { if (S.aim) { S.aim.dir = "row"; refreshAim(); } });
   $("aim-col").addEventListener("click", function () { if (S.aim) { S.aim.dir = "col"; refreshAim(); } });
-  function refreshAim() {
-    $("aim-row").setAttribute("aria-pressed", S.aim.dir === "row");
-    $("aim-col").setAttribute("aria-pressed", S.aim.dir === "col");
-    $("aim-text").textContent = AIM_TEXT[S.aim.kind]();
-    preview(focusCell);
-  }
 
-  // Early levels: if the player is stuck for a few seconds, a possible move glows.
+  // ---- hints --------------------------------------------------------------
+  // Early levels: if the player is stuck for a few seconds, a word glows.
   var idleTimer = null;
   function idle() {
     clearTimeout(idleTimer);
     if (!S.level || !S.level.assist || S.game.over()) return;
-    idleTimer = setTimeout(function () { if (!S.busy && !S.aim && !S.sel) showHint(true); }, S.level.assist * 1000);
+    idleTimer = setTimeout(function () { if (!S.busy && !S.aim && !S.path.length) showHint(true); }, S.level.assist * 1000);
   }
-
   var hintTimer = null;
   function clearHint() {
     clearTimeout(hintTimer);
-    tilesEl.querySelectorAll(".hint").forEach(function (el) { el.classList.remove("hint"); });
+    tilesEl.querySelectorAll(".hint").forEach(function (el) { el.classList.remove("hint"); el.style.removeProperty("--d"); });
   }
   function showHint(auto) {
     if (S.busy || S.game.over()) return;
     if (auto !== true) { endAim(); S.hints++; persist(); }
-    var m = S.game.hint();
-    if (!m) return;
+    var h = S.game.hint();
+    if (!h) return;
     clearHint();
-    m.forEach(function (c) { var el = cellEl(c[0], c[1]); if (el) el.classList.add("hint"); });
-    hintTimer = setTimeout(function () { clearHint(); idle(); }, 2800);
+    // Glow the letters in order, so the word reads as it lights up.
+    h.path.forEach(function (c, k) {
+      var el = cellEl(c[0], c[1]);
+      if (el) { el.style.setProperty("--d", (k * 0.12) + "s"); el.classList.add("hint"); }
+    });
+    hintTimer = setTimeout(function () { clearHint(); idle(); }, 3200);
   }
+  $("hint-btn").addEventListener("click", function () { showHint(false); });
 
-  // ---- input: drag, tap-tap, keyboard -------------------------------------
+  // ---- input: drag to trace, or tap letters one by one ----------------------
+  // The cell under a point, if the point is near that cell's centre (so diagonals are easy to
+  // hit without grazing the neighbours).
+  function cellAt(x, y, loose) {
+    var box = tilesEl.getBoundingClientRect();
+    var fx = (x - box.left) / box.width * SIZE, fy = (y - box.top) / box.height * SIZE;
+    var c = Math.floor(fx), r = Math.floor(fy);
+    if (r < 0 || c < 0 || r >= SIZE || c >= SIZE) return null;
+    var dx = fx - c - 0.5, dy = fy - r - 0.5;
+    if (!loose && Math.hypot(dx, dy) > 0.42) return null;
+    return [r, c];
+  }
   var drag = null;
   tilesEl.addEventListener("pointerdown", function (e) {
-    var el = e.target.closest(".tile");
-    if (!el || S.busy) return;
-    drag = { x: e.clientX, y: e.clientY, cell: [+el.dataset.r, +el.dataset.c], moved: false, id: e.pointerId };
-    if (S.aim) preview(drag.cell);
+    if (S.busy || S.game.over()) return;
+    var cell = cellAt(e.clientX, e.clientY, true);
+    if (!cell) return;
+    e.preventDefault();
+    clearHint(); idle();
+    drag = { id: e.pointerId, start: cell, moved: false };
     try { tilesEl.setPointerCapture(e.pointerId); } catch (err) {}
+    if (S.aim) { preview(cell); return; }
+    if (S.tapping) {
+      // Tap mode: tapping the last letter again plays the word; tapping a neighbour adds it.
+      if (same(cell, S.path[S.path.length - 1]) && S.path.length >= L.MIN) { drag.tapSubmit = true; return; }
+      if (!extendPath(cell)) { S.path = []; S.tapping = false; extendPath(cell); }
+    } else {
+      S.path = []; extendPath(cell);
+    }
+    showPath();
   });
   tilesEl.addEventListener("pointermove", function (e) {
     if (S.aim) {
-      // Aiming: the target follows the finger or mouse.
-      var box = tilesEl.getBoundingClientRect();
-      var cell = [Math.floor((e.clientY - box.top) / box.height * SIZE), Math.floor((e.clientX - box.left) / box.width * SIZE)];
-      if (cell[0] >= 0 && cell[1] >= 0 && cell[0] < SIZE && cell[1] < SIZE) { preview(cell); if (drag) drag.cell = cell; }
+      var ac = cellAt(e.clientX, e.clientY, true);
+      if (ac) { preview(ac); if (drag) drag.start = ac; }
       return;
     }
-    if (!drag || drag.moved || e.pointerId !== drag.id) return;
-    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    var min = tilesEl.clientWidth / SIZE * 0.35;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < min) return;
-    drag.moved = true;
-    var a = drag.cell;
-    var b = Math.abs(dx) > Math.abs(dy) ? [a[0], a[1] + Math.sign(dx)] : [a[0] + Math.sign(dy), a[1]];
-    play(a, b);
+    if (!drag || e.pointerId !== drag.id) return;
+    var cell = cellAt(e.clientX, e.clientY, false);
+    if (!cell) return;
+    if (!same(cell, drag.start)) drag.moved = true;
+    if (extendPath(cell)) showPath();
   });
   tilesEl.addEventListener("pointerup", function (e) {
     if (!drag || e.pointerId !== drag.id) return;
     var d = drag; drag = null;
     if (S.busy) return;
-    if (S.aim) { usePower(S.aim.kind, { cell: d.cell, dir: S.aim.dir }); return; }
-    if (d.moved) return;
-    var a = S.sel, c = d.cell;
-    if (a && Math.abs(a[0] - c[0]) + Math.abs(a[1] - c[1]) === 1) play(a, c);
-    else if (same(a, c)) clearSel();
-    else select(c);
+    if (S.aim) { usePower(S.aim.kind, { cell: d.start, dir: S.aim.dir }); return; }
+    if (d.tapSubmit) { submitPath(); return; }
+    if (d.moved) { S.tapping = false; submitPath(); return; }
+    // A tap without dragging: keep building the word tap by tap.
+    S.tapping = true;
+    showPath();
   });
-  tilesEl.addEventListener("pointercancel", function () { drag = null; });
+  tilesEl.addEventListener("pointercancel", function () { drag = null; clearPath(); });
   tilesEl.addEventListener("pointerleave", function () { if (S.aim && !drag) preview(null); });
+  $("word-go").addEventListener("click", submitPath);
+  $("word-clear").addEventListener("click", clearPath);
 
+  // Keyboard: arrows move (diagonals with two keys in a row aren't possible, so Home/End/PgUp/PgDn
+  // step diagonally), Enter adds a letter or plays the word, Escape clears.
   var focusCell = [0, 0];
-  var DIRS = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+  var DIRS = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1], Home: [-1, -1], PageUp: [-1, 1], End: [1, -1], PageDown: [1, 1] };
   tilesEl.addEventListener("keydown", function (e) {
     var el = e.target.closest(".tile");
     if (!el) return;
@@ -938,22 +1018,21 @@ var WORDS = "/*@WORDS*/";
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (S.aim) { usePower(S.aim.kind, { cell: cell, dir: S.aim.dir }); return; }
-      if (same(S.sel, cell)) clearSel(); else select(cell);
+      S.tapping = true;
+      if (same(cell, S.path[S.path.length - 1]) && S.path.length >= L.MIN) { submitPath(); return; }
+      if (!extendPath(cell)) { S.path = []; extendPath(cell); }
+      showPath();
       return;
     }
     var d = DIRS[e.key];
-    if (!d) { if (e.key === "Escape") { clearSel(); endAim(); } return; }
+    if (!d) { if (e.key === "Escape") { clearPath(); endAim(); } return; }
     e.preventDefault();
     var next = [cell[0] + d[0], cell[1] + d[1]];
     if (next[0] < 0 || next[1] < 0 || next[0] >= SIZE || next[1] >= SIZE) return;
-    if (S.sel && !S.aim) { play(S.sel, next); return; }
     focusTo(next);
     if (S.aim) preview(next);
   });
-  tilesEl.addEventListener("click", function (e) {
-    // Keyboard "click" (Enter/Space) is handled in keydown; pointer taps in pointerup.
-    e.preventDefault();
-  });
+  tilesEl.addEventListener("click", function (e) { e.preventDefault(); });
   function focusTo(cell) {
     var cur = cellEl(focusCell[0], focusCell[1]);
     if (cur) cur.tabIndex = -1;
@@ -967,11 +1046,11 @@ var WORDS = "/*@WORDS*/";
   });
 
   // ---- results and sharing ----------------------------------------------
-  // Points per move on one scale, shared by the chart and the share squares.
+  // Points per word on one scale, shared by the chart and the share squares.
   var TIER_EMOJI = ["🟦", "🟩", "🟨", "🟧", "🟥"];
   function tier(p) { return p >= 8000 ? 4 : p >= 4000 ? 3 : p >= 2000 ? 2 : p >= 1000 ? 1 : 0; }
   function verdict(score) {
-    return score >= 90000 ? "Legendary!" : score >= 60000 ? "Brilliant!" : score >= 40000 ? "Great game!" : score >= 25000 ? "Good game!" : "Nice start!";
+    return score >= 60000 ? "Legendary!" : score >= 45000 ? "Brilliant!" : score >= 32000 ? "Great game!" : score >= 22000 ? "Good game!" : "Nice start!";
   }
 
   function shareText() {
@@ -979,28 +1058,26 @@ var WORDS = "/*@WORDS*/";
     var sq = g.moveLog().map(function (m) { return TIER_EMOJI[tier(m.points)]; });
     var lines = [];
     for (var i = 0; i < sq.length; i += 10) lines.push(sq.slice(i, i + 10).join(""));
-    var used = S.moves.filter(function (m) { return !Array.isArray(m); }).length;
     var stars = starsFor(g.score);
     var head = S.mode === "daily" ? "Letterfall #" + puzzleNo(S.day) : "Letterfall level " + S.level.n + " " + "★★★".slice(0, stars) + "☆☆☆".slice(stars);
     return head + ": " + fmt(g.score) + " points\n" + lines.join("\n") +
       (best ? "\nBest word: " + best.word.toUpperCase() : "") +
-      (used ? "\nPowerups used: " + used : "") +
       (S.hints ? "\n" + S.hints + " hint" + (S.hints > 1 ? "s" : "") : "");
   }
 
   function updateStats() {
-    var st = load("lf:stats", { played: 0, streak: 0, last: null, best: 0 });
+    var st = load(K + "stats", { played: 0, streak: 0, last: null, best: 0 });
     if (st.last === S.day) return st;
     var y = new Date(); y.setDate(y.getDate() - 1);
     st.streak = st.last === dayStr(y) ? st.streak + 1 : 1;
     st.played++; st.last = S.day; st.best = Math.max(st.best, S.game.score);
-    save("lf:stats", st);
+    save(K + "stats", st);
     return st;
   }
 
   function finish(justNow) {
     var g = S.game, best = g.bestWord();
-    var words = g.log.reduce(function (s, m) { return s + m.words; }, 0);
+    var log = g.moveLog();
     var lvl = S.mode === "level", stars = starsFor(g.score);
     $("result-kicker").textContent = lvl ? "Level " + S.level.n : "Daily #" + puzzleNo(S.day);
     $("result-title").textContent = lvl ? ["So close!", "Level complete!", "Great job!", "Perfect!"][stars] : verdict(g.score);
@@ -1008,11 +1085,17 @@ var WORDS = "/*@WORDS*/";
     $("r-stars").innerHTML = lvl ? [0, 1, 2].map(function (k) { return '<span class="' + (k < stars ? "on" : "") + '">★</span>'; }).join("") : "";
     $("r-stars").setAttribute("aria-label", stars + " of 3 stars");
     $("r-score").textContent = fmt(g.score);
-    $("r-breakdown").textContent = g.cashIn ? "points, including " + fmt(g.cashIn) + " for powerups you didn't use" : "points";
+    // Where the points came from, when it isn't all words.
+    var extra = [];
+    if (g.powerPoints) extra.push(fmt(g.powerPoints) + " from powerups");
+    if (g.cashIn) extra.push(fmt(g.cashIn) + " for powerups you didn't use");
+    $("r-breakdown").textContent = extra.length ? "points, including " + extra.join(" and ") : "points";
+    if (lvl && !stars) $("r-breakdown").textContent = "points. You needed " + fmt(S.level.targets[0]) + " for a star. Try again with a new board.";
     $("r-word").textContent = best ? best.word : "-";
-    $("r-words").textContent = words;
-    // One bar per move; the best move is labelled with its points.
-    var log = g.moveLog(), max = Math.max.apply(null, log.map(function (m) { return m.points; }).concat([1]));
+    $("r-words").textContent = log.length;
+    $("r-words-label").textContent = "Words";
+    // One bar per word; the best is labelled with its points.
+    var max = Math.max.apply(null, log.map(function (m) { return m.points; }).concat([1]));
     var bestAt = log.reduce(function (b, m, k) { return m.points > log[b].points ? k : b; }, 0);
     var bars = $("r-bars");
     bars.textContent = "";
@@ -1022,7 +1105,7 @@ var WORDS = "/*@WORDS*/";
       bar.style.height = Math.max(4, 100 * m.points / max) + "%";
       if (k === bestAt && m.points) {
         var em = document.createElement("em");
-        em.textContent = "+" + fmt(m.points);
+        em.textContent = (m.best || "").toUpperCase() + " +" + fmt(m.points);
         // Keep the label inside the chart near either edge.
         if (k < 3) em.style.cssText = "left:0;transform:none";
         else if (k > log.length - 4) em.style.cssText = "left:auto;right:0;transform:none";
@@ -1030,20 +1113,18 @@ var WORDS = "/*@WORDS*/";
       }
       bars.appendChild(bar);
     });
-    bars.setAttribute("aria-label", "Points for each of your " + log.length + " moves. Best move: " + fmt(log.length ? log[bestAt].points : 0) + " points.");
-    $("r-last").textContent = "Move " + log.length;
+    bars.setAttribute("aria-label", "Points for each of your " + log.length + " words.");
+    $("r-last").textContent = "Word " + log.length;
     if (lvl) {
       // Save the stars and unlock the next level.
       var pr = progress();
       pr.stars[S.level.n] = Math.max(pr.stars[S.level.n] || 0, stars);
       if (stars && pr.current === S.level.n) pr.current = S.level.n + 1;
-      save("lf:levels", pr);
+      save(K + "levels", pr);
       var total = 0;
       for (var key in pr.stars) total += pr.stars[key];
       $("r-streak-label").textContent = "Total stars";
       $("r-streak").textContent = total;
-      $("r-breakdown").textContent = stars ? $("r-breakdown").textContent :
-        "points. You needed " + fmt(S.level.targets[0]) + " for a star. Try again with a new board.";
     } else {
       var st = updateStats();
       $("r-streak-label").textContent = "Day streak";
@@ -1057,8 +1138,8 @@ var WORDS = "/*@WORDS*/";
     $("r-practice").hidden = lvl;
     var now = new Date(), mid = new Date(now); mid.setHours(24, 0, 0, 0);
     var mins = Math.round((mid - now) / 60000);
-    $("r-next").textContent = S.mode === "daily" ? "Next daily board in " + Math.floor(mins / 60) + " h " + (mins % 60) + " min." : "";
-    $("r-next").hidden = S.mode !== "daily";
+    $("r-next").textContent = !lvl ? "Next daily board in " + Math.floor(mins / 60) + " h " + (mins % 60) + " min." : "";
+    $("r-next").hidden = lvl;
     hud(true);
     if (justNow) {
       $("result").showModal();
@@ -1081,12 +1162,11 @@ var WORDS = "/*@WORDS*/";
   $("r-close").addEventListener("click", function () { $("result").close(); });
   $("result-btn").addEventListener("click", function () { finish(false); $("result").showModal(); });
   $("new-btn").addEventListener("click", function () { start("level", true); });
-  $("hint-btn").addEventListener("click", function () { showHint(false); });
   $("mode-daily").addEventListener("click", function () { if (S.mode !== "daily" && !S.busy) start("daily"); });
   $("mode-level").addEventListener("click", function () { if (S.mode !== "level" && !S.busy) start("level"); });
   $("help-btn").addEventListener("click", function () { $("help").showModal(); });
-  $("help-close").addEventListener("click", function () { $("help").close(); save("lf:seen-help", true); });
-  $("help").addEventListener("close", function () { save("lf:seen-help", true); });
+  $("help-close").addEventListener("click", function () { $("help").close(); });
+  $("help").addEventListener("close", function () { save(K + "seen-help", true); });
   $("settings-btn").addEventListener("click", function () { $("settings").showModal(); });
   $("settings-close").addEventListener("click", function () { $("settings").close(); });
 
@@ -1094,8 +1174,8 @@ var WORDS = "/*@WORDS*/";
   var lines = document.querySelector(".grid-lines");
   for (var i = 0; i < SIZE * SIZE; i++) lines.appendChild(document.createElement("i"));
   applyPrefs();
-  start(load("lf:mode", "level") === "daily" ? "daily" : "level");
-  if (!load("lf:seen-help", false)) {
+  start(load(K + "mode", "level") === "daily" ? "daily" : "level");
+  if (!load(K + "seen-help", false)) {
     try { $("help").showModal(); } catch (e) {}
   }
 })();

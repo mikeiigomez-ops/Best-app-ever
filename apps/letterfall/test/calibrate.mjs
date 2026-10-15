@@ -10,19 +10,19 @@ const L = createRequire(import.meta.url)(join(here, "../src/engine.js"));
 L.setWords(readFileSync(join(here, "../src/words.txt"), "utf8"));
 const games = +(process.argv[2] || 200);
 
-// A middling player: random legal swaps, and powerups spent as soon as they arrive.
+// A casual player: a random common word of 3-5 letters (what most people spot first), now and
+// then a longer one, and powerups spent as soon as they arrive.
 function play(opts, seed) {
   const g = new L.Game(seed, opts);
-  let r = 0;
   const rnd = L.makeRng(seed + "#bot");
   while (!g.over()) {
     const have = L.POWERS.filter((k) => g.inv[k]);
-    if (have.length) {
-      const k = have[0];
-      if (g.usePower(k, { cell: [Math.floor(rnd() * 6), Math.floor(rnd() * 6)], dir: rnd() < 0.5 ? "row" : "col" })) continue;
-    }
-    const moves = L.validMoves(g.board);
-    g.tryMove(...moves[Math.floor(rnd() * moves.length)]);
+    if (have.length && g.usePower(have[0], { cell: [Math.floor(rnd() * 6), Math.floor(rnd() * 6)], dir: rnd() < 0.5 ? "row" : "col" })) continue;
+    const all = L.solve(g.board);
+    const maxLen = rnd() < 0.15 ? 6 : 5;
+    const c = all.filter((w) => w.common && w.word.length <= maxLen);
+    const pool = c.length ? c : all;
+    g.trace(pool[Math.floor(rnd() * pool.length)].path);
   }
   return g.score;
 }
@@ -35,5 +35,5 @@ for (const n of levels.length ? levels : [1, 3, 5, 6, 10, 11, 15, 20, 30, 40, 60
   for (let i = 0; i < games; i++) scores.push(play(cfg, "cal" + n + "-" + i));
   scores.sort((a, b) => a - b);
   const stars = cfg.targets.map((t) => (100 * scores.filter((s) => s >= t).length / games).toFixed(0) + "%");
-  console.log(`level ${n}: moves ${cfg.moves} easy ${!!cfg.easy} rerolls ${cfg.rerolls}  p10 ${pct(scores, 0.1)} p25 ${pct(scores, 0.25)} p50 ${pct(scores, 0.5)} p75 ${pct(scores, 0.75)} p90 ${pct(scores, 0.9)}  targets ${cfg.targets.join("/")}  bot reaches 1/2/3 stars: ${stars.join(" ")}`);
+  console.log(`level ${n}: moves ${cfg.moves} easy ${!!cfg.easy}  p10 ${pct(scores, 0.1)} p25 ${pct(scores, 0.25)} p50 ${pct(scores, 0.5)} p75 ${pct(scores, 0.75)} p90 ${pct(scores, 0.9)}  targets ${cfg.targets.join("/")}  bot reaches 1/2/3 stars: ${stars.join(" ")}`);
 }
