@@ -1,4 +1,4 @@
-// Letterfall engine: pure game rules, no DOM. Runs in the page and in node (test/*.mjs).
+// Spellbright engine: pure game rules, no DOM. Runs in the page and in node (test/*.mjs).
 //
 // The board is SIZE x SIZE letter tiles. A move traces a word through neighbouring tiles (diagonals
 // count, no tile twice), 3 to 8 letters. The word clears, the tiles above fall, and new letters drop
@@ -13,7 +13,7 @@
 //
 // Everything random comes from seeded streams, so the same seed and the same actions always give
 // the same game: that is what makes the daily board fair to compare.
-var Letterfall = (function () {
+var Spellbright = (function () {
   var SIZE = 6;
   var MOVES = 20;
   var MIN = 3, MAX = 8;
@@ -449,4 +449,4 @@ var Letterfall = (function () {
     solve: solve, snapshot: snapshot, blastCells: blastCells, validPath: validPath, level: level
   };
 })();
-if (typeof module !== "undefined") module.exports = Letterfall;
+if (typeof module !== "undefined") module.exports = Spellbright;

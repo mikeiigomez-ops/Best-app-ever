@@ -1,5 +1,5 @@
 // Score distributions for level settings, used to set the star targets in engine.js.
-// Run: node apps/letterfall/test/calibrate.mjs [games]
+// Run: node apps/spellbright/test/calibrate.mjs [games]
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, dirname } from "node:path";

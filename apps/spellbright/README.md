@@ -1,6 +1,19 @@
-# Letterfall
+# Spellbright
 
-A word puzzle with match-3 energy: trace words through a grid of letter tiles, clear them, and watch new letters fall in.
+A word puzzle with match-3 energy and a story: trace words through a grid of letter tiles, clear them, and watch new letters fall in. The stars you earn relight Lumen City's neon signs.
+
+## The story (Episode 1: Main Street)
+
+A storm knocked every letter off every neon sign in Lumen City. You're the sign-maker's new apprentice. A three-panel cold open sets this up the first time you play; after that the **city screen** is home.
+
+- **Main Street** has three dark signs, each in three parts: Mo's Diner (name, coffee cup, OPEN ALL NIGHT), the Bijou cinema (name, marquee bulbs, tonight's movie) and Rosa's Bakery (name, croissant, FRESH BREAD DAILY). Parts cost 2-3 stars each, 21 in all, so a player averaging two stars a level finishes the episode in about ten levels.
+- **Stars come from levels.** Only stars beyond a level's previous best go in the purse, so replaying levels can't farm them.
+- **Characters:** Mo (diner), the twins Pip and Pia (cinema) and Rosa (bakery) greet you, react as each part lights up with a neon flicker, and hand you on to the next sign.
+- **Finale:** Wren the lighthouse keeper notes that storms knock letters down but don't carry them off. Someone took the lighthouse's letters; Episode 2, The Harbour, is teased.
+
+Story text lives in `SIGNS`, `CAST`, `FINALE` and `INTRO` in `src/spellbright.html`; the signs are CSS neon type and three small inline SVGs, no image assets.
+
+## How it plays
 
 - **Trace** a word of 3 to 8 letters by dragging through touching tiles (diagonals count, each tile once). You can also tap letters one at a time and tap the last one again to play it. A trace that isn't a word costs nothing.
 - **Every word is yours.** The word clears, tiles above fall and new letters drop in; the game never spells words by itself.
@@ -8,7 +21,7 @@ A word puzzle with match-3 energy: trace words through a grid of letter tiles, c
 - **Combo:** words of 4+ letters in a row build a multiplier (×1.5, ×2, ×2.5, ×3); a 3-letter word resets it.
 - **Powerups:** every letter cleared charges the power meter. Each fill earns Shuffle, Line clear, Bomb or Wild, and using one costs no move. Unused ones are worth 1,500 points at the end.
 - **Score** = letter values × 100 × length factor (3: ×1, 4: ×2, 5: ×3, 6: ×5, 7: ×8, 8: ×12) × multiplier tiles × combo.
-- **Levels** (the main mode): beat a target score for one star, and 1.5× and 2× it for two and three. Levels 1-10 use an easy letter mix (no J, Q, X, Z, K, V), a powerup to start, a faster meter, and a word glows when you're stuck. From level 11 the normal letters come in; after level 20 there are fewer moves. Targets come from `test/calibrate.mjs`, using a bot that plays random common words of 3-5 letters: it three-stars about 9 in 10 tries at level 1 and gets one star about 3 in 4 at level 20.
+- **Levels** (played from the city): beat a target score for one star, and 1.5× and 2× it for two and three. Levels 1-10 use an easy letter mix (no J, Q, X, Z, K, V), a powerup to start, a faster meter, and a word glows when you're stuck. From level 11 the normal letters come in; after level 20 there are fewer moves. Targets come from `test/calibrate.mjs`, using a bot that plays random common words of 3-5 letters: it three-stars about 9 in 10 tries at level 1 and gets one star about 3 in 4 at level 20.
 - **Daily:** the same board for everyone (seeded by the date), 20 words, and a shareable result with one square per word from 🟦 (few points) to 🟥 (many).
 - **Feel:** a trail follows your finger and turns green on a real word, points pop up where words clear, sounds climb as you trace, and powerups and stars get their own callouts. Sound can be turned off in settings.
 
@@ -19,16 +32,16 @@ Progress, the daily streak and the in-progress game are saved in the browser. Sa
 ## Build and test
 
 ```sh
-node apps/letterfall/build.mjs      # dist/index.html (open in any browser) and dist/letterfall.html (artifact body)
-node apps/letterfall/test/sim.mjs         # rule checks + 1,000 bot games with balance stats
-node apps/letterfall/test/calibrate.mjs   # score spread and star rates per level
+node apps/spellbright/build.mjs      # dist/index.html (open in any browser) and dist/spellbright.html (artifact body)
+node apps/spellbright/test/sim.mjs         # rule checks + 1,000 bot games with balance stats
+node apps/spellbright/test/calibrate.mjs   # score spread and star rates per level
 ```
 
 ## Layout
 
 ```
 src/engine.js        the rules (no DOM): board, word solver, tracing, specials, scoring, levels, seeded randomness
-src/letterfall.html  the page: board, tracing input (drag, tap, keyboard), animation, results, sharing
+src/spellbright.html  the page: city and story, board, tracing input (drag, tap, keyboard), animation, results, sharing
 src/words.txt        24k words of 3-8 letters; * marks common words, which hints prefer
 test/sim.mjs         rule checks (paths, specials, replay) and balance stats from casual and greedy bots
 test/calibrate.mjs   score spread and star rates per level

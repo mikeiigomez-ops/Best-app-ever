@@ -1,7 +1,7 @@
-// Letterfall build (node, no deps).
-//   dist/letterfall.html  artifact page body (the host adds the document skeleton)
+// Spellbright build (node, no deps).
+//   dist/spellbright.html  artifact page body (the host adds the document skeleton)
 //   dist/index.html       standalone document: open it in any browser
-// Run: node apps/letterfall/build.mjs
+// Run: node apps/spellbright/build.mjs
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,12 +12,12 @@ const read = (p) => readFileSync(join(root, "src", p), "utf8");
 
 const words = read("words.txt").split(/\s+/).filter(Boolean);
 if (!words.every((w) => /^\*?[a-z]{3,8}$/.test(w))) throw new Error("words.txt: 3-8 lowercase letters per line, * marks common words");
-const page = read("letterfall.html")
+const page = read("spellbright.html")
   .replace('"/*@WORDS*/"', () => JSON.stringify(words.join(" ")))
   .replace("/*@ENGINE*/", () => read("engine.js").replace(/<\/script/gi, "<\\/script"));
 
 mkdirSync(OUT, { recursive: true });
-writeFileSync(join(OUT, "letterfall.html"), page);
+writeFileSync(join(OUT, "spellbright.html"), page);
 writeFileSync(join(OUT, "index.html"), `<!doctype html>
 <html lang="en">
 <head>
@@ -29,4 +29,4 @@ ${page}
 </body>
 </html>
 `);
-console.log("built dist/letterfall.html (" + (page.length / 1024).toFixed(0) + " KB) and dist/index.html");
+console.log("built dist/spellbright.html (" + (page.length / 1024).toFixed(0) + " KB) and dist/index.html");

@@ -1,5 +1,5 @@
 // Rule checks, then many games with simple bots to check balance.
-// Run: node apps/letterfall/test/sim.mjs [games]
+// Run: node apps/spellbright/test/sim.mjs [games]
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, dirname } from "node:path";

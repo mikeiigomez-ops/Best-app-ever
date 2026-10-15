@@ -1,9 +1,9 @@
-<title>Letterfall</title>
+<title>Spellbright</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Swap letters to spell words, set off chain reactions, and share your daily score.">
+<meta name="description" content="Spell words to catch the letters that fell off Lumen City's neon signs, and light the city back up.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Lilita+One&family=Lexend:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Tilt+Neon&family=Lilita+One&family=Lexend:wght@400;500;700&display=swap">
 <style>
 /* Layout: one phone-width column. Score and moves on top, the board as a deep cobalt well of ivory
    letter tiles (each with its point value, like a tile from a word game), the words you just spelled
@@ -33,6 +33,10 @@
   --wild: #2fbf9d;        /* wild tile */
   --wild-edge: #1d8a70;
   --blast: #ff8a5c;       /* line clear / bomb */
+  --font-neon: "Tilt Neon", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  /* Lumen City is always at night, in both themes. */
+  --night: #0b0d1f; --night-2: #161a3a; --brick: #1d1a33; --tube-off: #3b3d5e; --night-ink: #e9e7ff; --night-muted: #9a98c4;
+  --neon-pink: #ff5fb0; --neon-cyan: #48e6ff; --neon-amber: #ffb84d; --neon-white: #fff3d6;
   --t1: #5b8def; --t2: #3dbb72; --t3: #f2c230; --t4: #f28c28; --t5: #e5484d; /* points per move, low to high (matches 🟦🟩🟨🟧🟥) */
   --step--1: 0.8rem; --step-0: 0.95rem; --step-1: 1.15rem; --step-2: 1.6rem; --step-3: 2.4rem;
 }
@@ -105,6 +109,78 @@ button { font: inherit; color: inherit; }
 .word-go, .word-x { flex: none; border: 0; border-radius: 999px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
 .word-go { background: var(--good); color: var(--bg); }
 .word-x { background: var(--panel); border: 1px solid var(--rule); padding: 8px 12px; }
+
+/* Views */
+.game-view { display: flex; flex-direction: column; gap: 14px; }
+
+/* Lumen City */
+.city {
+  display: flex; flex-direction: column; gap: 14px; background: var(--night); color: var(--night-ink);
+  border-radius: 20px; padding: 16px; box-shadow: 0 16px 40px -20px rgba(5, 8, 30, 0.8);
+}
+.city .label { color: var(--night-muted); }
+.city-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.city-title { margin: 2px 0 0; font-family: var(--font-neon); font-weight: 400; font-size: 1.9rem; line-height: 1; color: var(--neon-white); text-shadow: 0 0 6px rgba(255, 243, 214, 0.6); }
+.purse { display: flex; align-items: center; gap: 6px; background: var(--night-2); border-radius: 999px; padding: 6px 12px; font-family: var(--font-display); font-size: 1.3rem; }
+.purse-star { color: var(--gold); text-shadow: 0 0 8px rgba(242, 178, 51, 0.7); }
+.purse.bump { animation: bump 0.6s ease; }
+@keyframes bump { 40% { transform: scale(1.18); } }
+.street { display: flex; flex-direction: column; gap: 10px; }
+.shop {
+  position: relative; border-radius: 14px; padding: 10px 12px 14px; overflow: hidden;
+  background: linear-gradient(180deg, var(--brick), var(--night-2)); border: 1px solid #2a2850;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+}
+.shop.locked { opacity: 0.55; }
+.shop.current { border-color: #4b4a86; box-shadow: 0 0 0 2px rgba(124, 155, 255, 0.35); }
+.shop .who { align-self: flex-start; font-size: 0.7rem; color: var(--night-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.shop .lockline { font-size: 0.75rem; color: var(--night-muted); }
+.part { font-family: var(--font-neon); color: var(--tube-off); transition: color 300ms ease, text-shadow 300ms ease; line-height: 1.05; }
+.part.sign-l { font-size: 2.1rem; letter-spacing: 0.04em; }
+.part.sign-s { font-size: 1rem; letter-spacing: 0.18em; }
+.part svg { width: 44px; height: 44px; display: block; filter: none; transition: filter 300ms ease; }
+.part.lit { color: var(--c); text-shadow: 0 0 2px #fff, 0 0 8px var(--c), 0 0 20px var(--c), 0 0 38px var(--c); }
+.part.lit svg { filter: drop-shadow(0 0 4px var(--c)) drop-shadow(0 0 12px var(--c)); }
+.part.lit.fresh { animation: flicker 1.1s linear; }
+@keyframes flicker { 0%, 12%, 20%, 34% { opacity: 1; } 8%, 16%, 28% { opacity: 0.15; } 100% { opacity: 1; } }
+.bulbs { font-size: 0.9rem; letter-spacing: 0.35em; }
+.harbour { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; border: 1px dashed #2f2d58; color: var(--night-muted); font-size: 0.8rem; }
+.harbour svg { width: 34px; height: 44px; flex: none; color: var(--tube-off); }
+.harbour b { color: var(--night-ink); font-weight: 500; display: block; font-size: 0.9rem; }
+.task { background: var(--night-2); border-radius: 14px; padding: 12px; display: flex; align-items: center; gap: 12px; }
+.task p { margin: 0; flex: 1; min-width: 0; font-size: var(--step--1); color: var(--night-muted); }
+.task p b { display: block; color: var(--night-ink); font-size: var(--step-0); font-weight: 500; }
+.task button { flex: none; border: 0; border-radius: 999px; padding: 9px 14px; font-weight: 700; background: var(--gold); color: #2a1a00; cursor: pointer; }
+.task button:disabled { background: var(--tube-off); color: var(--night-muted); cursor: default; }
+.play-btn { font-size: 1.1rem; padding: 14px; }
+.city-foot { margin: 0; text-align: center; }
+.linkish { background: none; border: 0; color: var(--night-muted); text-decoration: underline; cursor: pointer; font-size: var(--step--1); padding: 4px; }
+
+/* Cold open */
+.intro {
+  position: fixed; inset: 0; z-index: 30; background: var(--night); color: var(--night-ink); display: flex; flex-direction: column;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.intro-sky { position: relative; flex: 1; overflow: hidden; display: grid; place-items: center; }
+.intro-signs { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.intro-signs .part { font-size: clamp(2rem, 11vw, 3.2rem); letter-spacing: 0.06em; }
+.intro-rain span { position: absolute; top: -10%; font-family: var(--font-tile); font-weight: 700; color: var(--neon-white); opacity: 0.85; animation: rain linear infinite; }
+@keyframes rain { to { transform: translateY(120vh) rotate(var(--rot, 90deg)); } }
+.intro-card { max-width: 460px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.intro .label { color: var(--night-muted); margin: 0; }
+.intro-text { margin: 0; font-size: 1.15rem; line-height: 1.5; text-wrap: pretty; }
+.intro-actions { display: flex; justify-content: space-between; align-items: center; }
+.intro-actions .btn { flex: 0 0 auto; min-width: 140px; }
+
+/* Character lines */
+.talk { position: fixed; inset: 0; z-index: 25; background: rgba(8, 10, 30, 0.55); display: flex; align-items: flex-end; justify-content: center; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+.talk-card { width: min(460px, 100%); background: var(--night-2); color: var(--night-ink); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; border: 1px solid #2f2d58; animation: rise 0.25s ease; }
+@keyframes rise { from { transform: translateY(20px); opacity: 0; } }
+.talk-who { display: flex; align-items: center; gap: 10px; }
+.talk-who b { font-family: var(--font-neon); font-weight: 400; font-size: 1.25rem; color: var(--c, var(--neon-white)); text-shadow: 0 0 8px var(--c, transparent); }
+.face-chip { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-size: 1.2rem; color: #10102a; background: var(--c, var(--neon-white)); box-shadow: 0 0 14px var(--c, transparent); }
+.talk-text { margin: 0; font-size: 1.05rem; line-height: 1.5; }
+.talk-card .btn { align-self: flex-end; min-width: 120px; flex: none; }
 
 /* Level goal */
 .goal { display: flex; flex-direction: column; gap: 4px; margin-top: -4px; }
@@ -295,7 +371,7 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 
 @media (prefers-reduced-motion: reduce) {
   .tile, .tile.falling, .tile.gone, .face { transition-duration: 1ms !important; }
-  .tile.hint .face, .tile.shake .face, .tile.made .face, .callout.show, .pop { animation: none !important; }
+  .tile.hint .face, .tile.shake .face, .tile.made .face, .callout.show, .pop, .part.lit.fresh, .intro-rain span, .talk-card { animation: none !important; }
   .pop { display: none; }
   .callout.show { opacity: 1; }
 }
@@ -303,15 +379,30 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
 
 <div class="app">
   <header class="top">
-    <h1 class="brand">Letter<span>fall</span></h1>
+    <h1 class="brand">Spell<span>bright</span></h1>
     <div class="modes" role="group" aria-label="Game mode">
-      <button id="mode-level" type="button" aria-pressed="true">Levels</button>
+      <button id="mode-level" type="button" aria-pressed="true">City</button>
       <button id="mode-daily" type="button" aria-pressed="false">Daily</button>
     </div>
     <button id="help-btn" class="icon-btn" type="button" aria-label="How to play">?</button>
     <button id="settings-btn" class="icon-btn" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </header>
 
+  <section id="city-view" class="city" hidden aria-label="Lumen City">
+    <div class="city-top">
+      <div>
+        <p class="label">Episode 1</p>
+        <h2 class="city-title">Main Street</h2>
+      </div>
+      <div class="purse" aria-label="Stars to spend"><span class="purse-star">★</span><b id="purse">0</b></div>
+    </div>
+    <div class="street" id="street"></div>
+    <div id="task" class="task"></div>
+    <button id="play-btn" class="btn primary play-btn" type="button">Play level 1</button>
+    <p class="city-foot"><button id="intro-btn" class="linkish" type="button">Watch the intro again</button></p>
+  </section>
+
+  <div id="game-view" class="game-view">
   <section class="hud" aria-label="Score">
     <div class="stat"><span class="label">Score</span><span id="score" class="num">0</span></div>
     <div id="puzzle" class="puzzle">Puzzle #1</div>
@@ -378,11 +469,33 @@ dialog::backdrop { background: rgba(8, 12, 30, 0.55); }
     <button id="new-btn" class="btn primary" type="button" hidden>Next level</button>
     <button id="result-btn" class="btn primary" type="button" hidden>See result</button>
   </div>
+  </div>
+</div>
+
+<div id="intro" class="intro" hidden role="dialog" aria-modal="true" aria-labelledby="intro-text">
+  <div class="intro-sky" aria-hidden="true"><div class="intro-rain" id="intro-rain"></div></div>
+  <div class="intro-card">
+    <p class="label" id="intro-step">1 of 3</p>
+    <p id="intro-text" class="intro-text"></p>
+    <div class="intro-actions">
+      <button id="intro-skip" class="linkish" type="button">Skip</button>
+      <button id="intro-next" class="btn primary" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
+<div id="talk" class="talk" hidden role="dialog" aria-modal="true" aria-labelledby="talk-name">
+  <div class="talk-card">
+    <div class="talk-who"><span id="talk-face" class="face-chip">M</span><b id="talk-name">Mo</b></div>
+    <p id="talk-text" class="talk-text"></p>
+    <button id="talk-next" class="btn primary" type="button">Next</button>
+  </div>
 </div>
 
 <dialog id="help" aria-labelledby="help-title">
   <div class="sheet">
     <h2 id="help-title">How to play</h2>
+    <p>A storm knocked every letter off Lumen City's neon signs. Spell words in levels to earn stars, then spend them on Main Street to relight the signs.</p>
     <ol class="rules">
       <li>Drag through touching letters to spell a word of 3 to 8 letters. Diagonals count, and each tile can be used once per word.
         <div class="demo" aria-hidden="true"><i class="hl">S</i><i class="hl">T</i><i class="hl">A</i><i class="hl">R</i></div></li>
@@ -455,7 +568,7 @@ var WORDS = "/*@WORDS*/";
 </script>
 <script>
 (function () {
-  var L = Letterfall;
+  var L = Spellbright;
   L.setWords(WORDS);
   var SIZE = L.SIZE;
   var EPOCH = Date.UTC(2026, 9, 14); // Puzzle #1
@@ -468,7 +581,7 @@ var WORDS = "/*@WORDS*/";
   var wait = function (ms) { return new Promise(function (r) { setTimeout(r, reduced ? Math.min(ms, 60) : ms); }); };
 
   // Saves from the old swap version can't replay as words, so this version keeps its own keys.
-  var K = "lf2:";
+  var K = "sb:";
   function load(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
   function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
@@ -565,6 +678,7 @@ var WORDS = "/*@WORDS*/";
     $("feed-row").textContent = "";
     $("feed-hint").hidden = false;
     hud(true);
+    showGame();
     if (S.game.over()) finish(false);
     else idle();
   }
@@ -663,7 +777,7 @@ var WORDS = "/*@WORDS*/";
       for (var k = 0; k < 3; k++) $("star-" + k).classList.toggle("on", k < n);
       $("goal-text").textContent = n === 3 ? "Three stars! Keep scoring." :
         "Score " + fmt(S.level.targets[n]) + " for " + (n === 0 ? "one star" : n === 1 ? "two stars" : "three stars");
-      $("new-btn").textContent = n ? "Next level" : "Try again";
+      $("new-btn").textContent = n ? "Back to Main Street" : "Try again";
     }
     $("meter-fill").style.width = (100 * g.power / g.powerAt) + "%";
     $("meter").setAttribute("aria-valuemax", g.powerAt);
@@ -1059,7 +1173,7 @@ var WORDS = "/*@WORDS*/";
     var lines = [];
     for (var i = 0; i < sq.length; i += 10) lines.push(sq.slice(i, i + 10).join(""));
     var stars = starsFor(g.score);
-    var head = S.mode === "daily" ? "Letterfall #" + puzzleNo(S.day) : "Letterfall level " + S.level.n + " " + "★★★".slice(0, stars) + "☆☆☆".slice(stars);
+    var head = S.mode === "daily" ? "Spellbright #" + puzzleNo(S.day) : "Spellbright level " + S.level.n + " " + "★★★".slice(0, stars) + "☆☆☆".slice(stars);
     return head + ": " + fmt(g.score) + " points\n" + lines.join("\n") +
       (best ? "\nBest word: " + best.word.toUpperCase() : "") +
       (S.hints ? "\n" + S.hints + " hint" + (S.hints > 1 ? "s" : "") : "");
@@ -1078,7 +1192,7 @@ var WORDS = "/*@WORDS*/";
   function finish(justNow) {
     var g = S.game, best = g.bestWord();
     var log = g.moveLog();
-    var lvl = S.mode === "level", stars = starsFor(g.score);
+    var lvl = S.mode === "level", stars = starsFor(g.score), gained = 0;
     $("result-kicker").textContent = lvl ? "Level " + S.level.n : "Daily #" + puzzleNo(S.day);
     $("result-title").textContent = lvl ? ["So close!", "Level complete!", "Great job!", "Perfect!"][stars] : verdict(g.score);
     $("r-stars").hidden = !lvl;
@@ -1116,8 +1230,11 @@ var WORDS = "/*@WORDS*/";
     bars.setAttribute("aria-label", "Points for each of your " + log.length + " words.");
     $("r-last").textContent = "Word " + log.length;
     if (lvl) {
-      // Save the stars and unlock the next level.
+      // Save the stars and unlock the next level. Only stars beyond this level's best go in the
+      // purse, so replaying a level can't farm them.
       var pr = progress();
+      gained = Math.max(0, stars - (pr.stars[S.level.n] || 0));
+      if (gained) { var sto = story(); sto.purse += gained; saveStory(sto); }
       pr.stars[S.level.n] = Math.max(pr.stars[S.level.n] || 0, stars);
       if (stars && pr.current === S.level.n) pr.current = S.level.n + 1;
       save(K + "levels", pr);
@@ -1132,14 +1249,15 @@ var WORDS = "/*@WORDS*/";
     }
     $("r-share").textContent = shareText();
     $("r-level-btn").hidden = !lvl;
-    $("r-level-btn").textContent = stars ? "Next level" : "Try again";
+    $("r-level-btn").textContent = stars ? "Back to Main Street" : "Try again";
     $("copy-btn").className = lvl ? "btn" : "btn primary";
     $("share-legend").hidden = lvl;
     $("r-practice").hidden = lvl;
     var now = new Date(), mid = new Date(now); mid.setHours(24, 0, 0, 0);
     var mins = Math.round((mid - now) / 60000);
-    $("r-next").textContent = !lvl ? "Next daily board in " + Math.floor(mins / 60) + " h " + (mins % 60) + " min." : "";
-    $("r-next").hidden = lvl;
+    $("r-next").textContent = !lvl ? "Next daily board in " + Math.floor(mins / 60) + " h " + (mins % 60) + " min." :
+      gained ? "+" + gained + " ★ to spend relighting Main Street." : stars ? "You already had these stars. Beat your best on a level to earn more." : "";
+    $("r-next").hidden = lvl && !$("r-next").textContent;
     hud(true);
     if (justNow) {
       $("result").showModal();
@@ -1157,26 +1275,237 @@ var WORDS = "/*@WORDS*/";
     };
     try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
   });
-  $("r-practice").addEventListener("click", function () { $("result").close(); start("level"); });
-  $("r-level-btn").addEventListener("click", function () { $("result").close(); start("level", true); });
+  $("r-practice").addEventListener("click", function () { $("result").close(); showCity(); });
+  $("r-level-btn").addEventListener("click", function () { $("result").close(); afterLevel(); });
   $("r-close").addEventListener("click", function () { $("result").close(); });
   $("result-btn").addEventListener("click", function () { finish(false); $("result").showModal(); });
-  $("new-btn").addEventListener("click", function () { start("level", true); });
-  $("mode-daily").addEventListener("click", function () { if (S.mode !== "daily" && !S.busy) start("daily"); });
-  $("mode-level").addEventListener("click", function () { if (S.mode !== "level" && !S.busy) start("level"); });
+  $("new-btn").addEventListener("click", afterLevel);
+  $("mode-daily").addEventListener("click", function () { if (!S.busy && (S.mode !== "daily" || S.view === "city")) start("daily"); });
+  $("mode-level").addEventListener("click", function () { if (!S.busy && S.view !== "city") showCity(); });
   $("help-btn").addEventListener("click", function () { $("help").showModal(); });
   $("help-close").addEventListener("click", function () { $("help").close(); });
   $("help").addEventListener("close", function () { save(K + "seen-help", true); });
   $("settings-btn").addEventListener("click", function () { $("settings").showModal(); });
   $("settings-close").addEventListener("click", function () { $("settings").close(); });
 
+  // ---- story: Episode 1, Main Street ---------------------------------------
+  var CUP = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 20h24v8a10 10 0 0 1-10 10h-4a10 10 0 0 1-10-10z"/><path d="M34 23h3a4 4 0 0 1 0 8h-4"/><path d="M17 8c-2 3 2 5 0 8M24 6c-2 3 2 5 0 8"/><path d="M8 42h30"/></svg>';
+  var CROISSANT = '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 32c2-9 10-16 19-16s17 7 19 16c-4-3-8-3-11 0-2-4-5-6-8-6s-6 2-8 6c-3-3-7-3-11 0z"/><path d="M18 25l2 7M30 25l-2 7M24 23v9"/></svg>';
+  var LIGHTHOUSE = '<svg viewBox="0 0 34 44" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 14h10l3 26H9z"/><path d="M11 14l6-6 6 6"/><path d="M13 21h8M12 29h10"/><path d="M4 42h26"/></svg>';
+  var CAST = {
+    mo: { name: "Mo", c: "var(--neon-pink)" },
+    pip: { name: "Pip", c: "var(--neon-amber)" },
+    pia: { name: "Pia", c: "var(--neon-cyan)" },
+    rosa: { name: "Rosa", c: "var(--neon-cyan)" },
+    wren: { name: "Wren", c: "#7cf5c8" }
+  };
+  var SIGNS = [
+    { shop: "Mo's Diner",
+      hello: [["mo", "So you're the sign-maker's new apprentice? Thank goodness. My diner's been dark since the storm, and nobody finds a diner in the dark."],
+              ["mo", "Here's how it works. Spell words to catch the fallen letters. Every star you earn in a level buys a little light. Start with my name up there."]],
+      parts: [
+        { html: "MO'S DINER", cls: "sign-l", c: "--neon-pink", task: "Light up the name", cost: 2,
+          line: [["mo", "Look at that! Folks can read MO'S again. I could cry into the gravy."]] },
+        { html: CUP, c: "--neon-amber", task: "Fix the coffee cup", cost: 2,
+          line: [["mo", "The coffee cup! It even steams. Now it feels like home."]] },
+        { html: "OPEN ALL NIGHT", cls: "sign-s", c: "--neon-cyan", task: "Switch on OPEN ALL NIGHT", cost: 3,
+          line: [["mo", "Open for business! First slice of pie is on the house, apprentice."],
+                 ["mo", "The Bijou next door has been dark too. The twins could use you. Fair warning: they finish each other's sentences."]] }
+      ] },
+    { shop: "The Bijou",
+      hello: [["pip", "You're the apprentice! We're Pip and..."], ["pia", "...Pia. Our marquee lost every single letter."],
+              ["pip", "Tonight's movie is a mystery. Literally. Nobody can read the title."]],
+      parts: [
+        { html: "BIJOU", cls: "sign-l", c: "--neon-amber", task: "Light up BIJOU", cost: 2,
+          line: [["pia", "BIJOU! It's beautiful."], ["pip", "I told you the apprentice was good."], ["pia", "You said \"probably\"."]] },
+        { html: "● ● ● ● ● ● ● ●", cls: "bulbs", c: "--neon-white", task: "Wire the marquee bulbs", cost: 2,
+          line: [["pip", "The bulbs are chasing each other again! Just like opening night."]] },
+        { html: "NOW SHOWING: THE NIGHT THE LETTERS FELL", cls: "sign-s", c: "--neon-pink", task: "Spell out tonight's movie", cost: 3,
+          line: [["pia", "\"The Night the Letters Fell.\" A little on the nose."], ["pip", "Go see Rosa at the bakery. She's been baking in the dark all week."]] }
+      ] },
+    { shop: "Rosa's Bakery",
+      hello: [["rosa", "Forty years my sign has glowed before the sun comes up. Forty years! Until this storm."],
+              ["rosa", "Help an old baker, dear? There's a warm roll in it for you."]],
+      parts: [
+        { html: "ROSA'S", cls: "sign-l", c: "--neon-cyan", task: "Light up ROSA'S", cost: 2,
+          line: [["rosa", "There's my name. My Arturo bent those tubes himself, you know."]] },
+        { html: CROISSANT, c: "--neon-amber", task: "Light the croissant", cost: 2,
+          line: [["rosa", "Ha! The croissant was always his favorite."]] },
+        { html: "FRESH BREAD DAILY", cls: "sign-s", c: "--neon-pink", task: "Switch on FRESH BREAD DAILY", cost: 3,
+          line: [["rosa", "Smell that? The ovens remember. Thank you, dear. Main Street is glowing again."]] }
+      ] }
+  ];
+  var FINALE = [
+    ["wren", "Nice work on Main Street, apprentice. I'm Wren. I keep the lighthouse down at the harbour."],
+    ["wren", "Or I did. It's still dark. And I've been thinking. Storms knock letters down. They don't carry them off."],
+    ["wren", "Every letter from my lighthouse is gone. Someone gathered them up. Come find me at the harbour."]
+  ];
+  var PARTS = [];
+  SIGNS.forEach(function (sg, si) { sg.parts.forEach(function (p, pi) { PARTS.push({ sign: si, idx: pi, p: p }); }); });
+
+  function story() { return Object.assign({ intro: false, met: false, purse: 0, lit: 0, finale: false }, load(K + "story", {})); }
+  function saveStory(st) { save(K + "story", st); }
+
+  function showGame() {
+    S.view = "game";
+    $("city-view").hidden = true;
+    $("game-view").hidden = false;
+    $("mode-level").setAttribute("aria-pressed", S.mode === "level");
+    $("mode-daily").setAttribute("aria-pressed", S.mode === "daily");
+  }
+  function showCity() {
+    if (S.busy) return;
+    S.view = "city";
+    save(K + "mode", "level");
+    clearTimeout(idleTimer); clearHint(); endAim(); clearPath();
+    $("city-view").hidden = false;
+    $("game-view").hidden = true;
+    $("mode-level").setAttribute("aria-pressed", true);
+    $("mode-daily").setAttribute("aria-pressed", false);
+    renderCity();
+  }
+  // After a level: back to the city with stars to spend, or straight into a retry.
+  function afterLevel() {
+    if (S.level && starsFor(S.game.score)) showCity();
+    else start("level", true);
+  }
+
+  function renderCity(fresh) {
+    var st = story(), html = "";
+    SIGNS.forEach(function (sg, si) {
+      var first = si * 3, locked = st.lit < first, current = st.lit >= first && st.lit < first + 3;
+      html += '<article class="shop' + (locked ? " locked" : "") + (current ? " current" : "") + '" aria-label="' + sg.shop + '">' +
+        '<span class="who">' + sg.shop + "</span>";
+      sg.parts.forEach(function (p, pi) {
+        var k = first + pi, on = st.lit > k;
+        html += '<span class="part ' + (p.cls || "") + (on ? " lit" : "") + (on && fresh === k ? " fresh" : "") + '" style="--c: var(' + p.c + ')">' + p.html + "</span>";
+      });
+      if (locked) html += '<span class="lockline">Dark since the storm</span>';
+      html += "</article>";
+    });
+    html += '<div class="harbour">' + LIGHTHOUSE + "<span><b>The Harbour</b>" +
+      (st.finale ? "Episode 2. Coming soon." : "Still dark. Episode 2.") + "</span></div>";
+    $("street").innerHTML = html;
+    $("purse").textContent = st.purse;
+    var next = PARTS[st.lit];
+    if (!next) {
+      $("task").innerHTML = "<p><b>Main Street is glowing again!</b>Episode 2, The Harbour, is coming soon. Keep playing levels and the Daily to stay sharp.</p>";
+    } else {
+      var need = next.p.cost - st.purse;
+      $("task").innerHTML = "<p><b>" + SIGNS[next.sign].shop + ": " + next.p.task + "</b>" +
+        (need > 0 ? "Earn " + need + " more ★ in levels." : "You have enough stars.") + "</p>" +
+        '<button id="relight" type="button"' + (need > 0 ? " disabled" : "") + ">★ " + next.p.cost + " Relight</button>";
+      $("relight").addEventListener("click", relight);
+    }
+    $("play-btn").textContent = "Play level " + progress().current;
+  }
+
+  function relight() {
+    var st = story(), next = PARTS[st.lit];
+    if (!next || st.purse < next.p.cost) return;
+    st.purse -= next.p.cost;
+    st.lit++;
+    saveStory(st);
+    renderCity(st.lit - 1);
+    chimeSound(4); buzz(40);
+    var lines = next.p.line.slice();
+    var signDone = next.idx === 2, nextSign = SIGNS[next.sign + 1];
+    setTimeout(function () {
+      talk(lines, function () {
+        if (signDone && nextSign) talk(nextSign.hello);
+        else if (signDone && !st.finale) {
+          talk(FINALE, function () { var s2 = story(); s2.finale = true; saveStory(s2); renderCity(); });
+        }
+      });
+    }, reduced ? 0 : 900);
+  }
+
+  // Character lines, one at a time.
+  function talk(lines, done) {
+    var i = 0;
+    function show() {
+      var who = CAST[lines[i][0]];
+      $("talk").style.setProperty("--c", who.c);
+      $("talk-face").textContent = who.name[0];
+      $("talk-name").textContent = who.name;
+      $("talk-text").textContent = lines[i][1];
+      $("talk-next").textContent = i < lines.length - 1 ? "Next" : "OK";
+    }
+    talk.next = function () {
+      i++;
+      if (i < lines.length) show();
+      else { $("talk").hidden = true; talk.next = null; if (done) done(); }
+    };
+    $("talk").hidden = false;
+    show();
+    $("talk-next").focus();
+  }
+  $("talk-next").addEventListener("click", function () { if (talk.next) talk.next(); });
+
+  function meetFirst() {
+    var st = story();
+    if (st.met) return;
+    st.met = true; saveStory(st);
+    talk(SIGNS[0].hello);
+  }
+
+  // The cold open: the city glowing, the storm, the apprentice.
+  var INTRO = [
+    "Lumen City never sleeps. Every street glows with neon, and every sign tells a story.",
+    "Then came the storm. Lightning cracked, the wind howled, and every letter on every sign came tumbling down.",
+    "You're the sign-maker's new apprentice. Spell words to catch the fallen letters, earn stars, and bring the city's light back, one sign at a time."
+  ];
+  function runIntro(done) {
+    var step = 0, sky = document.querySelector(".intro-sky");
+    sky.innerHTML = '<div class="intro-signs"><span class="part sign-l" style="--c: var(--neon-pink)">DINER</span><span class="part sign-l" style="--c: var(--neon-amber)">BIJOU</span><span class="part sign-l" style="--c: var(--neon-cyan)">BAKERY</span></div><div class="intro-rain" id="intro-rain"></div>';
+    var signs = sky.querySelectorAll(".part"), rain = $("intro-rain");
+    function rainOn(n) {
+      rain.textContent = "";
+      for (var k = 0; k < n; k++) {
+        var sp = document.createElement("span");
+        sp.textContent = "ABCDEFGHIJKLMNOPRSTUVWY"[Math.floor(Math.random() * 23)];
+        sp.style.left = (Math.random() * 96) + "%";
+        sp.style.fontSize = (14 + Math.random() * 22) + "px";
+        sp.style.animationDuration = (2.2 + Math.random() * 3) + "s";
+        sp.style.animationDelay = (-Math.random() * 4) + "s";
+        sp.style.setProperty("--rot", (Math.random() * 360 - 180) + "deg");
+        rain.appendChild(sp);
+      }
+    }
+    function show() {
+      $("intro-step").textContent = (step + 1) + " of " + INTRO.length;
+      $("intro-text").textContent = INTRO[step];
+      $("intro-next").textContent = step < INTRO.length - 1 ? "Next" : "Start";
+      signs.forEach(function (el, k) {
+        var on = step === 0 || (step === 2 && k === 0);
+        el.classList.toggle("lit", on);
+        el.classList.toggle("fresh", step === 2 && k === 0);
+      });
+      rainOn(step === 1 ? 46 : step === 2 ? 8 : 0);
+      if (step === 1) boomSound();
+    }
+    function close() {
+      $("intro").hidden = true;
+      rain.textContent = "";
+      var st = story(); st.intro = true; saveStory(st);
+      if (done) done();
+    }
+    $("intro-next").onclick = function () { step++; if (step < INTRO.length) show(); else close(); };
+    $("intro-skip").onclick = close;
+    $("intro").hidden = false;
+    show();
+    $("intro-next").focus();
+  }
+  $("intro-btn").addEventListener("click", function () { runIntro(); });
+  $("play-btn").addEventListener("click", function () { start("level"); });
+
   // ---- boot -------------------------------------------------------------
   var lines = document.querySelector(".grid-lines");
   for (var i = 0; i < SIZE * SIZE; i++) lines.appendChild(document.createElement("i"));
   applyPrefs();
-  start(load(K + "mode", "level") === "daily" ? "daily" : "level");
-  if (!load(K + "seen-help", false)) {
-    try { $("help").showModal(); } catch (e) {}
-  }
+  if (load(K + "mode", "level") === "daily") start("daily");
+  else showCity();
+  // First visit: the cold open, then Mo says hello.
+  if (!story().intro) runIntro(meetFirst);
 })();
 </script>
