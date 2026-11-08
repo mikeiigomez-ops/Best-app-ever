@@ -171,9 +171,9 @@ textarea.inp{min-height:84px;resize:vertical;line-height:1.4}
 
 <div class="app">
   <header class="top mono">
-    <span id="top-date">Command Deck</span>
-    <span class="row" style="gap:10px">
-      <span class="live"><span class="dot" id="live-dot"></span><span id="live-txt">Connecting</span></span>
+    <span id="top-date" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Command Deck</span>
+    <span class="row" style="gap:10px;flex-wrap:nowrap;flex-shrink:0">
+      <span class="live" style="white-space:nowrap"><span class="dot" id="live-dot"></span><span id="live-txt">Connecting</span></span>
       <button class="iconbtn" id="refresh" type="button" aria-label="Refresh"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 11a8 8 0 10-2.3 5.7M20 5v6h-6"/></svg></button>
     </span>
   </header>
@@ -299,9 +299,11 @@ function renderHome(){
   const bq=$("b-queue"); bq.hidden=!ideas; bq.textContent=ideas;
   const noSess=!Array.isArray(S.sessions);
   let h = !list.length && S.dbState!=="ready" ? `<h1 class="hero">Your projects</h1>` : `<h1 class="hero">${list.length} project${list.length===1?"":"s"}${noSess?"":waiting?`, <em>${waiting} waiting on you</em>`:", nothing waiting on you"}</h1>`;
+  const need=["list_sessions","send_message","create_session"]; const missing=(S.toolsListed||[]).length? need.filter(n=>!S.tools.has(n)) : [];
+  if(S.sessFromSync && mcp) h+=`<div class="note row" style="gap:8px">Showing sessions as of ${esc(fmt(S.sessSync.syncedAt,{weekday:"short",hour:"numeric",minute:"2-digit"}))}. Live session access is off for this page${missing.length?` (${esc(missing.join(", "))})`:""}. <button class="btn sm" type="button" data-act="perms">Turn on</button></div>`;
   if(noSess && mcp && S.sessErr) h+=`<div class="panel" style="padding:14px;display:flex;flex-direction:column;gap:10px;border-color:rgba(255,198,107,.35);background:rgba(255,198,107,.06)">
     <span style="font-size:14px;color:#f3e6cc">I can't see your Claude sessions yet, so I can't tell you what's waiting on you. Bots, reports, tonight's queue and chat still work.</span>
-    <span class="note">${esc(S.sessErr)}</span>
+    <span class="note">${missing.length?`This page isn't getting these Claude Code Remote tools: ${esc(missing.join(", "))}. In the permissions panel, open "8 tools" and turn them on.`:esc(S.sessErr)}</span>
     <div class="row"><button class="btn sm amb" type="button" data-act="perms">Turn on session access</button></div></div>`;
   h+=`<div class="ring"><div class="in">
     <h2 class="sec"><span style="color:var(--ice)">Claude this week</span><span>Last 7 days</span></h2>
@@ -478,7 +480,7 @@ function renderTabs(){
   document.querySelectorAll(".wide-tabs [data-rtab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.rtab===S.rtab)));
 }
 function render(){
-  $("top-date").textContent = "All projects · "+fmt(new Date(),{weekday:"short",day:"2-digit",month:"short"}).toUpperCase();
+  $("top-date").textContent = (innerWidth<520?"":"All projects · ")+fmt(new Date(),{weekday:"short",day:"2-digit",month:"short"}).toUpperCase();
   renderTabs(); renderHome(); renderBots(); renderQueue(); renderReports();
   if(S.sheet && !$("sheet").contains(document.activeElement)) renderSheet();
 }
@@ -493,12 +495,14 @@ async function initDb(){
   db.collection("reports").orderBy("createdAt","desc").limit(200).onSnapshot(sn=>{ done(); S.reports=sn.docs.map(d=>({_id:d.id,...d.data()})); render(); }, ()=>{ done(); render(); });
   db.collection("projects").onSnapshot(sn=>{ done(); S.projects=sn.docs.map(d=>({_id:d.id,...d.data()})); render(); }, ()=>{ done(); render(); });
   db.collection("queue").onSnapshot(sn=>{ S.queue=sn.docs.map(d=>({_id:d.id,...d.data()})); render(); }, ()=>{});
+  db.doc("sync/sessions").onSnapshot(d=>{ S.sessSync=d.exists?d.data():null; applySync(); render(); }, ()=>{});
   db.collection("decisions").onSnapshot(sn=>{ const m={}; sn.docs.forEach(d=>m[d.id]=d.data()); S.decisions=m; render(); }, ()=>{});
 }
 async function dbSet(col,id,data){ if(!db) throw new Error("Open this page in Claude to save."); await db.collection(col).doc(id).set(data); }
 async function dbUpdate(col,id,data){ if(!db) throw new Error("Open this page in Claude to save."); await db.collection(col).doc(id).update(data); }
 async function dbDel(col,id){ if(!db) return; await db.collection(col).doc(id).delete(); }
 
+function applySync(){ if(!S.sessLive && Array.isArray(S.sessSync?.items)){ S.sessions=S.sessSync.items; S.sessFromSync=true; if(mcp) setLive("", "Sessions as of "+fmt(S.sessSync.syncedAt,{hour:"numeric",minute:"2-digit"})); } }
 /* ---------- mcp: Claude Code Remote ---------- */
 let mcp=null;
 function payloadOf(r){ let p=r?.payload; if(typeof p==="string"){ const i=p.indexOf("{"),j=p.lastIndexOf("}"); if(i>=0&&j>i){ try{p=JSON.parse(p.slice(i,j+1))}catch{} } } return p; }
@@ -519,13 +523,14 @@ async function loadLive(force){
   setLive("","Updating");
   const opt = force ? {cache:{staleTime:0,gcTime:300000,refresh:true}} : {cache:{staleTime:60000,gcTime:300000}};
   const [s,t,e] = await Promise.allSettled([ (S.tools.has("list_sessions")?call("list_sessions",{limit:100,mine:true},opt):Promise.reject({code:"not_in_manifest",message:"Session listing is turned off for this page"})), call("list_triggers",{limit:100},opt), (S.envId||!S.tools.has("list_environments"))?Promise.resolve(null):call("list_environments",{limit:20},{cache:{staleTime:3600000,gcTime:86400000}}) ]);
-  if(s.status==="fulfilled"){ const p=s.value; const a=p?.ccr?.data||p?.data||p?.sessions; S.sessions=Array.isArray(a)?a:[]; S.sessErr=null; } else { S.sessErr=errText(s.reason,"see your sessions"); }
+  if(s.status==="fulfilled"){ const p=s.value; const a=p?.ccr?.data||p?.data||p?.sessions; S.sessions=Array.isArray(a)?a:[]; S.sessErr=null; S.sessLive=true; S.sessFromSync=false; } else { S.sessErr=errText(s.reason,"see your sessions"); S.sessLive=false; }
   if(t.status==="fulfilled"){ const p=t.value; const a=p?.data||p?.triggers; S.triggers=Array.isArray(a)?a:[]; S.trigErr=null; } else { S.trigErr=errText(t.reason,"see your bots"); }
   if(!S.envId && Array.isArray(S.triggers)){ const m=JSON.stringify(S.triggers).match(/env_[A-Za-z0-9]{10,}/); if(m) S.envId=m[0]; }
   if(e.status==="fulfilled"&&e.value){ const envs=e.value.environments||e.value.data||[]; const pick=envs.find(x=>x.name==="Default"&&x.kind==="anthropic_cloud")||envs.find(x=>x.kind==="anthropic_cloud"&&x.state==="active")||envs[0]; S.envId=pick?.environment_id||null; }
   if(!S.envId) S.envId=DEFAULT_ENV;
   const ok=s.status==="fulfilled";
   setLive(ok?"on":"err", ok?"Live "+new Intl.DateTimeFormat("en-US",{hour:"numeric",minute:"2-digit"}).format(new Date()):"Sessions unavailable");
+  applySync();
   render();
 }
 async function initMcp(){
